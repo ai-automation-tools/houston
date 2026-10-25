@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "d9eb9de8760dccd4ee531641971fe1c8fe42d873"
+      "revision": "017818204e3af6801e702a604b32a7c5588e8fad"
     }
   },
   "components": [
@@ -46,20 +46,20 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 169,
-          "end_line": 195,
+          "line": 170,
+          "end_line": 198,
           "label": "shell WebContentsView"
         },
         {
           "path": "src/preload/shell.cjs",
-          "line": 15,
-          "end_line": 70,
+          "line": 22,
+          "end_line": 136,
           "label": "window.acc preload"
         },
         {
           "path": "src/renderer/app.js",
           "line": 132,
-          "end_line": 166,
+          "end_line": 168,
           "label": "confirm bar, run tabs"
         }
       ]
@@ -81,14 +81,14 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 98,
-          "end_line": 120,
+          "line": 99,
+          "end_line": 119,
           "label": "handle() refuses other senders"
         },
         {
           "path": "src/main/main.js",
-          "line": 389,
-          "end_line": 430,
+          "line": 391,
+          "end_line": 451,
           "label": "IPC channels"
         }
       ]
@@ -123,7 +123,7 @@
         {
           "path": "src/main/main.js",
           "line": 200,
-          "end_line": 204,
+          "end_line": 205,
           "label": "deny-by-default permissions"
         }
       ]
@@ -240,8 +240,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 389,
-          "end_line": 397,
+          "line": 432,
+          "end_line": 451,
           "label": "chat IPC"
         }
       ]
@@ -338,8 +338,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 310,
-          "end_line": 360,
+          "line": 333,
+          "end_line": 389,
           "label": "tools over app sources"
         }
       ]
@@ -360,8 +360,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 352,
-          "end_line": 358,
+          "line": 393,
+          "end_line": 398,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -389,14 +389,14 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 296,
-          "end_line": 345,
+          "line": 304,
+          "end_line": 389,
           "label": "terminal_run, run_status, cron_run"
         },
         {
           "path": "src/shared/tools.js",
           "line": 339,
-          "end_line": 379,
+          "end_line": 377,
           "label": "terminal_run, run_status"
         }
       ]
