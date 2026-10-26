@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PROTOCOL_VERSIONS, bearerMatches, createMcpServer, handleMessage, isLoopbackHost, isLoopbackOrigin } from '../src/shared/mcp.js';
+import { LEGACY_VERSIONS, MODERN_VERSIONS, PROTOCOL_VERSIONS, checkRequest, mirrorHeaders, bearerMatches, createMcpServer, handleMessage, isLoopbackHost, isLoopbackOrigin } from '../src/shared/mcp.js';
 
 const TOKEN = 'a'.repeat(64);
 const tools = new Map([
@@ -28,7 +28,7 @@ test('handleMessage: initialize, notifications, tools, errors', async () => {
   const init = await handleMessage({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }, tools, '0.1.0');
   assert.equal(/** @type {any} */ (init?.result).protocolVersion, '2025-06-18');
   const odd = await handleMessage({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '1999-01-01' } }, tools, '0.1.0');
-  assert.equal(/** @type {any} */ (odd?.result).protocolVersion, PROTOCOL_VERSIONS[0]);
+  assert.equal(/** @type {any} */ (odd?.result).protocolVersion, LEGACY_VERSIONS[0]);
   assert.equal(await handleMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, tools, ''), null);
   const list = await handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, tools, '');
   assert.deepEqual(/** @type {any} */ (list?.result).tools.map((/** @type {any} */ t) => t.name), ['echo', 'boom']);
@@ -76,13 +76,21 @@ test("Claude Code's handshake logs as one named connection, with no failures", a
   const clientInfo = { name: 'claude-code', version: '2.1.307' };
   // What Claude Code 2.1.307 sent on 2026-10-21, in order.
   assert.equal((await post({ jsonrpc: '2.0', id: 'server-discover-probe-1', method: 'server/discover', params: {} }, { 'MCP-Protocol-Version': '2026-07-28' })).status, 400);
-  assert.equal((await post({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo } })).status, 200);
-  assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, { 'MCP-Protocol-Version': '2025-11-25' })).status, 202);
-  assert.equal((await fetch(url, { headers: { ...auth, Accept: 'text/event-stream' } })).status, 405);
-  assert.equal((await fetch(url, { method: 'DELETE', headers: auth })).status, 405);
-  assert.equal((await post({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).status, 200);
+  const init = await post({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo } });
+  assert.equal(init.status, 200);
+  const session = { 'Mcp-Session-Id': String(init.headers.get('mcp-session-id')) };
+  assert.match(session['Mcp-Session-Id'], /^[0-9a-f-]{36}$/);
+  assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, { 'MCP-Protocol-Version': '2025-11-25', ...session })).status, 202);
+  assert.equal((await fetch(url, { headers: { ...auth, ...session, Accept: 'text/event-stream' } })).status, 405);
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { ...auth, ...session } })).status, 405);
+  assert.equal((await post({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, session)).status, 200);
   assert.deepEqual(log.filter((e) => !e.ok), []);
   assert.equal(log.find((e) => e.method === 'initialize')?.client, 'claude-code 2.1.307');
+  // Later calls carry the session, so they name the client too; no session or an unknown one, no name.
+  assert.deepEqual(log.filter((e) => e.method.includes('/')).map((e) => e.client), ['claude-code 2.1.307', 'claude-code 2.1.307']);
+  assert.equal((await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).status, 200);
+  assert.equal((await post({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, { 'Mcp-Session-Id': 'not-one-of-ours' })).status, 200);
+  assert.deepEqual(log.slice(-2).map((e) => e.client), [undefined, undefined]);
   assert.deepEqual(log.filter((e) => e.note).map((e) => e.status), [400, 405, 405]);
   assert.match(String(log[0].note), /2026-07-28/);
   // Not part of a handshake: still failures.
@@ -142,7 +150,7 @@ test('the HTTP server refuses foreign origins and unsupported protocol versions'
   assert.equal((await post(ping, { Origin: 'https://evil.example' })).status, 403);
   assert.equal((await post(ping, { Origin: 'http://localhost:3000' })).status, 200);
   assert.equal((await post(ping, { 'MCP-Protocol-Version': '1999-01-01' })).status, 400);
-  assert.equal((await post(ping, { 'MCP-Protocol-Version': PROTOCOL_VERSIONS[0] })).status, 200);
+  assert.equal((await post(ping, { 'MCP-Protocol-Version': LEGACY_VERSIONS[0] })).status, 200);
 });
 
 test('a failure inside the handler becomes a JSON-RPC error, and the next request still works', async (t) => {
@@ -163,9 +171,9 @@ test('a strict client session: initialize, initialized, tools/list, tools/call, 
     assert.equal(r.id, id);
     assert.equal(('result' in r) !== ('error' in r), true, 'exactly one of result and error');
   };
-  const init = await (await post({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSIONS[0], capabilities: {}, clientInfo: { name: 'strict', version: '1' } } })).json();
+  const init = await (await post({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: LEGACY_VERSIONS[0], capabilities: {}, clientInfo: { name: 'strict', version: '1' } } })).json();
   wellFormed(init, 1);
-  assert.equal(init.result.protocolVersion, PROTOCOL_VERSIONS[0]);
+  assert.equal(init.result.protocolVersion, LEGACY_VERSIONS[0]);
   assert.equal(typeof init.result.serverInfo.name, 'string');
   const h = { 'MCP-Protocol-Version': init.result.protocolVersion };
   assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, h)).status, 202);
@@ -207,4 +215,66 @@ test('a client that disconnects mid-call aborts the tool it was waiting on', asy
   setTimeout(() => client.abort(), 50);
   assert.equal(await call, 'AbortError');
   assert.equal(await aborted, true);
+});
+
+/** A modern (2026-07-28) request and the headers that mirror it. @param {string | number} id @param {string} method @param {object} [params] */
+const modern = (id, method, params = {}) => {
+  const msg = { jsonrpc: '2.0', id, method, params: { ...params, _meta: { 'io.modelcontextprotocol/protocolVersion': MODERN_VERSIONS[0], 'io.modelcontextprotocol/clientInfo': { name: 'modern', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} } } };
+  return { msg, headers: mirrorHeaders(msg) };
+};
+
+test('a modern client: server/discover, tools/list and tools/call with per-request _meta, no initialize', async (t) => {
+  const post = await serve(t);
+  const send = async (/** @type {{ msg: object, headers: Record<string, string> }} */ r) => { const res = await post(r.msg, r.headers); return { status: res.status, body: await res.json() }; };
+  const disc = await send(modern('d', 'server/discover'));
+  assert.equal(disc.status, 200);
+  assert.deepEqual(disc.body.result.supportedVersions, PROTOCOL_VERSIONS);
+  assert.equal(disc.body.result.resultType, 'complete');
+  assert.deepEqual(disc.body.result.capabilities, { tools: {} });
+  assert.equal(disc.body.result._meta['io.modelcontextprotocol/serverInfo'].name, 'houston');
+  const list = await send(modern(1, 'tools/list'));
+  assert.equal(list.status, 200);
+  assert.equal(list.body.result.resultType, 'complete');
+  assert.deepEqual(list.body.result.tools.map((/** @type {any} */ x) => x.name), ['echo', 'boom']);
+  const call = await send(modern(2, 'tools/call', { name: 'echo', arguments: { x: 1 } }));
+  assert.deepEqual(call.body.result.structuredContent, { x: 1 });
+  assert.equal(call.body.result.resultType, 'complete');
+  const nope = await send(modern(3, 'resources/list'));
+  assert.equal(nope.status, 404);
+  assert.equal(nope.body.error.code, -32601);
+  // The token check is unchanged for modern requests.
+  const r = modern(4, 'tools/list');
+  assert.equal((await post(r.msg, { ...r.headers, Authorization: '' })).status, 401);
+  assert.equal((await post(r.msg, { ...r.headers, Authorization: 'Bearer wrong' })).status, 401);
+});
+
+test('a modern request without its fields or with headers that disagree gets 400 and a modern error', async (t) => {
+  const post = await serve(t);
+  const code = async (/** @type {object} */ msg, /** @type {Record<string, string>} */ headers) => { const res = await post(msg, headers); assert.equal(res.status, 400); return (await res.json()).error; };
+  const ok = modern(1, 'tools/call', { name: 'echo' });
+  const err = await code({ ...ok.msg, params: { ...ok.msg.params, _meta: { ...ok.msg.params._meta, 'io.modelcontextprotocol/protocolVersion': '2099-01-01' } } }, { ...ok.headers, 'MCP-Protocol-Version': '2026-07-28' });
+  assert.equal(err.code, -32022);
+  assert.deepEqual(err.data, { supported: PROTOCOL_VERSIONS, requested: '2099-01-01' });
+  assert.equal((await code(ok.msg, { ...ok.headers, 'MCP-Protocol-Version': '2099-01-01' })).code, -32022);
+  const noCaps = { ...ok.msg, params: { name: 'echo', _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } } };
+  assert.equal((await code(noCaps, ok.headers)).code, -32602);
+  assert.equal((await code(ok.msg, { ...ok.headers, 'MCP-Protocol-Version': '2025-11-25' })).code, -32020);
+  assert.equal((await code(ok.msg, { ...ok.headers, 'Mcp-Method': 'tools/list' })).code, -32020);
+  assert.equal((await code(ok.msg, { ...ok.headers, 'Mcp-Name': 'boom' })).code, -32020);
+  const { 'Mcp-Name': _n, ...noName } = ok.headers;
+  assert.equal((await code(ok.msg, noName)).code, -32020);
+  // server/discover is modern-only: with no _meta it's malformed, not unknown.
+  assert.equal((await code({ jsonrpc: '2.0', id: 9, method: 'server/discover' }, {})).code, -32602);
+});
+
+test('checkRequest leaves legacy requests alone and decodes a base64 Mcp-Name', () => {
+  assert.deepEqual(checkRequest({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, {}), { modern: false });
+  assert.deepEqual(checkRequest({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { 'mcp-protocol-version': '2025-06-18' }), { modern: false });
+  assert.equal(checkRequest(null, {}).reject, undefined);
+  const r = modern(1, 'tools/call', { name: 'héllo wörld' });
+  assert.match(r.headers['Mcp-Name'], /^=\?base64\?.+\?=$/);
+  const lower = Object.fromEntries(Object.entries(r.headers).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.deepEqual(checkRequest(r.msg, lower), { modern: true });
+  assert.deepEqual(mirrorHeaders({ jsonrpc: '2.0', id: 1, method: 'tools/list' }), {});
+  assert.equal(mirrorHeaders(modern(1, 'tools/call', { name: '=?base64?x?=' }).msg)['Mcp-Name'], `=?base64?${Buffer.from('=?base64?x?=').toString('base64')}?=`);
 });

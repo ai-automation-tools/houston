@@ -30,6 +30,7 @@ Start with the roadmap if you want to know what's next, or the decisions folder 
 | [**🗺️ ROADMAP.md**](ROADMAP.md) | What's done and what's next. Every release gate closed on 2026-10-18 and the repo went public; the work now is Milestones A to D from the 2026-10-20 audit (A and B are done, C is under way with the Git changes view and dev servers in, and D has started with managed runs; the Integrations are done), then daily-use polish and distribution. The roadmap routine works it twice a week. |
 | [**📋 CHANGELOG.md**](CHANGELOG.md) | Every change, newest first. Everything since 0.1.0 (the 2026-09-29 Phase 1 slice) is still under Unreleased. |
 | [**🔭 UPSTREAMS.md**](UPSTREAMS.md) | The outside services, protocols and packages the app depends on, what the code assumes about each, and where to check that it still holds. The biweekly upstream check works from it. |
+| [**❓ OPEN-QUESTIONS.md**](OPEN-QUESTIONS.md) | Decisions the roadmap routine needs from Mike; an answered one is applied on the next run. |
 
 ## ⚖️ Design
 

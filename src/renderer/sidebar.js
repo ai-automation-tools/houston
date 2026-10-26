@@ -441,9 +441,11 @@ export class Sidebar {
       row.style.paddingLeft = '10px';
       row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
       q(row, '.icon').textContent = c.note ? '·' : c.ok ? '✓' : '✗';
-      q(row, '.name').textContent = c.tool ? `${c.tool}${c.args && c.args !== '{}' ? ` ${c.args}` : ''}` : c.client ? `${c.client} connected` : c.method;
-      q(row, '.sub').textContent = c.status ? String(c.status) : `${c.ms} ms`;
-      row.title = [new Date(c.at).toLocaleString(), c.tool ? `tools/call ${c.tool}` : c.method, c.args, c.note, c.error].filter(Boolean).join('\n');
+      const opened = c.client && (c.method === 'initialize' || c.method === 'server/discover');
+      q(row, '.name').textContent = c.tool ? `${c.tool}${c.args && c.args !== '{}' ? ` ${c.args}` : ''}` : opened ? `${c.client} connected` : c.method;
+      // Which client made a later call, by the name it gave (self-reported, not proof).
+      q(row, '.sub').textContent = `${c.client && !opened ? `${c.client} · ` : ''}${c.status ? String(c.status) : `${c.ms} ms`}`;
+      row.title = [new Date(c.at).toLocaleString(), c.tool ? `tools/call ${c.tool}` : c.method, c.client && `from ${c.client}`, c.args, c.note, c.error].filter(Boolean).join('\n');
       host.append(row);
     }
   }

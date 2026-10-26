@@ -15,7 +15,7 @@ const AT_REST_ONLY_LENGTH = { terminal_run: ['command'] };
  *   at: number, method: string, tool?: string, args?: string, argsAtRest?: string,
  *   ok: boolean, ms: number, status?: number, error?: string, client?: string, note?: string,
  * }} LogEntry argsAtRest: what mcp.log gets in place of args, when that differs;
- *   client: who connected, from initialize's clientInfo; note: an expected non-200 answer
+ *   client: who made the call, from its clientInfo (initialize's, or a modern request's _meta) or its session's; note: an expected non-200 answer
  */
 
 /** @param {string} s @param {number} max */
@@ -36,19 +36,20 @@ export function stripQueries(text) {
 /**
  * One request and what came of it. `msg` is whatever the client sent (trust nothing);
  * `out` is the JSON-RPC response, or null for a notification.
- * @param {{ msg: any, out: any, ms: number, at?: number }} call
+ * @param {{ msg: any, out: any, ms: number, at?: number, client?: string }} call client: who the request's session belongs to, when it doesn't say
  * @returns {LogEntry}
  */
-export function describeCall({ msg, out, ms, at = Date.now() }) {
+export function describeCall({ msg, out, ms, at = Date.now(), client }) {
   const method = typeof msg?.method === 'string' ? clip(msg.method, 100) : '(invalid)';
   /** @type {LogEntry} */
   const entry = { at, method, ok: true, ms };
-  if (method === 'initialize') {
-    // Self-reported, so it names the client, it doesn't prove who it is.
-    const info = msg.params?.clientInfo;
-    const name = plain(info?.name, 60);
-    if (name) entry.client = [name, plain(info.version, 30)].filter(Boolean).join(' ');
-  }
+  // Self-reported, so it names the client, it doesn't prove who it is. A legacy client
+  // names itself once, in initialize, and the server ties its later calls to that name by
+  // session (`client`); a modern (2026-07-28) one names itself in every request's _meta.
+  const info = (method === 'initialize' ? msg.params?.clientInfo : undefined) ?? msg?.params?._meta?.['io.modelcontextprotocol/clientInfo'];
+  const name = plain(info?.name, 60);
+  if (name) entry.client = [name, plain(info.version, 30)].filter(Boolean).join(' ');
+  else if (client) entry.client = client;
   if (method === 'tools/call') {
     if (typeof msg.params?.name === 'string') entry.tool = clip(msg.params.name, 100);
     const args = msg.params?.arguments;
@@ -82,8 +83,9 @@ export function refusedCall(status, reason, at = Date.now()) {
 
 /**
  * A request answered with an error status that's part of a normal connection, not a
- * failure: Claude Code first probes with a newer protocol version (400 tells it to fall
- * back) and asks for an event stream with GET (405 tells it there is none).
+ * failure: Claude Code first probes with a modern protocol version and no _meta (400
+ * tells it to fall back to initialize) and asks for an event stream with GET (405 tells
+ * it there is none); a version the server doesn't speak gets 400 with the ones it does.
  * @param {number} status
  * @param {string} note
  * @returns {LogEntry}
