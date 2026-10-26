@@ -178,7 +178,7 @@ test('a chat turn drives a real MCP server over HTTP with its token', async (t) 
   ]);
   /** @type {string[]} */
   const logged = [];
-  const server = createMcpServer({ token: TOKEN, tools, version: '0', onCall: (e) => logged.push(e.tool || e.method) });
+  const server = createMcpServer({ token: TOKEN, tools, version: '0', onCall: (e) => logged.push(`${e.tool || e.method} ${e.client}`) });
   await new Promise((r) => server.listen(0, '127.0.0.1', () => r(undefined)));
   t.after(() => server.close());
   const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
@@ -200,7 +200,8 @@ test('a chat turn drives a real MCP server over HTTP with its token', async (t) 
     { type: 'tool_result', tool_use_id: 'u1', content: '{"id":7}', is_error: false },
     { type: 'tool_result', tool_use_id: 'u2', content: 'The user denied this command.', is_error: true },
   ]);
-  assert.deepEqual(logged, ['tools/list', 'open_tab', 'terminal_run']);
+  // Each call names the chat, from its 2026-07-28 _meta.
+  assert.deepEqual(logged, ['tools/list houston-chat', 'open_tab houston-chat', 'terminal_run houston-chat']);
 
   const wrong = mcpClient(url, 'wrong');
   assert.deepEqual(await wrong.call('open_tab', {}), { text: 'MCP server answered 401', isError: true });

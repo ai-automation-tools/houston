@@ -17,7 +17,7 @@
 |:---|:---|
 | **Entry file** | [`src/main/mcp.js`](../src/main/mcp.js) starts it; the protocol is in [`src/shared/mcp.js`](../src/shared/mcp.js) and the tools in [`src/shared/tools.js`](../src/shared/tools.js) |
 | **Launched by** | The app itself, at start-up. Nothing to install or run separately; it stops when the app quits |
-| **Transport** | Streamable HTTP, plain JSON responses (no SSE stream, no sessions), on `127.0.0.1` with a random port. [`scripts/mcp-stdio.js`](../scripts/mcp-stdio.js) bridges it to stdio for clients started anywhere |
+| **Transport** | Streamable HTTP, plain JSON responses (no SSE stream). An `initialize` answer carries an `Mcp-Session-Id`, used only to name the client on its later calls in the log; it grants nothing, and an unknown or missing one is ignored, on `127.0.0.1` with a random port. [`scripts/mcp-stdio.js`](../scripts/mcp-stdio.js) bridges it to stdio for clients started anywhere |
 | **Protocol** | Both eras of MCP: `2026-07-28`, where each request carries its version, capabilities and client name in `_meta` (mirrored in the `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers) and `server/discover` lists what the server speaks, and the `initialize` handshake of `2025-11-25`, `2025-06-18` and `2025-03-26`. The stdio bridge fills in the headers from `_meta` |
 | **Auth** | `Authorization: Bearer <token>`, a fresh token each launch. Host and Origin must be loopback |
 | **Discovery** | `mcp.json` in the app's userData folder holds this launch's URL and token (deleted on quit). Every terminal the app opens has `ACC_MCP_URL` and `ACC_MCP_TOKEN` set |

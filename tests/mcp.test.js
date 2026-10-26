@@ -76,13 +76,21 @@ test("Claude Code's handshake logs as one named connection, with no failures", a
   const clientInfo = { name: 'claude-code', version: '2.1.307' };
   // What Claude Code 2.1.307 sent on 2026-10-21, in order.
   assert.equal((await post({ jsonrpc: '2.0', id: 'server-discover-probe-1', method: 'server/discover', params: {} }, { 'MCP-Protocol-Version': '2026-07-28' })).status, 400);
-  assert.equal((await post({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo } })).status, 200);
-  assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, { 'MCP-Protocol-Version': '2025-11-25' })).status, 202);
-  assert.equal((await fetch(url, { headers: { ...auth, Accept: 'text/event-stream' } })).status, 405);
-  assert.equal((await fetch(url, { method: 'DELETE', headers: auth })).status, 405);
-  assert.equal((await post({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).status, 200);
+  const init = await post({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo } });
+  assert.equal(init.status, 200);
+  const session = { 'Mcp-Session-Id': String(init.headers.get('mcp-session-id')) };
+  assert.match(session['Mcp-Session-Id'], /^[0-9a-f-]{36}$/);
+  assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, { 'MCP-Protocol-Version': '2025-11-25', ...session })).status, 202);
+  assert.equal((await fetch(url, { headers: { ...auth, ...session, Accept: 'text/event-stream' } })).status, 405);
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { ...auth, ...session } })).status, 405);
+  assert.equal((await post({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, session)).status, 200);
   assert.deepEqual(log.filter((e) => !e.ok), []);
   assert.equal(log.find((e) => e.method === 'initialize')?.client, 'claude-code 2.1.307');
+  // Later calls carry the session, so they name the client too; no session or an unknown one, no name.
+  assert.deepEqual(log.filter((e) => e.method.includes('/')).map((e) => e.client), ['claude-code 2.1.307', 'claude-code 2.1.307']);
+  assert.equal((await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).status, 200);
+  assert.equal((await post({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, { 'Mcp-Session-Id': 'not-one-of-ours' })).status, 200);
+  assert.deepEqual(log.slice(-2).map((e) => e.client), [undefined, undefined]);
   assert.deepEqual(log.filter((e) => e.note).map((e) => e.status), [400, 405, 405]);
   assert.match(String(log[0].note), /2026-07-28/);
   // Not part of a handshake: still failures.

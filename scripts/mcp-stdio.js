@@ -4,7 +4,9 @@
 // its token, and the reply goes to stdout. mcp.json is read per message, so restarting
 // the app (new port, new token) needs no client restart. HOUSTON_MCP_JSON overrides the
 // file's path. A modern (2026-07-28) request's _meta goes into the headers HTTP wants
-// mirrored. Never write anything but replies to stdout.
+// mirrored, and the Mcp-Session-Id the app gives at initialize goes back on every later
+// request, so the MCP tab names the client on each call. Never write anything but
+// replies to stdout.
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -16,6 +18,9 @@ const infoFile = process.env.HOUSTON_MCP_JSON || path.join(process.env.APPDATA |
 /** @type {Set<http.ClientRequest>} */
 const pending = new Set();
 let closed = false;
+// The app's session id for this client, with the token it came under: a restarted app
+// has a new token and doesn't know the old id.
+let session = { token: '', id: '' };
 
 /** @param {unknown} msg */
 const send = (msg) => closed || process.stdout.write(`${JSON.stringify(msg)}\n`);
@@ -42,8 +47,11 @@ function forward(line) {
   // up to 5 minutes for the user's click.
   const req = http.request(info.url, {
     method: 'POST',
-    headers: { ...mirrorHeaders(msg), 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${info.token}`, 'Content-Length': body.length },
+    headers: { ...mirrorHeaders(msg), 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${info.token}`, 'Content-Length': body.length,
+      ...(session.id && session.token === info.token && { 'Mcp-Session-Id': session.id }) },
   }, (res) => {
+    const sid = res.headers['mcp-session-id'];
+    if (typeof sid === 'string') session = { token: info.token, id: sid };
     /** @type {Buffer[]} */
     const chunks = [];
     res.on('data', (c) => chunks.push(c));

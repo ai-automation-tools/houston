@@ -97,9 +97,9 @@ const runs = (taskId, now) => {
 
 /** @param {number} now */
 const calls = (now) => [
-  { at: now - 4 * 60_000, method: 'tools/call', tool: 'sidebar_search', args: '{"query":"architecture"}', ok: true, ms: 12 },
-  { at: now - 5 * 60_000, method: 'tools/call', tool: 'list_tabs', args: '{}', ok: true, ms: 3 },
-  { at: now - 6 * 60_000, method: 'initialize', ok: true, ms: 2 },
+  { at: now - 4 * 60_000, method: 'tools/call', tool: 'sidebar_search', args: '{"query":"architecture"}', ok: true, ms: 12, client: 'claude-code 2.1.307' },
+  { at: now - 5 * 60_000, method: 'tools/call', tool: 'list_tabs', args: '{}', ok: true, ms: 3, client: 'claude-code 2.1.307' },
+  { at: now - 6 * 60_000, method: 'initialize', ok: true, ms: 2, client: 'claude-code 2.1.307' },
 ];
 
 const NPM_TEST = [

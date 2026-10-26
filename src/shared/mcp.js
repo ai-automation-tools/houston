@@ -1,5 +1,7 @@
 // The Control Center MCP server: JSON-RPC over MCP's Streamable HTTP transport, plain
-// JSON responses only (no SSE stream, no sessions). No Electron here, so tests can run
+// JSON responses only (no SSE stream). A legacy client gets an Mcp-Session-Id at
+// initialize, used only to name it on its later calls in the log; it grants nothing.
+// No Electron here, so tests can run
 // it for real; src/main/mcp.js starts it and hands it the tools.
 //
 // It speaks both eras of MCP. A legacy client (2025-11-25 and earlier) opens with
@@ -12,7 +14,7 @@
 // rebinding from a web page reaching the port).
 
 import http from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { describeCall, expectedCall, refusedCall } from './mcplog.js';
 
 /** Revisions with per-request `_meta` and no handshake. */
@@ -22,6 +24,7 @@ export const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 export const PROTOCOL_VERSIONS = [...MODERN_VERSIONS, ...LEGACY_VERSIONS];
 const META = 'io.modelcontextprotocol/';
 const MAX_BODY = 1024 * 1024;
+const MAX_SESSIONS = 100;
 
 /**
  * @typedef {{ readOnlyHint?: boolean, destructiveHint?: boolean, idempotentHint?: boolean, openWorldHint?: boolean }} ToolAnnotations
@@ -211,6 +214,11 @@ function rpcError(id, code, message) {
  * @returns {http.Server} not yet listening
  */
 export function createMcpServer({ token, tools, version, onCall = () => {} }) {
+  // Session id → the name its client gave at initialize ('' for none). An unknown id is
+  // ignored rather than refused, since a session only labels calls.
+  // ponytail: oldest dropped past MAX_SESSIONS; a client outliving 100 newer sessions logs unnamed
+  /** @type {Map<string, string>} */
+  const sessions = new Map();
   return http.createServer((req, res) => {
     /** @param {number} status @param {unknown} [body] */
     const reply = (status, body) => {
@@ -239,7 +247,7 @@ export function createMcpServer({ token, tools, version, onCall = () => {} }) {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
       if (req.method === 'GET') return steer(405, 'Method not allowed', 'Asked for an event stream; there is none, so replies come back over POST');
-      if (req.method === 'DELETE') return steer(405, 'Method not allowed', 'Asked to end a session; there are none to end');
+      if (req.method === 'DELETE') return steer(405, 'Method not allowed', 'Asked to end its session; sessions only name a client and end when the app quits');
       return refuse(405, 'Method not allowed');
     }
 
@@ -262,10 +270,12 @@ export function createMcpServer({ token, tools, version, onCall = () => {} }) {
         onCall(refusedCall(400, 'Parse error'));
         return reply(400, rpcError(null, -32700, 'Parse error'));
       }
+      const sid = req.headers['mcp-session-id'];
+      const client = typeof sid === 'string' ? sessions.get(sid) : undefined;
       // The protocol version and, for a modern request, its _meta and mirrored headers.
       const { modern, reject } = checkRequest(msg, req.headers);
       if (reject) {
-        try { onCall(reject.note ? expectedCall(reject.status, reject.note) : describeCall({ msg, out: reject.out, ms: 0 })); } catch { /* logging never blocks the reply */ }
+        try { onCall(reject.note ? expectedCall(reject.status, reject.note) : describeCall({ msg, out: reject.out, ms: 0, client })); } catch { /* logging never blocks the reply */ }
         return reply(reject.status, reject.out);
       }
       const started = Date.now();
@@ -281,8 +291,16 @@ export function createMcpServer({ token, tools, version, onCall = () => {} }) {
         // Nothing reaching here may leave the socket hanging or the rejection unhandled.
         out = rpcError(isObject(msg) && (typeof msg.id === 'string' || typeof msg.id === 'number') ? msg.id : null, -32603, 'Internal error');
       }
+      /** @type {import('./mcplog.js').LogEntry | undefined} */
+      let entry;
       // Notifications get no answer but still happened.
-      try { onCall(describeCall({ msg, out, ms: Date.now() - started })); } catch { /* logging never blocks the reply */ }
+      try { entry = describeCall({ msg, out, ms: Date.now() - started, client }); onCall(entry); } catch { /* logging never blocks the reply */ }
+      if (msg?.method === 'initialize' && out?.result) {
+        const id = randomUUID();
+        sessions.set(id, entry?.client ?? '');
+        if (sessions.size > MAX_SESSIONS) sessions.delete(/** @type {string} */ (sessions.keys().next().value));
+        res.setHeader('Mcp-Session-Id', id);
+      }
       if (out === null) return reply(202);
       // A modern client tells an unknown method from a legacy server's 404 by the body.
       reply(modern && out.error?.code === -32601 ? 404 : 200, out);

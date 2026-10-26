@@ -165,19 +165,25 @@ export function addUserText(messages, text) {
 }
 
 /**
- * A JSON-RPC client for the app's MCP server.
+ * A JSON-RPC client for the app's MCP server. It speaks MCP 2026-07-28, so each request
+ * names it in `_meta` and the MCP tab shows its calls as the chat's.
  * @param {string} url
  * @param {string} token
  * @param {typeof fetch} [fetchFn]
  */
 export function mcpClient(url, token, fetchFn = fetch) {
   let id = 0;
-  /** @param {string} method @param {object} params @param {AbortSignal} [signal] */
+  const version = '2026-07-28';
+  const _meta = { 'io.modelcontextprotocol/protocolVersion': version, 'io.modelcontextprotocol/clientCapabilities': {}, 'io.modelcontextprotocol/clientInfo': { name: 'houston-chat' } };
+  /** @param {string} method @param {Record<string, unknown>} params @param {AbortSignal} [signal] */
   const rpc = async (method, params, signal) => {
+    // The headers shared/mcp.js's mirrorHeaders() would give; that module needs node:http,
+    // and this one also loads in the browser demo. Tool names are plain ASCII.
+    const mirrored = { 'MCP-Protocol-Version': version, 'Mcp-Method': method, ...(typeof params.name === 'string' && { 'Mcp-Name': params.name }) };
     const res = await fetchFn(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...mirrored },
+      body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params: { ...params, _meta } }),
       // Aborting closes the connection, which withdraws a confirm bar the call waits on.
       signal: withDeadline(signal, TOOL_DEADLINE_MS),
     });

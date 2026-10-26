@@ -91,6 +91,15 @@ test('query strings and fragments are cut from logged URLs and errors', () => {
   assert.equal(e.error, 'failed https://x.dev/a?…');
 });
 
+test("a later call names its client from its own _meta, else from its session's", () => {
+  const call = (/** @type {object} */ params, /** @type {string} */ [client] = []) => describeCall({ msg: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_tabs', ...params } }, out: { result: {} }, ms: 0, client }).client;
+  assert.equal(call({ _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'opencode', version: '1' } } }, ['claude-code 2']), 'opencode 1');
+  assert.equal(call({}, ['claude-code 2']), 'claude-code 2');
+  assert.equal(call({}), undefined);
+  // Only initialize names a client in params; anything else's clientInfo is ignored.
+  assert.equal(call({ clientInfo: { name: 'spoof' } }), undefined);
+});
+
 test("server/discover records a modern client's name from _meta", () => {
   const msg = { jsonrpc: '2.0', id: 'd', method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'claude-code', version: '3.0.0' } } } };
   assert.equal(describeCall({ msg, out: { result: {} }, ms: 0 }).client, 'claude-code 3.0.0');

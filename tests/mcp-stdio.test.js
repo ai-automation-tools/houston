@@ -13,7 +13,9 @@ const tools = new Map([['echo', { description: 'Echo', inputSchema: { type: 'obj
 test('mcp-stdio bridges stdin lines to the app and says so when it is not running', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-stdio-'));
   const file = path.join(dir, 'mcp.json');
-  const server = createMcpServer({ token: TOKEN, tools, version: '0.0.0' });
+  /** @type {import('../src/shared/mcplog.js').LogEntry[]} */
+  const log = [];
+  const server = createMcpServer({ token: TOKEN, tools, version: '0.0.0', onCall: (e) => log.push(e) });
   await new Promise((r) => server.listen(0, '127.0.0.1', () => r(undefined)));
   const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
   const child = spawn(process.execPath, ['scripts/mcp-stdio.js'], { env: { ...process.env, HOUSTON_MCP_JSON: file } });
@@ -24,9 +26,11 @@ test('mcp-stdio bridges stdin lines to the app and says so when it is not runnin
 
   assert.equal((await ask({ jsonrpc: '2.0', id: 1, method: 'ping' })).error.code, -32000);
   fs.writeFileSync(file, JSON.stringify({ url: `http://127.0.0.1:${port}/mcp`, token: TOKEN }));
-  assert.equal((await ask({ jsonrpc: '2.0', id: 2, method: 'initialize', params: {} })).result.serverInfo.name, 'houston');
+  assert.equal((await ask({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { clientInfo: { name: 'codex', version: '1.0' } } })).result.serverInfo.name, 'houston');
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   assert.deepEqual((await ask({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { x: 1 } } })).result.structuredContent, { x: 1 });
+  // The bridge sent back the session id initialize gave it, so the call names its client.
+  assert.equal(log.find((e) => e.tool === 'echo')?.client, 'codex 1.0');
   // A modern (2026-07-28) client: the bridge mirrors _meta into the headers HTTP checks.
   const _meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} };
   assert.equal((await ask({ jsonrpc: '2.0', id: 4, method: 'server/discover', params: { _meta } })).result.supportedVersions[0], '2026-07-28');
