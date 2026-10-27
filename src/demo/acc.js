@@ -11,6 +11,7 @@ import { trayItem } from '../shared/chat.js';
 import { chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { searchConversations } from '../shared/conversations.js';
 import { Activity, activityRows } from '../shared/activity.js';
+import { Runs, runRows } from '../shared/runs.js';
 import { WELCOME_ID, WELCOME_URL } from './about.js';
 
 const HOUR = 3_600_000;
@@ -192,6 +193,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
   const titleOf = (url) => {
     if (isDocUrl(url)) return docIdFromUrl(url).split('/').pop() || url;
     if (url.startsWith('acc://run/')) return 'Cronsole run';
+    if (url.startsWith('acc://runlog/')) return 'Run';
     try { return new URL(url).hostname || url; } catch { return url; }
   };
   const show = () => {
@@ -279,6 +281,16 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
   };
   seed({ kind: 'command', asked: 'npm run lint', target: 'D:\\work\\acme-api' }, true, 0);
   seed({ kind: 'command', asked: 'git push --force', target: 'D:\\work\\acme-api' }, false);
+  // The run history behind the MCP panel's Runs list: the lint run above, and an older failure.
+  const history = new Runs();
+  /** @param {string} command @param {number} code @param {string} output @param {string[]} changed @param {number} ago */
+  const pastRun = (command, code, output, changed, ago) => {
+    const r = history.start({ terminal: 0, command, cwd: 'D:\\work\\acme-api' }, now() - ago);
+    history.end(0, code, output, now() - ago + 4000);
+    r.changed = changed;
+  };
+  pastRun('npm test', 1, '> acme-api@1.0.0 test\r\n✗ login rejects a wrong password\r\n1 failing', [], 5 * HOUR);
+  pastRun('npm run lint', 0, '> acme-api@1.0.0 lint\r\n0 problems', ['src/server.js'], 2 * HOUR);
   let askWork = 0;
   const workChanged = () => emit('activity', activityRows(work.list));
 
@@ -409,6 +421,11 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     activity: {
       list: async () => activityRows(work.list),
       onChanged: listen('activity'),
+    },
+
+    runs: {
+      list: async (/** @type {string} */ query) => runRows(history.list, query),
+      onChanged: listen('runs'),
     },
 
     chat: {

@@ -89,6 +89,12 @@ contextBridge.exposeInMainWorld('acc', {
     onChanged: listen('activity:changed'),
   },
 
+  /** terminal_run's run history, newest first, searched by the text given. */
+  runs: {
+    list: invoke('runs:list'),
+    onChanged: listen('runs:changed'),
+  },
+
   chat: {
     info: invoke('chat:info'),
     attach: invoke('chat:attach'),

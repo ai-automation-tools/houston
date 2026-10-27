@@ -129,6 +129,26 @@ export function devLogPage({ script, folder, command, state, url, output }) {
   return docPage({ title: `${script} · log`, trail: `Dev servers › ${name} › ${script}`, body });
 }
 
+/**
+ * A terminal_run run's acc://runlog page: the command, how it ended, the files it
+ * changed and its output, all as text.
+ * @param {{ run: number, command: string, cwd: string, state: string, started: string, took: string | null, changed: string[] | null, output: string }} r
+ */
+export function runLogPage({ run, command, cwd, state, started, took, changed, output }) {
+  const files = changed === null
+    ? '<p class="note">Changed files: not a Git repository, or not known yet.</p>'
+    : changed.length
+      ? `<h2>Changed files (${changed.length})</h2><ul>${changed.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join('')}</ul>`
+      : '<p class="note">Changed files: none.</p>';
+  const body = [
+    `<h1><code>${escapeHtml(command)}</code></h1>`,
+    `<p class="note">${escapeHtml([`Run ${run}`, state, cwd, `started ${started}`, took && `took ${took}`].filter(Boolean).join(' · '))}</p>`,
+    files,
+    output ? `<pre>${escapeHtml(output)}</pre>` : '<p class="note">No output.</p>',
+  ].join('');
+  return docPage({ title: `Run ${run} · ${command.slice(0, 60)}`, trail: `Runs › ${run}`, body });
+}
+
 const CSS = `
 :root { --bg: #0b0d10; --panel: #111418; --line: #262b33; --text: #e4e4e7; --text-2: #a1a1aa; --accent: #38bdf8; }
 @media (prefers-color-scheme: light) { :root { --bg: #ffffff; --panel: #f4f4f5; --line: #e4e4e7; --text: #18181b; --text-2: #52525b; --accent: #0369a1; } }
