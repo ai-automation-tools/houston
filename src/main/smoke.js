@@ -171,7 +171,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       };
       const clickRun = () => wc.executeJavaScript(`(() => { const b = document.getElementById('confirm-run'); const shown = !document.getElementById('confirm-bar').hidden; b.click(); return shown; })()`);
       const ok = await settle(ranOut?.run);
-      const failing = call('terminal_run', { command: 'Write-Output "about to fail"; cmd /c exit 3' });
+      const failing = call('terminal_run', { command: 'Write-Output ("about to " + "fail"); cmd /c exit 3' });
       await wait(500);
       await clickRun();
       const failed = await settle((await failing)?.run);
@@ -196,6 +196,36 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('the MCP panel lists each run under Agent work: what was asked and how it ended',
         JSON.stringify(work.map((/** @type {string[]} */ w) => w[0])) === '["cancelled","failed","succeeded"]'
         && work[0][1] === 'Start-Sleep -Seconds 60' && work[1][2] === 'failed (exit 3)' && work[2][2] === 'finished (exit 0)', work);
+      // Run history: searching the MCP panel finds the failing run by its output (its
+      // command builds the text, so only the output has it whole), and a click opens its
+      // log as a script-free page. runs.json has all three.
+      const history = await wc.executeJavaScript(`(async () => {
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+        const box = document.getElementById('runs-search');
+        box.value = 'about to fail';
+        box.dispatchEvent(new Event('input'));
+        await pause(600);
+        const rows = [...document.querySelectorAll('#mcp-list .row.run')].map((r) => [r.querySelector('.name').textContent, r.querySelector('.sub').textContent]);
+        document.querySelector('#mcp-list .row.run')?.click();
+        box.value = '';
+        box.dispatchEvent(new Event('input'));
+        return { rows };
+      })()`);
+      for (let i = 0; i < 40 && !tabs.list().some((t) => t.url.startsWith('acc://runlog/')); i++) await wait(250);
+      const runTab = tabs.list().find((t) => t.url.startsWith('acc://runlog/'));
+      const runView = runTab && tabs.tabs.get(runTab.id);
+      if (runView) {
+        for (let i = 0; i < 40 && runView.view.webContents.isLoading(); i++) await wait(100);
+        history.page = await runView.view.webContents.executeJavaScript(`({ url: location.href, h1: document.querySelector('h1')?.textContent, note: document.querySelector('.note')?.textContent, text: document.querySelector('pre')?.textContent ?? '', scripts: document.scripts.length })`);
+        tabs.close(runTab.id);
+      }
+      const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'runs.json'), 'utf8'));
+      history.saved = saved.map((/** @type {any} */ r) => r.state);
+      console.log(`[smoke] history=${JSON.stringify(history)}`);
+      check('the MCP panel\'s run search finds a run by its output, and a click opens its log as a page; runs.json keeps the runs',
+        history.rows.length === 1 && history.rows[0][0].includes('cmd /c exit 3') && /about to fail/.test(history.rows[0][1])
+        && history.page?.url === `acc://runlog/${failed?.run}` && /failed \(exit 3\)/.test(history.page.note || '') && /about to fail/.test(history.page.text) && history.page.scripts === 0
+        && JSON.stringify(history.saved.slice(-3)) === '["succeeded","failed","cancelled"]', history);
       console.log(`[smoke] terminal raw tail=${JSON.stringify(terminals.read()?.raw?.slice(-400))}`);
       const page = await call('read_tab', { tab: tab.view.webContents.id });
       console.log(`[smoke] mcp read_tab title=${JSON.stringify(page.title)} chars=${page.text?.length} truncated=${page.truncated} start=${JSON.stringify(page.text?.slice(0, 60))}`);

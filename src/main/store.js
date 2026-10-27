@@ -80,6 +80,16 @@ export const store = {
     writeJson('layout.json', { ...store.layout(), ...patch });
   },
 
+  /** runs.json: terminal_run's run history, raw; Runs cleans it. */
+  runs() {
+    return readJson('runs.json', []);
+  },
+
+  /** @param {import('../shared/runs.js').Run[]} list */
+  saveRuns(list) {
+    writeJson('runs.json', list);
+  },
+
   /** workspaces.json; before it exists, a Default workspace holding the tabs layout.json saved. */
   workspaces() {
     const d = readJson('layout.json', {});

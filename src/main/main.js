@@ -25,7 +25,9 @@ import { chromeUserAgent, cleanSavedTabs, savedActiveIndex } from '../shared/ses
 import { cronTools, navigationTools, readOnlyTools, tabTools, terminalTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
-import { Runs, runInfo } from '../shared/runs.js';
+import { Runs, changedFiles, runIdFromUrl, runInfo, runRows, runStateText } from '../shared/runs.js';
+import { runLogPage } from '../shared/docs.js';
+import { cleanOutput } from '../shared/output.js';
 import { Activity, activityRows } from '../shared/activity.js';
 import { menuItems } from '../shared/menu.js';
 import { HUB_FAVORITES } from '../shared/tree.js';
@@ -208,7 +210,7 @@ async function createWindow() {
   browseSession.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
   browseSession.setDevicePermissionHandler(() => false);
   const devs = new DevServers(send);
-  serveDocs(browseSession, (url) => cron.page(url), (url) => gitDiff(current().folder, url), async (url) => devs.page(url));
+  serveDocs(browseSession, (url) => cron.page(url), (url) => gitDiff(current().folder, url), async (url) => devs.page(url), async (url) => runLog(url));
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
     invalidateDocsIndex();
@@ -222,12 +224,52 @@ async function createWindow() {
   });
   const terminals = new Terminals(send);
   // terminal_run's runs: a run ends when its session exits, and that exit code is its result.
-  const runs = new Runs();
+  // runs.json keeps the history across restarts (the smoke run's is on its throwaway profile).
+  const runs = new Runs(store.runs());
+  const saveRuns = () => {
+    try {
+      store.saveRuns(runs.list);
+    } catch (err) {
+      logError('runs.json', err);
+    }
+    send('runs:changed');
+  };
+  /** The workspace repo's files by git status, or null outside a repo. @param {string} dir */
+  const gitFiles = (dir) => gitStatus(dir).then((st) => (st.repo ? st.files : null), () => null);
+  /** Each running run's git status from just before it started. @type {Map<number, Promise<import('../shared/git.js').GitFile[] | null>>} */
+  const beforeRun = new Map();
   // The MCP panel's agent work: every ask from the confirm bar to its end.
   const activity = new Activity();
   const workChanged = () => send('activity:changed', activityRows(activity.list));
   /** @param {import('../shared/runs.js').Run | undefined} r */
-  const runEnded = (r) => { if (r && activity.runEnded(r)) workChanged(); };
+  const runEnded = async (r) => {
+    if (!r) return;
+    if (activity.runEnded(r)) workChanged();
+    saveRuns();
+    const before = beforeRun.get(r.run);
+    beforeRun.delete(r.run);
+    if (!before) return;
+    r.changed = changedFiles(await before, await gitFiles(r.cwd));
+    saveRuns();
+  };
+  /** The acc://runlog/<id> page. @param {string} url */
+  const runLog = (url) => {
+    const id = runIdFromUrl(url);
+    const r = id === null ? undefined : runs.get(id);
+    if (!r) throw new Error('No run has this address. Only the last 50 are kept.');
+    const raw = r.state === 'running' ? terminals.read(r.terminal)?.raw ?? '' : r.output ?? '';
+    const ms = runInfo(r).durationMs;
+    return runLogPage({
+      run: r.run,
+      command: r.command,
+      cwd: r.cwd,
+      state: runStateText(r),
+      started: new Date(r.startedAt).toLocaleString(),
+      took: ms === null ? null : `${(ms / 1000).toFixed(1)} s`,
+      changed: r.changed,
+      output: cleanOutput(raw).trimEnd(),
+    });
+  };
   terminals.onExit = (id, code) => runEnded(runs.end(id, code, terminals.read(id)?.raw ?? undefined));
 
   // Workspaces (workspaces.json): switching swaps the tabs and the conversation, and shows
@@ -357,6 +399,9 @@ async function createWindow() {
       if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`cwd is not a folder: ${dir}`);
       const w = await askFor({ kind: 'command', asked: command, target: dir }, { command, cwd: dir }, signal);
       if (!w) return null;
+      // Read git status before the command can touch anything, to list what it changed.
+      const before = gitFiles(dir);
+      await before;
       let t;
       try {
         t = terminals.create({ cwd: dir, ws: spaces.active, run: command });
@@ -365,6 +410,8 @@ async function createWindow() {
         throw err;
       }
       const r = runs.start({ terminal: t.id, command, cwd: t.cwd });
+      beforeRun.set(r.run, before);
+      saveRuns();
       activity.ranAs(w.id, r.run);
       workChanged();
       send('term:opened', t);
@@ -413,6 +460,7 @@ async function createWindow() {
   const callLog = mcpLog(send);
   handle('mcp:log', () => callLog.entries);
   handle('activity:list', () => activityRows(activity.list));
+  handle('runs:list', (query) => runRows(runs.list, typeof query === 'string' ? query.slice(0, 200) : ''));
   // Terminals get the address and token, so `claude` in one can reach the app (README,
   // "Drive the app from Claude Code"). The shell loads after this, so even the first has them.
   const mcpReady = startMcp(new Map([...readOnlyTools(sources), ...navigationTools(sources), ...terminalTools(sources), ...cronTools(sources), ...tabTools(sources)]), (e) => callLog.add(e))

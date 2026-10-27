@@ -1,10 +1,11 @@
 // The left sidebar: Files (Project Hub's tree), Bookmarks (browser profiles Hub reads,
 // plus Hub's own favorites), Recent, and one search box across all three; plus MCP,
-// the log of calls agents made to the app's MCP server; and Cron, Cronsole's tasks.
+// the log of calls agents made to the app's MCP server and the run history; and Cron, Cronsole's tasks.
 
 import { failedTasks, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
 import { diffAreas, gitUrl } from './shared/git.js';
 import { devUrl } from './shared/devservers.js';
+import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
 import { HUB_FAVORITES, absPath, defaultAction, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
@@ -15,6 +16,7 @@ const ICONS = {
   skill: '🧩', agent: '🧠', command: '⌘', hook: '🪝', routine: '⏱️', style: '🎨',
 };
 const RECENT_ICONS = { url: '🌐', file: '📄', folder: '📁', terminal: '💻' };
+const RUN_ICONS = { running: '◌', succeeded: '✓', failed: '✗', cancelled: '■' };
 
 /**
  * @typedef {import('./shared/tree.js').HubNode} HubNode
@@ -58,6 +60,8 @@ export class Sidebar {
       source: /** @type {HTMLSelectElement} */ (document.getElementById('bookmark-source')),
       recent: /** @type {HTMLElement} */ (document.getElementById('panel-recent')),
       mcp: /** @type {HTMLElement} */ (document.getElementById('panel-mcp')),
+      mcpList: /** @type {HTMLElement} */ (document.getElementById('mcp-list')),
+      runsSearch: /** @type {HTMLInputElement} */ (document.getElementById('runs-search')),
       cron: /** @type {HTMLElement} */ (document.getElementById('panel-cron')),
       cronList: /** @type {HTMLElement} */ (document.getElementById('cron-list')),
       git: /** @type {HTMLElement} */ (document.getElementById('panel-git')),
@@ -107,6 +111,21 @@ export class Sidebar {
       this.work = rows;
       this.renderCalls();
     });
+    /** @type {import('./shared/runs.js').RunRow[]} */
+    this.runs = [];
+    api.runs.onChanged(() => this.loadRuns());
+    /** @type {number | undefined} */
+    let typing;
+    this.el.runsSearch.addEventListener('input', () => {
+      window.clearTimeout(typing);
+      typing = window.setTimeout(() => this.loadRuns(), 150);
+    });
+  }
+
+  /** The run history, searched by what's in the box; main does the search over the output. */
+  async loadRuns() {
+    this.runs = await this.api.runs.list(this.el.runsSearch.value);
+    this.renderCalls();
   }
 
   async load() {
@@ -117,7 +136,7 @@ export class Sidebar {
     this.renderRecent();
     this.calls = await this.api.mcp.log();
     this.work = await this.api.activity.list();
-    this.renderCalls();
+    await this.loadRuns();
     await Promise.all([this.loadFiles(), this.loadBookmarks()]);
     // Hub rescans on its own; reload the tree when it says so, no Retry needed.
     this.api.hub.onChanged(() => this.loadFiles());
@@ -422,14 +441,33 @@ export class Sidebar {
   }
 
   renderCalls() {
-    const host = this.el.mcp;
+    const host = this.el.mcpList;
     host.innerHTML = '';
     this.showWorkCount();
+    const query = this.el.runsSearch.value.trim();
+    if (query) {
+      host.append(groupTitle(`Runs matching "${query}"`));
+      if (!this.runs.length) host.append(note('No run has this in its command, folder, changed files or output. The last 50 runs are kept.'));
+      for (const r of this.runs) host.append(this.runRow(r));
+      return;
+    }
     if (this.work.length) {
       host.append(groupTitle('Agent work'));
-      for (const w of this.work) host.append(workRow(w));
-      host.append(groupTitle('Calls'));
+      for (const w of this.work) {
+        const row = workRow(w);
+        const run = w.run;
+        if (run !== null) {
+          row.addEventListener('click', () => this.openUrl(runLogUrl(run)));
+          row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
+        }
+        host.append(row);
+      }
     }
+    if (this.runs.length) {
+      host.append(groupTitle('Runs'));
+      for (const r of this.runs) host.append(this.runRow(r));
+    }
+    if (this.work.length || this.runs.length) host.append(groupTitle('Calls'));
     if (!this.calls.length) {
       host.append(note("Calls agents make to the app's MCP server show up here, newest first, under the commands and tasks they asked to run. The full log is in %APPDATA%\\ai-command-center\\logs\\mcp.log."));
       return;
@@ -448,6 +486,34 @@ export class Sidebar {
       row.title = [new Date(c.at).toLocaleString(), c.tool ? `tools/call ${c.tool}` : c.method, c.client && `from ${c.client}`, c.args, c.note, c.error].filter(Boolean).join('\n');
       host.append(row);
     }
+  }
+
+  /**
+   * One past terminal_run run: its command and how it ended, or the output line that
+   * matched the search. A click opens its output, changed files included, as a page.
+   * @param {import('./shared/runs.js').RunRow} r
+   */
+  runRow(r) {
+    const row = document.createElement('div');
+    row.className = `row work run ${r.state}`;
+    row.tabIndex = 0;
+    row.style.paddingLeft = '10px';
+    row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
+    const files = r.changed?.length ? ` · ${r.changed.length} file${r.changed.length === 1 ? '' : 's'}` : '';
+    q(row, '.icon').textContent = RUN_ICONS[r.state];
+    q(row, '.name').textContent = r.command;
+    q(row, '.sub').textContent = r.match ?? `${runStateText(r)}${files} · ${ago(r.startedAt)}`;
+    row.title = [
+      r.command,
+      `Run ${r.run} in ${r.cwd}`,
+      runStateText(r),
+      `Started ${new Date(r.startedAt).toLocaleString()}`,
+      r.changed?.length && `Changed: ${r.changed.slice(0, 20).join(', ')}${r.changed.length > 20 ? ', …' : ''}`,
+      r.match && `Output: ${r.match}`,
+    ].filter(Boolean).join('\n');
+    row.addEventListener('click', () => this.openUrl(runLogUrl(r.run)));
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
+    return row;
   }
 
   /**

@@ -36,7 +36,12 @@
         <div id="bookmark-tree"></div>
       </section>
       <section id="panel-recent" class="panel" role="tabpanel" hidden></section>
-      <section id="panel-mcp" class="panel" role="tabpanel" aria-live="polite" hidden></section>
+      <section id="panel-mcp" class="panel" role="tabpanel" hidden>
+        <div class="panel-tools">
+          <input id="runs-search" type="search" placeholder="Search past runs: command, folder, output, files" aria-label="Search past runs" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="mcp-list" aria-live="polite"></div>
+      </section>
       <section id="panel-cron" class="panel" role="tabpanel" hidden>
         <div class="panel-tools cron-tools">
           <button id="cron-open" title="Cronsole's UI in the pinned tab">Open Cronsole</button>
