@@ -64,3 +64,16 @@ test('a Cronsole task names its id, ends as started in Cronsole, and only open w
   assert.ok(a.get(open.id), 'a waiting ask is never dropped');
   assert.equal(a.get(t.id), undefined, 'the oldest finished one is');
 });
+
+test('a tab_click or tab_fill ask names the attached tab and ends done or failed', () => {
+  const a = new Activity();
+  const page = { kind: /** @type {const} */ ('page'), asked: 'click button "Go"', target: 'example.com' };
+  const ok = a.ask(page, 1);
+  const bad = a.ask(page, 2);
+  for (const w of [ok, bad]) a.answered(w.id, true, false, 3);
+  a.settle(ok.id, 'succeeded', null, 4);
+  a.settle(bad.id, 'failed', 'Something else covers element 1 on the page', 5);
+  const rows = activityRows(a.list);
+  assert.deepEqual(rows.map((r) => [r.label, r.where]), [['failed', 'the attached tab at example.com'], ['done', 'the attached tab at example.com']]);
+  assert.match(String(rows[0].error), /covers/);
+});

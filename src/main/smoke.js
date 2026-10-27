@@ -223,6 +223,51 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       })()`);
       console.log(`[smoke] find=${JSON.stringify(finder)}`);
       if (!process.env.ACC_SMOKE_URL) check('find in page counts matches and closes', /^[1-9]\d*\/[1-9]\d*$/.test(finder.count) && finder.hidden, finder);
+      // Browser actions on example.com, attached the way its right-click menu would: a field
+      // added for the check (pinned on top: the page's own script draws over its middle),
+      // filled, then the page's link clicked, each after Run on the bar.
+      if (!process.env.ACC_SMOKE_URL) {
+        const page = tab.view.webContents;
+        const unattached = await call('tab_elements', {});
+        tabs.setAgentTab(tab.id);
+        await page.executeJavaScript(`document.body.insertAdjacentHTML('afterbegin', '<input aria-label="smoke field" style="position:fixed;top:8px;left:8px;z-index:2147483647">')`);
+        const listed = await call('tab_elements', {});
+        const field = listed?.elements?.find((/** @type {any} */ e) => e.label === 'smoke field');
+        const link = listed?.elements?.find((/** @type {any} */ e) => e.tag === 'a');
+        const shotOut = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'tab_screenshot', arguments: {} } }),
+        }).then((r) => r.json());
+        const image = shotOut.result?.content?.[0];
+        /** Answer the bar with Run and say what it showed. */
+        const runBar = () => wc.executeJavaScript(`(() => {
+          const shown = document.getElementById('confirm-bar').hidden ? null : [document.getElementById('confirm-cmd').textContent, document.getElementById('confirm-where').textContent];
+          document.getElementById('confirm-run').click();
+          return shown;
+        })()`);
+        const filling = call('tab_fill', { ref: field?.ref, text: 'hello smoke' });
+        await wait(500);
+        const fillBar = await runBar();
+        const filled = await filling;
+        const value = await page.executeJavaScript(`document.querySelector('input[aria-label="smoke field"]')?.value`);
+        const clicking = call('tab_click', { ref: link?.ref });
+        await wait(500);
+        const clickBar = await runBar();
+        const clicked = await clicking;
+        for (let i = 0; i < 40 && /^https:\/\/example\.com/.test(page.getURL()); i++) await wait(250);
+        const after = page.getURL();
+        console.log(`[smoke] tab actions unattached=${JSON.stringify(unattached?.result?.content?.[0]?.text ?? unattached)} elements=${JSON.stringify(listed?.elements)} image=${image?.type}:${image?.data?.length} fill=${JSON.stringify([fillBar, filled, value])} click=${JSON.stringify([clickBar, clicked])} after=${after}`);
+        check('tab_elements needs an attached tab, then lists its field and link; tab_screenshot gives an image',
+          /attached/.test(String(unattached?.result?.content?.[0]?.text)) && field?.fillable === true && link && image?.type === 'image' && image.data.length > 1000, { unattached, field, link, image: image?.type });
+        check('tab_fill and tab_click show the element and host on the bar, then type and click for real',
+          fillBar?.[0] === 'type "hello smoke" into text field "smoke field"' && /example\.com/.test(fillBar?.[1]) && filled?.filled === true && value === 'hello smoke'
+          && /^click link /.test(clickBar?.[0]) && clicked?.clicked === true && !/^https:\/\/example\.com/.test(after), { fillBar, filled, value, clickBar, clicked, after });
+        tabs.setAgentTab(null);
+        page.navigationHistory.goBack();
+        for (let i = 0; i < 40 && !/^https:\/\/example\.com/.test(page.getURL()); i++) await wait(250);
+        await wait(1000);
+      }
     } catch (err) {
       check('the MCP checks ran', false, err instanceof Error ? err.message : err);
     }
@@ -253,8 +298,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('Hub: a Markdown file opens as a document page', false, 'no acc://doc tab', { live: true });
     }
     // The MCP calls above, in the sidebar's MCP panel and at the end of mcp.log.
-    const panel = await wc.executeJavaScript(`[...document.querySelectorAll('#panel-mcp .row .name')].map((n) => n.textContent.split(' ')[0]).slice(0, 8)`);
-    const logged = fs.readFileSync(path.join(app.getPath('userData'), 'logs', 'mcp.log'), 'utf8').trim().split('\n').slice(-8)
+    const panel = await wc.executeJavaScript(`[...document.querySelectorAll('#panel-mcp .row .name')].map((n) => n.textContent.split(' ')[0]).slice(0, 20)`);
+    const logged = fs.readFileSync(path.join(app.getPath('userData'), 'logs', 'mcp.log'), 'utf8').trim().split('\n').slice(-20)
       .map((l) => { const e = JSON.parse(l); return `${e.tool || e.method}:${e.ok ? 'ok' : e.status || 'err'}`; });
     console.log(`[smoke] mcp log panel=${JSON.stringify(panel)} file=${JSON.stringify(logged)}`);
     check('MCP calls show in the panel and in mcp.log', panel.includes('terminal_run') && logged.some((/** @type {string} */ l) => l.startsWith('terminal_run:')), { panel, logged });

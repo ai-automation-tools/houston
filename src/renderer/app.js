@@ -129,12 +129,12 @@ $('term-shells').addEventListener('click', async () => {
   if (picked) openTerminal(undefined, picked);
 });
 
-// ---- terminal_run confirmations ----------------------------------------------
+// ---- terminal_run, cron_run, tab_click and tab_fill confirmations ------------
 // One bar at a time over the terminal; the rest wait their turn. Main holds the
 // command and folder; Run answers true, and main opens the run's own terminal, which
 // arrives here through term:opened.
 
-/** @type {{ id: number, command?: string, cwd?: string, task?: string }[]} */
+/** @type {{ id: number, command?: string, cwd?: string, task?: string, action?: string, page?: string }[]} */
 const asks = [];
 
 function showAsk() {
@@ -142,9 +142,12 @@ function showAsk() {
   $('confirm-bar').hidden = !ask;
   if (!ask) return;
   if (mainEl.classList.contains('no-terminal')) setTerminalOpen(true);
-  // A command names the terminal it goes to; a Cronsole task (cron_run) names Cronsole.
-  $('confirm-cmd').textContent = ask.task ?? ask.command ?? '';
-  $('confirm-where').textContent = ask.task !== undefined ? 'Cronsole' : `its own PowerShell terminal in ${ask.cwd ?? 'your home folder'}, which ends with the command`;
+  // A command names the terminal it goes to; a Cronsole task (cron_run) names Cronsole; a
+  // click or typing (tab_click, tab_fill) names the attached tab's host.
+  $('confirm-cmd').textContent = ask.task ?? ask.action ?? ask.command ?? '';
+  $('confirm-where').textContent = ask.task !== undefined ? 'Cronsole'
+    : ask.page !== undefined ? `the tab attached for agents, at ${ask.page}`
+      : `its own PowerShell terminal in ${ask.cwd ?? 'your home folder'}, which ends with the command`;
   // Deny takes focus, so an Enter meant for the terminal can't run the command.
   $('confirm-deny').focus();
 }
@@ -252,8 +255,9 @@ function updateTab(t) {
   tabState.set(t.id, { ...(tabState.get(t.id) || {}), ...t });
   const title = t.title || t.url || 'New tab';
   /** @type {HTMLElement} */ (el.querySelector('.title')).textContent = title;
-  el.title = `${title}\n${t.url}`;
+  el.title = `${title}\n${t.url}${t.agent ? '\nAttached for agents: they can ask to click and type here' : ''}`;
   el.classList.toggle('loading', Boolean(t.loading));
+  el.classList.toggle('agent', Boolean(t.agent));
   // A tab showing Cronsole's UI is the pinned one: first in the strip, no close button.
   const pinned = Boolean(t.url) && isCronsoleUrl(t.url, cron.ui);
   el.classList.toggle('pinned', pinned);

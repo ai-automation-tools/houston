@@ -104,3 +104,9 @@ test("server/discover records a modern client's name from _meta", () => {
   const msg = { jsonrpc: '2.0', id: 'd', method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'claude-code', version: '3.0.0' } } } };
   assert.equal(describeCall({ msg, out: { result: {} }, ms: 0 }).client, 'claude-code 3.0.0');
 });
+
+test('mcp.log on disk gets tab_fill text as a length too', () => {
+  const e = describeCall({ msg: call('tab_fill', { ref: 2, text: 'sentinel-password' }), out: { result: { content: [] } }, ms: 1, at: 0 });
+  assert.match(String(e.args), /sentinel/);
+  assert.equal(JSON.parse(logLine(e)).args, '{"ref":2,"text":"[17 chars]"}');
+});

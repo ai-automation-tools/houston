@@ -22,7 +22,8 @@ import { diffPage as gitDiff, status as gitStatus } from './git.js';
 import { DevServers } from './devservers.js';
 import { toUrl } from '../shared/url.js';
 import { cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
-import { cronTools, navigationTools, readOnlyTools, terminalTools } from '../shared/tools.js';
+import { cronTools, navigationTools, readOnlyTools, tabTools, terminalTools } from '../shared/tools.js';
+import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
 import { Runs, runInfo } from '../shared/runs.js';
 import { Activity, activityRows } from '../shared/activity.js';
@@ -301,9 +302,9 @@ async function createWindow() {
     send('recent:changed', store.addRecent({ type: 'file', target: id, label }));
   };
 
-  // terminal_run and cron_run: the shell shows the command or the task's name and answers
-  // yes or no. The command, its folder and the task id stay here; the answer can't
-  // change what runs or where.
+  // terminal_run, cron_run, tab_click and tab_fill: the shell shows the command, the task's
+  // name or the page action and answers yes or no. What runs and where stays here; the
+  // answer can't change it.
   /** @type {Confirmations<boolean>} */
   const confirmations = new Confirmations({
     show: (ask) => send('mcp:confirm', ask),
@@ -312,7 +313,7 @@ async function createWindow() {
   });
   /**
    * Ask on the bar, and track the ask in the activity list. True only for Run.
-   * @param {{ kind: 'command' | 'task', asked: string, target: string }} work
+   * @param {{ kind: import('../shared/activity.js').WorkKind, asked: string, target: string }} work
    * @param {Record<string, unknown>} payload what the bar shows
    * @param {AbortSignal | undefined} signal
    */
@@ -324,7 +325,7 @@ async function createWindow() {
     workChanged();
     return answer === true ? w : null;
   };
-  /** @param {number} id @param {'started' | 'failed'} state @param {unknown} [err] */
+  /** @param {number} id @param {'started' | 'succeeded' | 'failed'} state @param {unknown} [err] */
   const workEnded = (id, state, err) => {
     activity.settle(id, state, err === undefined ? null : err instanceof Error ? err.message : String(err));
     workChanged();
@@ -386,13 +387,32 @@ async function createWindow() {
         throw err;
       }
     },
+    tabElements: () => tabs.elements(),
+    tabScreenshot: () => tabs.screenshot(),
+    // The element, the text and the host are fixed here from the last list, before the bar shows them.
+    tabAct: async (ref, text, signal) => {
+      const { el, url } = tabs.listedElement(ref);
+      if (text !== undefined && !el.fillable) throw new Error(`Element ${ref} is a ${elementLine(el)}, which doesn't take text`);
+      const action = text === undefined ? `click ${elementLine(el)}` : `type "${text}" into ${elementLine(el)}`;
+      const host = pageHost(url);
+      const w = await askFor({ kind: 'page', asked: action, target: host }, { action, page: host }, signal);
+      if (!w) return null;
+      try {
+        const out = await tabs.act(el, text);
+        workEnded(w.id, 'succeeded');
+        return out;
+      } catch (err) {
+        workEnded(w.id, 'failed', err);
+        throw err;
+      }
+    },
   };
   const callLog = mcpLog(send);
   handle('mcp:log', () => callLog.entries);
   handle('activity:list', () => activityRows(activity.list));
   // Terminals get the address and token, so `claude` in one can reach the app (README,
   // "Drive the app from Claude Code"). The shell loads after this, so even the first has them.
-  const mcpReady = startMcp(new Map([...readOnlyTools(sources), ...navigationTools(sources), ...terminalTools(sources), ...cronTools(sources)]), (e) => callLog.add(e))
+  const mcpReady = startMcp(new Map([...readOnlyTools(sources), ...navigationTools(sources), ...terminalTools(sources), ...cronTools(sources), ...tabTools(sources)]), (e) => callLog.add(e))
     .then((m) => {
       mcp = m;
       terminals.env = { ACC_MCP_URL: m.url, ACC_MCP_TOKEN: m.token };

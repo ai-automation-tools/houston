@@ -207,6 +207,8 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .tab .close:hover { color: var(--text); background: var(--line); }
 .tab.pinned { min-width: 0; max-width: 140px; border-top: 2px solid var(--accent); }
 .tab.pinned .close { display: none; }
+/* The tab the user attached for agents' clicks and typing. */
+.tab.agent .title::before { content: '🤖 '; }
 .tab.loading .title::before { content: "◌ "; color: var(--accent); }
 
 #navbar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }

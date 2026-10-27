@@ -5,6 +5,7 @@
 import { Menu, WebContentsView, clipboard, shell } from 'electron';
 import { isAllowedNavigation } from '../shared/url.js';
 import { cleanSavedTabs } from '../shared/session.js';
+import { AGENT_WORLD, ELEMENTS_MAX, cleanElements, listScript, prepareScript } from '../shared/pageactions.js';
 
 const MAX_CLOSED = 10;
 
@@ -67,6 +68,10 @@ export class Tabs {
     /** URLs of tabs the user closed, oldest first, for Reopen closed tab. */
     /** @type {string[]} */
     this.closed = [];
+    /** The tab the user attached for agents (tab_elements, tab_click, tab_fill), if any. @type {number | null} */
+    this.agentId = null;
+    /** The last tab_elements list, which tab_click and tab_fill refs point into. @type {{ tab: number, url: string, elements: import('../shared/pageactions.js').PageElement[] } | null} */
+    this.listed = null;
   }
 
   /** @param {import('electron-chrome-extensions').ElectronChromeExtensions} ext */
@@ -128,9 +133,10 @@ export class Tabs {
   /** @param {Tab} tab */
   describe(tab) {
     const wc = tab.view.webContents;
-    if (!wc || wc.isDestroyed()) return { id: tab.id, url: '', title: '', loading: false, canGoBack: false, canGoForward: false };
+    if (!wc || wc.isDestroyed()) return { id: tab.id, url: '', title: '', loading: false, canGoBack: false, canGoForward: false, agent: false };
     return {
       id: tab.id,
+      agent: tab.id === this.agentId,
       url: wc.getURL(),
       title: wc.getTitle(),
       loading: wc.isLoading(),
@@ -142,8 +148,8 @@ export class Tabs {
   /** Every open tab, oldest first, for the `list_tabs` MCP tool. */
   list() {
     return [...this.tabs.values()].map((t) => {
-      const { id, url, title, loading } = this.describe(t);
-      return { id, url, title, loading, active: t.id === this.activeId };
+      const { id, url, title, loading, agent } = this.describe(t);
+      return { id, url, title, loading, active: t.id === this.activeId, agent };
     });
   }
 
@@ -205,6 +211,8 @@ export class Tabs {
   /** @param {number} id */
   forget(id) {
     if (!this.tabs.delete(id)) return;
+    if (this.agentId === id) this.agentId = null;
+    if (this.listed?.tab === id) this.listed = null;
     this.send('tab:closed', id);
     if (this.activeId === id) {
       const next = [...this.tabs.keys()].pop();
@@ -260,6 +268,96 @@ export class Tabs {
     return { id: tab.id, url: wc.getURL(), title: wc.getTitle(), text: String(text ?? '') };
   }
 
+  /**
+   * Attach a tab for agents, or none; one at a time. The strip marks it.
+   * @param {number | null} id
+   */
+  setAgentTab(id) {
+    const before = this.agentId;
+    this.agentId = id !== null && this.tabs.has(id) ? id : null;
+    this.listed = null;
+    for (const t of [before, this.agentId]) {
+      const tab = t !== null ? this.tabs.get(t) : undefined;
+      if (tab) this.send('tab:update', this.describe(tab));
+    }
+  }
+
+  /** The attached tab, while it shows a web page. */
+  agentTab() {
+    const tab = this.agentId !== null ? this.tabs.get(this.agentId) : undefined;
+    const wc = tab?.view.webContents;
+    if (!tab || !wc || wc.isDestroyed()) throw new Error("No tab is attached for agents. The user attaches one with 'Let agents click and type here' in the page's right-click menu.");
+    if (!/^https?:/i.test(wc.getURL())) throw new Error('The attached tab is not showing a web page');
+    return tab;
+  }
+
+  /** @param {Tab} tab @param {string} code */
+  inPage(tab, code) {
+    return Promise.race([
+      tab.view.webContents.executeJavaScriptInIsolatedWorld(AGENT_WORLD, [{ code }], false),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('The page did not answer within 5 s')), 5000)),
+    ]);
+  }
+
+  /** tab_elements: what can be clicked or typed into on the attached tab. Replaces the last list. */
+  async elements() {
+    const tab = this.agentTab();
+    const wc = tab.view.webContents;
+    const got = cleanElements(await this.inPage(tab, listScript(ELEMENTS_MAX)));
+    this.listed = { tab: tab.id, url: wc.getURL(), elements: got.elements };
+    return { tab: tab.id, url: wc.getURL(), title: wc.getTitle(), ...got };
+  }
+
+  /** tab_screenshot: the attached tab as a PNG, base64, at most 1280 px wide. */
+  async screenshot() {
+    const tab = this.agentTab();
+    const wc = tab.view.webContents;
+    let img = await wc.capturePage();
+    if (img.getSize().width > 1280) img = img.resize({ width: 1280 });
+    return { tab: tab.id, url: wc.getURL(), png: img.toPNG().toString('base64') };
+  }
+
+  /**
+   * An element from the last tab_elements list, while the attached tab still shows that page.
+   * @param {number} ref
+   */
+  listedElement(ref) {
+    const tab = this.agentTab();
+    const url = tab.view.webContents.getURL();
+    if (!this.listed || this.listed.tab !== tab.id) throw new Error('Call tab_elements first');
+    if (this.listed.url !== url) throw new Error('The page has changed since tab_elements; call it again');
+    const el = this.listed.elements.find((e) => e.ref === ref);
+    if (!el) throw new Error(`No element ${ref} in the last tab_elements list`);
+    return { tab, el, url };
+  }
+
+  /**
+   * After the click on Run: a real mouse click on the element, or real typing into it
+   * (replacing its text; no Enter). The tab comes to the front first, so the user sees it.
+   * @param {import('../shared/pageactions.js').PageElement} el the element the bar named
+   * @param {string} [text] typing for a fill
+   */
+  async act(el, text) {
+    const { tab } = this.listedElement(el.ref);
+    const wc = tab.view.webContents;
+    this.activate(tab.id);
+    const at = /** @type {{ x?: number, y?: number, error?: string }} */ (await this.inPage(tab, prepareScript(el, text !== undefined)));
+    if (at?.error) throw new Error(at.error);
+    if (typeof at?.x !== 'number' || typeof at.y !== 'number') throw new Error('The page did not say where the element is');
+    if (text !== undefined) {
+      await wc.insertText(text);
+    } else {
+      const zoom = wc.getZoomFactor();
+      const x = Math.round(at.x * zoom);
+      const y = Math.round(at.y * zoom);
+      wc.focus();
+      wc.sendInputEvent({ type: 'mouseMove', x, y });
+      wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+      wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    }
+    return { tab: tab.id, url: wc.getURL() };
+  }
+
   /** @param {'back' | 'forward' | 'reload' | 'stop' | 'devtools' | 'reopen' | 'zoom-in' | 'zoom-out' | 'zoom-reset'} action */
   command(action) {
     if (action === 'reopen') return this.reopen();
@@ -310,7 +408,12 @@ export class Tabs {
     );
     const extItems = this.extensions?.getContextMenuItems(wc, params) ?? [];
     if (extItems.length) items.push({ type: 'separator' }, ...extItems);
-    items.push({ type: 'separator' }, { label: 'Inspect', click: () => wc.inspectElement(params.x, params.y) });
+    items.push(
+      { type: 'separator' },
+      // Web pages only: an agent acting on an app page (a document, a run's output) gains nothing and could reach more.
+      { label: 'Let agents click and type here', type: 'checkbox', checked: tab.id === this.agentId, enabled: tab.id === this.agentId || /^https?:/i.test(wc.getURL()), click: () => this.setAgentTab(tab.id === this.agentId ? null : tab.id) },
+      { label: 'Inspect', click: () => wc.inspectElement(params.x, params.y) },
+    );
     Menu.buildFromTemplate(items).popup();
   }
 }
