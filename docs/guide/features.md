@@ -20,7 +20,7 @@
 - Ads and trackers are blocked by default: EasyList and EasyPrivacy through [Ghostery's adblocker](https://github.com/ghostery/adblocker) (MPL-2.0). **Extensions → Block ads and trackers** turns it off.
 
 > [!WARNING]
-> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing. LastPass signs in, but its toolbar popup's vault keeps spinning. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-20-the-browser-namespace).
+> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing. LastPass and Rakuten work. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent).
 
 ## 💻 Terminals
 

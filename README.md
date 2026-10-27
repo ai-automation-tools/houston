@@ -46,7 +46,7 @@ An agent (Claude Code, or Claude in the sidebar) can drive it, and runs nothing 
 > **[Try the demo](https://houston-demo.ai-automation-tools.dev/)** in any browser. Made-up data; nothing runs or calls out.
 
 > [!WARNING]
-> Chrome extensions only half-work. LastPass's popup, for one, keeps spinning. [Details](docs/guide/features.md#-browser).
+> Chrome extensions mostly work: LastPass and Rakuten do, MV3 ad blockers don't. [Details](docs/guide/features.md#-browser).
 
 ## ✨ Features
 

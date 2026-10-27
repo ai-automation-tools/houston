@@ -78,6 +78,10 @@ The diagnosis above was wrong about the cause. Probing on Electron 44.7 with a t
 
 **Decided 2026-10-20 (Mike): built-in blocking with `@ghostery/adblocker-electron`** (MPL-2.0, GPL-compatible), on by default with a menu toggle, in `src/main/adblock.js`. It owns the browse session's `onBeforeRequest` and `onHeadersReceived`; Electron allows one listener per event, so nothing else in the app may register them. Checked with LastPass and Rakuten installed: both workers still start, and the three ad and analytics URLs above fail while ordinary requests load.
 
+## Update 2026-10-27: the user agent
+
+The `document is not defined` that LastPass's worker logs every 30 seconds isn't `chrome.offscreen`: without that API LastPass's `vq()` just returns `undefined`. It picks its platform from `navigator.userAgent.indexOf("Electron")`, and Electron's default user agent has `Electron/44…` in it, so the worker took LastPass's own desktop-app path (`Sk.ELECTRON`), which reads `document.cookie`. **Fix:** `app.userAgentFallback` is set to Chrome's user agent before anything starts (`chromeUserAgent()` in `src/shared/session.js`); a probe extension's service worker sees the plain one. It changes what the app reports, not the extension, so the "don't patch extensions" rule stands. Mike confirmed his vault loads (2026-10-27).
+
 Keep the profile path short when spiking with a scratch profile: past Windows' 260-character limit, IndexedDB fails to open, and LastPass reports "No available storage method found".
 
 ---

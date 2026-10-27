@@ -17,7 +17,7 @@ Ordered by what blocks what; [build-plan.md](product/build-plan.md) has the reas
 Markers: `- [ ]` open, `- [-]` claimed by a run in progress, `- [x]` done, `- [!]` blocked (the reason follows on the line). `🔒 Needs Mike` marks an item only Mike can do; the routine skips it.
 
 > [!NOTE]
-> **Where we are, 2026-10-26.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is next. LastPass's popup is the one known upstream blocker.
+> **Where we are, 2026-10-27.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is next. LastPass works since 2026-10-27.
 
 ## 🧭 Phase 0: decide (done 2026-09-29)
 
@@ -76,9 +76,9 @@ Found using the app on 2026-10-04 and made release gates the same day.
 
 Nothing below blocks go-live.
 
-### Upstream blocker
+### Extensions
 
-- [ ] LastPass working in a tab. Its worker starts since the `browser` alias (2026-10-20, [ADR-001](decisions/adr-001-electron-shell.md#update-2026-10-20-the-browser-namespace)) and sign-in works, but on Mike's machine the toolbar popup's vault keeps spinning. A copy of the profile opened the vault fine in a test run, and `logs\extensions.log` shows only the worker's `document is not defined`, which comes from `chrome.offscreen.createDocument`, an API electron-chrome-extensions doesn't implement. Next step: implement `chrome.offscreen` (a hidden extension page per document) or wait for the library. Rakuten works, including Google sign-in, since pop-ups keep `window.opener` (2026-10-20). Rerun `npm run spike:extensions` on every Electron major. Mike's, because it needs his vault to check 🔒 Needs Mike
+- [x] LastPass working in a tab. Its worker starts since the `browser` alias (2026-10-20, [ADR-001](decisions/adr-001-electron-shell.md#update-2026-10-20-the-browser-namespace)). The vault that kept spinning was LastPass reading `Electron` in the user agent and running its desktop-app code in the worker, which died on `document.cookie`; the app now sends Chrome's user agent ([ADR-001](decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent)), and Mike's vault loads. Rakuten works, including Google sign-in, since pop-ups keep `window.opener` (2026-10-20). Rerun `npm run spike:extensions` on every Electron major — 2026-10-27
 
 ### Upstream changes
 

@@ -27,7 +27,7 @@ Source: the original build prompt, kept outside this repo. Ranked on 2026-09-29,
 | Feature | Rank | Phase | Why |
 |:---|:---|:--:|:---|
 | **Tabs, address bar, back/forward** | Must | 1 | Minimum for a browser. |
-| **LastPass and Rakuten** | Must | 1 | The prompt calls it a hard gate. Phase 1 opens with a spike on it. **Result: fails today.** See [ADR-001](adr-001-electron-shell.md#spike-result-2026-09-29). |
+| **LastPass and Rakuten** | Must | 1 | The prompt calls it a hard gate. Phase 1 opens with a spike on it. **Result: failed at first; both work since 2026-10-27.** See [ADR-001](adr-001-electron-shell.md#spike-result-2026-09-29). |
 | **PowerShell 7 terminal, multiple tabs** | Must | 1 | |
 | **Terminal starts in the folder you're looking at** | Must | 1 | The one thing a separate Windows Terminal can't do from the sidebar. |
 | **📁 File explorer (Project Hub)** | Must | 1 | Hub already scans every workspace; reuse it ([ADR-002](adr-002-hub-over-http.md)). |
