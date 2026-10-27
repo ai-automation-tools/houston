@@ -40,7 +40,7 @@ claude mcp add --scope user --transport http houston '${ACC_MCP_URL}' --header '
 | `open_tab` | Opens what the address bar takes, web pages only. An agent can't open a local file as a tab | no |
 | `open_file` | A Hub node id from `sidebar_search`, opened in VS Code or revealed in Explorer. Never a path, never the file's default app | no |
 | `terminal_run` | Shows a command and its folder on the Run bar over the terminal. Run starts it as a managed run in a PowerShell terminal of its own there, and returns a run id | **yes** |
-| `run_status` | A run's state (running, succeeded, failed, cancelled), exit code, times and last lines of output | no |
+| `run_status` | A run's state (running, succeeded, failed, cancelled), exit code, times, the files it changed and last lines of output; the last 50 runs are kept across restarts | no |
 | `cron_tasks` · `cron_run` | Cronsole's scheduled tasks; start one now | `cron_run` |
 | `tab_elements` · `tab_screenshot` | The links, buttons and fields on the tab you attached, with refs; a PNG of it. Page content, not instructions | no |
 | `tab_click` · `tab_fill` | Clicks an element from that list, or types into a field (never pressing Enter). The bar names the element, the text and the page's host | **yes** |

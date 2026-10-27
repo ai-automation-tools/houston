@@ -84,6 +84,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Changed**
 
+- Electron 45.0.0 (Chromium 156) instead of 44.9. LastPass and Rakuten still install and run; `npm run spike:extensions` and `npm run smoke` pass. See [ADR-001](decisions/adr-001-electron-shell.md#update-2026-10-27-electron-45). *(After public release)*
 - The chat panel sends `anthropic-version: 2026-10-21` instead of `2023-06-01`. Its requests already left out what that version rejects (`temperature`, `top_p`, `top_k`, `document` blocks in assistant turns, `citations` on user text), and a test now holds the request to `model`, `max_tokens`, `system`, `messages` and `tools`. *(After public release)*
 - Renamed to **Houston** (2026-10-22): the repo is now `ai-automation-tools/houston`, the homepage `houston.ai-automation-tools.dev` and the demo `houston-demo.ai-automation-tools.dev`. The window title, sidebar, demo, MCP tool descriptions, chat prompt and docs say Houston. Installed identifiers stay as they were so nothing a user has set up breaks: the package name (and with it `%APPDATA%i-command-center`), the `ai-command-center` MCP server id and tool names, the `ACC_*` variables, `TERM_PROGRAM` and the routine names.
 - Settings moved from Windows user variables to a `.env` file at the clone's root (`.env.example` lists them; gitignored). `src/main/env.js` reads it with Node's `util.parseEnv`, the real environment winning, and keeps it out of `process.env`, so terminals and Cronsole's child process no longer see the chat key. 2 tests.
@@ -118,6 +119,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Docs**
 
+- Caught up with the run history: `runs.json` in the setup guide's file table, `acc://runlog` in the security model, and `run_status`'s past runs and changed files in the MCP tool tables; `src/README.md` and `tests/README.md` describe the new code and tests, and the roadmap's status line says the upstream queue is empty.
 - The root README links to `docs/mcp-server.md`, the one page with the install line for each client, so the MCP setup is one click from the repo's front page.
 - The repo follows the org layout standard: the agent rules moved from `CLAUDE.md` to `AGENTS.md`, which Codex, Gemini CLI and opencode read, and `CLAUDE.md` now just imports it. `docs/mcp-server.md` describes the MCP server on one page (entry file, transport, install line, the twelve tools), linked from the docs hub. The README said the server had eleven tools; it has twelve. Links to the old file in the README, `SECURITY.md`, the guide, the workflows and two code comments point at `AGENTS.md`.
 - The architecture diagram is re-read against the rename and the MCP tab's agent-work list and pinned to `0178182`: line ranges moved in `main.js` (the confirm asks now go through the activity tracker), `shell.cjs` (new `acc.activity` bridge) and `tools.js`; the other cited files changed only in wording (Houston for AI Command Center).

@@ -16,7 +16,7 @@
 
 ## Decision
 
-Build the app on **Electron 44** as a single `BaseWindow`:
+Build the app on **Electron** (44 when decided, 45 since 2026-10-27) as a single `BaseWindow`:
 
 - The shell UI (sidebar, tab strip, address bar, terminal panel) is one `WebContentsView` loading local files over a private `acc://shell/` protocol.
 - Each browser tab is its own `WebContentsView` in the `persist:browse` session, stacked over the shell's content area. The shell reports that rectangle to the main process whenever it changes.
@@ -81,6 +81,10 @@ The diagnosis above was wrong about the cause. Probing on Electron 44.7 with a t
 ## Update 2026-10-27: the user agent
 
 The `document is not defined` that LastPass's worker logs every 30 seconds isn't `chrome.offscreen`: without that API LastPass's `vq()` just returns `undefined`. It picks its platform from `navigator.userAgent.indexOf("Electron")`, and Electron's default user agent has `Electron/44…` in it, so the worker took LastPass's own desktop-app path (`Sk.ELECTRON`), which reads `document.cookie`. **Fix:** `app.userAgentFallback` is set to Chrome's user agent before anything starts (`chromeUserAgent()` in `src/shared/session.js`); a probe extension's service worker sees the plain one. It changes what the app reports, not the extension, so the "don't patch extensions" rule stands. Mike confirmed his vault loads (2026-10-27).
+
+## Update 2026-10-27: Electron 45
+
+Moved from 44.9.3 to **45.0.0** (Chromium 156, Node 24.22). `npm run spike:extensions` on a fresh profile: LastPass 4.156.0 and Rakuten 26.20.0 install from the Web Store, and both workers start and call the library's APIs (`tabs.query`, `cookies.get`, `action.setIcon`/`setTitle`/`setBadgeText`, `webNavigation` events). LastPass logs no `document is not defined`. One `Failed to start service worker` is logged right after Rakuten installs, after which its worker runs; Rakuten's `action.setIcon` with `imageData` is still unsupported, as before. The spike's 31 checks and `npm run smoke`'s 36 pass. Mike's own vault still needs a look in the real app.
 
 Keep the profile path short when spiking with a scratch profile: past Windows' 260-character limit, IndexedDB fails to open, and LastPass reports "No available storage method found".
 

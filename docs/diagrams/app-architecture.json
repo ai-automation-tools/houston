@@ -69,7 +69,7 @@
       "type": "backend",
       "label": "Main process",
       "sublabel": "IPC from the shell only",
-      "tag": "Electron 44",
+      "tag": "Electron 45",
       "pos": [
         470,
         200

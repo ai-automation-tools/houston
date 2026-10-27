@@ -27,6 +27,7 @@ The rules every change has to keep are in [AGENTS.md](../../AGENTS.md)'s securit
 - A Cronsole run page (`acc://run/…`) has the same policy, opens only from the sidebar, and shows the run's output as text.
 - A Git diff page (`acc://git/…`) does too, and is served only for a file `git status` lists right now with that kind of change.
 - A dev server's log page (`acc://dev/…`) does too, and is served only for a server this run of the app started.
+- A `terminal_run` run's log page (`acc://runlog/…`) does too, and is served only for a run in the history.
 
 ## Terminals and agents
 
