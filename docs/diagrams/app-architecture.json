@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "017818204e3af6801e702a604b32a7c5588e8fad"
+      "revision": "723011fbd274dfc1f79f6e0eb055112e3d54e3b7"
     }
   },
   "components": [
@@ -46,20 +46,20 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 170,
-          "end_line": 198,
+          "line": 180,
+          "end_line": 204,
           "label": "shell WebContentsView"
         },
         {
           "path": "src/preload/shell.cjs",
           "line": 22,
-          "end_line": 136,
+          "end_line": 142,
           "label": "window.acc preload"
         },
         {
           "path": "src/renderer/app.js",
           "line": 132,
-          "end_line": 168,
+          "end_line": 175,
           "label": "confirm bar, run tabs"
         }
       ]
@@ -81,14 +81,14 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 99,
-          "end_line": 119,
+          "line": 100,
+          "end_line": 125,
           "label": "handle() refuses other senders"
         },
         {
           "path": "src/main/main.js",
-          "line": 391,
-          "end_line": 451,
+          "line": 571,
+          "end_line": 632,
           "label": "IPC channels"
         }
       ]
@@ -116,14 +116,14 @@
         },
         {
           "path": "src/main/tabs.js",
-          "line": 20,
-          "end_line": 40,
+          "line": 22,
+          "end_line": 39,
           "label": "navigation guard"
         },
         {
           "path": "src/main/main.js",
-          "line": 200,
-          "end_line": 205,
+          "line": 206,
+          "end_line": 211,
           "label": "deny-by-default permissions"
         }
       ]
@@ -157,7 +157,7 @@
         {
           "path": "src/main/docs.js",
           "line": 1,
-          "end_line": 30,
+          "end_line": 12,
           "label": "acc:// pages"
         }
       ]
@@ -194,7 +194,7 @@
       "id": "userdata",
       "type": "database",
       "label": "userData JSON",
-      "sublabel": "settings, workspaces, chats",
+      "sublabel": "settings, workspaces, chats, runs",
       "pos": [
         780,
         40
@@ -215,6 +215,12 @@
           "line": 40,
           "end_line": 62,
           "label": "mcp.json, removed on quit"
+        },
+        {
+          "path": "src/main/store.js",
+          "line": 83,
+          "end_line": 91,
+          "label": "runs.json history"
         }
       ]
     },
@@ -240,8 +246,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 432,
-          "end_line": 451,
+          "line": 503,
+          "end_line": 523,
           "label": "chat IPC"
         }
       ]
@@ -268,8 +274,8 @@
         },
         {
           "path": "src/shared/chat.js",
-          "line": 58,
-          "end_line": 70,
+          "line": 55,
+          "end_line": 68,
           "label": "key and model from env"
         }
       ]
@@ -303,8 +309,8 @@
         },
         {
           "path": "src/shared/runs.js",
-          "line": 12,
-          "end_line": 35,
+          "line": 15,
+          "end_line": 31,
           "label": "run script: exit code is the result"
         }
       ]
@@ -332,14 +338,14 @@
         },
         {
           "path": "src/shared/mcp.js",
-          "line": 115,
-          "end_line": 150,
+          "line": 221,
+          "end_line": 242,
           "label": "host and token check"
         },
         {
           "path": "src/main/main.js",
-          "line": 333,
-          "end_line": 389,
+          "line": 379,
+          "end_line": 472,
           "label": "tools over app sources"
         }
       ]
@@ -360,8 +366,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 393,
-          "end_line": 398,
+          "line": 464,
+          "end_line": 470,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -389,15 +395,15 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 304,
-          "end_line": 389,
-          "label": "terminal_run, run_status, cron_run"
+          "line": 394,
+          "end_line": 458,
+          "label": "terminal_run, cron_run, tab_click, tab_fill"
         },
         {
           "path": "src/shared/tools.js",
-          "line": 339,
-          "end_line": 377,
-          "label": "terminal_run, run_status"
+          "line": 347,
+          "end_line": 438,
+          "label": "terminal_run, run_status, tab_click, tab_fill"
         }
       ]
     },
@@ -567,6 +573,12 @@
       "from": "main",
       "to": "git",
       "label": "execFile"
+    },
+    {
+      "id": "confirm-tabs",
+      "from": "confirm",
+      "to": "tabs",
+      "label": "clicks, types"
     }
   ],
   "cards": [
@@ -576,16 +588,16 @@
       "items": [
         "Browser tabs are sandboxed, get only the extension-API and ad-block preloads and are denied every permission but fullscreen, pointer lock and clipboard writes",
         "Every IPC channel refuses any sender but the shell view",
-        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs) run no scripts; only documents may link to documents, the rest open from the app only"
+        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs, terminal_run run logs) run no scripts; only documents may link to documents, the rest open from the app only"
       ]
     },
     {
       "dot": "violet",
       "title": "What an agent can do",
       "items": [
-        "Look with no click: list_tabs, read_tab, sidebar_search, recent, list_terminals, terminal_read, run_status, cron_tasks",
+        "Look with no click: list_tabs, read_tab, sidebar_search, recent, list_terminals, terminal_read, run_status, cron_tasks, and tab_elements, tab_screenshot on the tab the user attached",
         "Navigate: open_tab, and open_file by Hub node id (VS Code or Explorer, never the default app)",
-        "Act only after Run: terminal_run starts a managed run in its own PowerShell, whose exit code is the result; cron_run asks Cronsole's run_task"
+        "Act only after Run: terminal_run starts a managed run in its own PowerShell, whose exit code is the result; cron_run asks Cronsole's run_task; tab_click and tab_fill click or type on the attached tab"
       ]
     },
     {
@@ -594,7 +606,7 @@
       "items": [
         "Claude Code in an app terminal: ACC_MCP_URL and ACC_MCP_TOKEN are in every terminal's environment",
         "The chat panel, through the same server and token, so its calls are logged and confirmed like any client's",
-        "Every call, refused ones too, goes to the sidebar's MCP tab and logs/mcp.log, with the connecting client named"
+        "Every call, refused ones too, goes to the sidebar's MCP tab and logs/mcp.log, with the connecting client named; terminal_run's last 50 runs are searchable there too"
       ]
     },
     {

@@ -1,26 +1,26 @@
 {
-  "revision": "017818204e3af6801e702a604b32a7c5588e8fad",
+  "revision": "723011fbd274dfc1f79f6e0eb055112e3d54e3b7",
   "files": {
     "src/main/chat.js": "f69844b2e5da8c7b7e6b1b997b410da735a633eb",
     "src/main/cronsole.js": "0fa3ccca1a50d115800b362aae351bf2dd5e50f0",
     "src/main/devservers.js": "f552e4617518623c8505de5d4a3fa5ba57c8887b",
-    "src/main/docs.js": "5c6ba913dda868c7adabd53e727d2c9e324b4f32",
+    "src/main/docs.js": "f4d6eb199c578ccd5769ffeb8484ab8fd454e0e0",
     "src/main/git.js": "fb72d012466225dc44e454aeb080ab94d7527785",
     "src/main/hub.js": "47015a271f8a7ad29e4f6171a8c552299d4f07ee",
     "src/main/kill.js": "7005a74ac2e6bb6bbe4842bce110138d7502cb5e",
-    "src/main/main.js": "fbde624d2c56527f151b6cbf413a5d6fdd249192",
+    "src/main/main.js": "03fe424551e4c53a93d9908fd9a0f8aa69a1e971",
     "src/main/mcp.js": "60a1f01c61fb6f32aa332a2fba222a70a8d47c4d",
-    "src/main/store.js": "6b2115f644ed079f8baa58f17600e3f3df12d9f0",
-    "src/main/tabs.js": "c70027c4e62d4cf876ffe7b7eacd25a72d841b89",
+    "src/main/store.js": "5bd0275294d9ff6d2339b645f346d3b2c4f137c9",
+    "src/main/tabs.js": "a4d6fe43129297b78e1a3d29f605670677703970",
     "src/main/terminal.js": "fefb0e18b4e63cbb43251ce5db5db85cd3c877ff",
-    "src/preload/shell.cjs": "bb30510dbc443318c5271b12c3e1a425aaccaae2",
-    "src/renderer/app.js": "4887cc6d864f7b93179f56e5660c6b658f99dc49",
-    "src/shared/chat.js": "3280c816aee1b6c03dbd6534058198367b563886",
+    "src/preload/shell.cjs": "6b9e5b495f96f5e64348e15d79d7f21c614d8ea1",
+    "src/renderer/app.js": "9f1b79ef87f9696ca787f3e119ebe7fdcb62902c",
+    "src/shared/chat.js": "d8402a9c01fbe84484ba71b6a4c55e8aacfbfd7f",
     "src/shared/confirm.js": "48ed2a50d56150797b68581e7844168d99900cce",
     "src/shared/cronsole.js": "0c67d7fdd84bfea027f46cb7a77033f245ac44ef",
-    "src/shared/mcp.js": "54cbfd7919c62896c657593c83dc372ca4d93494",
-    "src/shared/runs.js": "49a5159cad4b9bb9c93d3eb8522898d52341c149",
+    "src/shared/mcp.js": "8788c1a95d7fac05300718f9aa00142d7f49f78f",
+    "src/shared/runs.js": "141c8ce543334096fa882600f8d38f39d5f5ca6b",
     "src/shared/shells.js": "907d854806bee67ad7e213a761a9440b5bbeb7aa",
-    "src/shared/tools.js": "33618691aca3a4c04369abf0b052dc8e4c55074b"
+    "src/shared/tools.js": "74ffb597c4da0d47f367435c706d2048d2d21310"
   }
 }
