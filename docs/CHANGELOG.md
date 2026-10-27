@@ -84,6 +84,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Changed**
 
+- The chat panel sends `anthropic-version: 2026-10-21` instead of `2023-06-01`. Its requests already left out what that version rejects (`temperature`, `top_p`, `top_k`, `document` blocks in assistant turns, `citations` on user text), and a test now holds the request to `model`, `max_tokens`, `system`, `messages` and `tools`. *(After public release)*
 - Renamed to **Houston** (2026-10-22): the repo is now `ai-automation-tools/houston`, the homepage `houston.ai-automation-tools.dev` and the demo `houston-demo.ai-automation-tools.dev`. The window title, sidebar, demo, MCP tool descriptions, chat prompt and docs say Houston. Installed identifiers stay as they were so nothing a user has set up breaks: the package name (and with it `%APPDATA%i-command-center`), the `ai-command-center` MCP server id and tool names, the `ACC_*` variables, `TERM_PROGRAM` and the routine names.
 - Settings moved from Windows user variables to a `.env` file at the clone's root (`.env.example` lists them; gitignored). `src/main/env.js` reads it with Node's `util.parseEnv`, the real environment winning, and keeps it out of `process.env`, so terminals and Cronsole's child process no longer see the chat key. 2 tests.
 - The `npm run smoke` routine moved out of `src/main/main.js` into `src/main/smoke.js` (main.js 590 → 389 lines); the test count lives once, as a badge in `tests/README.md`. *(roadmap: Code health)*

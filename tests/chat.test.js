@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { API_URL, API_VERSION, STOPPED, addUserText, chatAttach, chatConfig, chatText, cleanMessages, estimateTokens, mcpClient, messagesApi, readStream, runTurn, toApiTools, toolOutcome, transcript, trimHistory, trayItem, withAttachments } from '../src/shared/chat.js';
+import { API_URL, STOPPED, addUserText, chatAttach, chatConfig, chatText, cleanMessages, estimateTokens, mcpClient, messagesApi, readStream, runTurn, toApiTools, toolOutcome, transcript, trimHistory, trayItem, withAttachments } from '../src/shared/chat.js';
 import { createMcpServer } from '../src/shared/mcp.js';
 
 test('chatConfig reads the key and model from the environment, with no default model', () => {
@@ -67,6 +67,8 @@ test('runTurn posts, runs the tools Claude asks for, and posts the results', asy
   });
   assert.equal(bodies.length, 2);
   assert.equal(bodies[0].model, 'm');
+  // The fields API version 2026-10-21 accepts; temperature, top_p and top_k would be a 400.
+  assert.deepEqual(Object.keys(bodies[0]).sort(), ['max_tokens', 'messages', 'model', 'system', 'tools']);
   assert.deepEqual(bodies[0].tools, [{ name: 'open_tab', description: '', input_schema: { type: 'object' } }]);
   assert.deepEqual(bodies[1].messages[2], { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: '{"name":"open_tab","input":{"url":"example.com"}}', is_error: false }] });
   assert.deepEqual(events.map((e) => e.type), ['text', 'tool', 'result', 'text']);
@@ -161,7 +163,7 @@ test('messagesApi sends the key and version headers and surfaces API errors', as
   assert.deepEqual(ok, { content: [], stop_reason: 'end_turn' });
   assert.equal(calls[0].url, API_URL);
   assert.equal(calls[0].init.headers['x-api-key'], 'sk-test');
-  assert.equal(calls[0].init.headers['anthropic-version'], API_VERSION);
+  assert.equal(calls[0].init.headers['anthropic-version'], '2026-10-21');
   await assert.rejects(messagesApi('k', fake(401, { error: { message: 'invalid x-api-key' } }))({}), /401: invalid x-api-key/);
   await assert.rejects(messagesApi('k', fake(200, { nope: true }))({}), /without content/);
   const html = /** @type {typeof fetch} */ (async () => new Response('<html>', { status: 502, statusText: 'Bad Gateway' }));

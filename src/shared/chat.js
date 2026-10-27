@@ -7,7 +7,9 @@
 // model: which one to pay for is the user's call.
 
 export const API_URL = 'https://api.anthropic.com/v1/messages';
-export const API_VERSION = '2023-06-01';
+// 2026-10-21 rejects temperature, top_p and top_k, document blocks in assistant turns and
+// citations on user text; the requests here send none of them.
+export const API_VERSION = '2026-10-21';
 const MAX_TOKENS = 4096;
 const MAX_STEPS = 10;
 const MAX_TEXT = 20_000;
