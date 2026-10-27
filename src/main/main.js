@@ -21,7 +21,7 @@ import { serveDocs, invalidateDocsIndex } from './docs.js';
 import { diffPage as gitDiff, status as gitStatus } from './git.js';
 import { DevServers } from './devservers.js';
 import { toUrl } from '../shared/url.js';
-import { cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
+import { chromeUserAgent, cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
 import { cronTools, navigationTools, readOnlyTools, tabTools, terminalTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
@@ -55,6 +55,9 @@ protocol.registerSchemesAsPrivileged([
 // ACC_USER_DATA: run on another profile (npm run smoke's throwaway one). Before the
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
+
+// Before any renderer or service worker starts: they read navigator.userAgent from this.
+app.userAgentFallback = chromeUserAgent(app.userAgentFallback);
 
 // One instance: a second launch focuses the first. exit(), not quit(): quit() is async,
 // so whenReady would still run and start a second MCP server over the first's mcp.json.

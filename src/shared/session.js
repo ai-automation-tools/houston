@@ -55,3 +55,14 @@ export function savedActiveIndex(index, count) {
     ? /** @type {number} */ (index)
     : count - 1;
 }
+
+/**
+ * Electron's default user agent as Chrome's: without the `Electron/…` token and the app's
+ * own `name/version` before `Chrome/`. LastPass reads "Electron" in it as its own desktop
+ * app and runs that code in its service worker, which then dies on `document.cookie`.
+ * @param {string} ua
+ * @returns {string}
+ */
+export function chromeUserAgent(ua) {
+  return ua.replace(/ Electron\/\S+/, '').replace(/\) \S+\/\S+ Chrome\//, ') Chrome/');
+}

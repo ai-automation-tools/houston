@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SAVED_TABS_MAX, cleanSavedTabs, cycleTab, pickTab, savedActiveIndex } from '../src/shared/session.js';
+import { SAVED_TABS_MAX, chromeUserAgent, cleanSavedTabs, cycleTab, pickTab, savedActiveIndex } from '../src/shared/session.js';
 
 test('cleanSavedTabs keeps allowed URLs in order and drops the rest', () => {
   assert.deepEqual(
@@ -47,4 +47,11 @@ test('pickTab follows Chrome: 1 to 8 pick that tab, 9 the last, out of range not
   assert.equal(pickTab([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 9), 10);
   assert.equal(pickTab(order, 0), null);
   assert.equal(pickTab([], 9), null);
+});
+
+test('chromeUserAgent drops the Electron and app tokens and keeps the rest', () => {
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.167 Safari/537.36';
+  assert.equal(chromeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ai-command-center/0.1.0 Chrome/152.0.7977.167 Electron/44.9.3 Safari/537.36'), chrome);
+  assert.equal(chromeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.167 Electron/44.9.3 Safari/537.36'), chrome);
+  assert.equal(chromeUserAgent(chrome), chrome);
 });
