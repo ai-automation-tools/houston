@@ -1,4 +1,4 @@
-// Agent work that waits on the confirm bar (terminal_run, cron_run): one entry per ask,
+// Agent work that waits on the confirm bar (terminal_run, cron_run, tab_click, tab_fill): one entry per ask,
 // from the bar to its end, with what was asked and exactly where it goes. Pure; the main
 // process keeps one Activity, updates it as each ask is answered and each run ends, and
 // the MCP panel shows activityRows().
@@ -10,9 +10,10 @@ export const ACTIVITY_KEEP = 50;
  *   waiting: on the confirm bar, or queued behind it; started: handed to Cronsole, whose
  *   own history has how it went; expired: nobody answered in time; withdrawn: the asker
  *   went away (its client disconnected, the chat's Stop)
- * @typedef {{ id: number, kind: 'command' | 'task', asked: string, target: string, state: WorkState, askedAt: number, endedAt: number | null, run: number | null, exitCode: number | null, error: string | null }} Work
- *   asked: the command, or the task's name; target: the command's folder, or the task's id
- * @typedef {{ id: number, kind: 'command' | 'task', state: WorkState, open: boolean, icon: string, label: string, text: string, where: string, run: number | null, askedAt: number, endedAt: number | null, error: string | null }} WorkRow
+ * @typedef {'command' | 'task' | 'page'} WorkKind
+ * @typedef {{ id: number, kind: WorkKind, asked: string, target: string, state: WorkState, askedAt: number, endedAt: number | null, run: number | null, exitCode: number | null, error: string | null }} Work
+ *   asked: the command, the task's name, or the click or typing on a page; target: the command's folder, the task's id, or the page's host
+ * @typedef {{ id: number, kind: WorkKind, state: WorkState, open: boolean, icon: string, label: string, text: string, where: string, run: number | null, askedAt: number, endedAt: number | null, error: string | null }} WorkRow
  */
 
 /** @param {WorkState} s */
@@ -25,7 +26,7 @@ export class Activity {
     this.nextId = 1;
   }
 
-  /** @param {{ kind: 'command' | 'task', asked: string, target: string }} p @returns {Work} */
+  /** @param {{ kind: WorkKind, asked: string, target: string }} p @returns {Work} */
   ask({ kind, asked, target }, at = Date.now()) {
     /** @type {Work} */
     const w = { id: this.nextId++, kind, asked, target, state: 'waiting', askedAt: at, endedAt: null, run: null, exitCode: null, error: null };
@@ -74,8 +75,8 @@ export class Activity {
   }
 
   /**
-   * Running work ended some other way: a task handed to Cronsole, or an error.
-   * @param {number} id @param {'started' | 'failed'} state @param {string | null} [error]
+   * Running work ended some other way: a task handed to Cronsole, a page action done, or an error.
+   * @param {number} id @param {'started' | 'succeeded' | 'failed'} state @param {string | null} [error]
    */
   settle(id, state, error = null, at = Date.now()) {
     const w = this.get(id);
@@ -100,7 +101,7 @@ export function activityRows(list) {
     icon: ICONS[w.state],
     label: w === onBar ? 'waiting for approval' : w.state === 'waiting' ? 'queued' : label(w),
     text: w.asked,
-    where: w.kind === 'command' ? `its own PowerShell in ${w.target}` : `Cronsole task ${w.target}`,
+    where: w.kind === 'command' ? `its own PowerShell in ${w.target}` : w.kind === 'page' ? `the attached tab at ${w.target}` : `Cronsole task ${w.target}`,
     run: w.run,
     askedAt: w.askedAt,
     endedAt: w.endedAt,
@@ -116,7 +117,7 @@ function label(w) {
   switch (w.state) {
     case 'running': return w.run === null ? 'starting' : `running (run ${w.run})`;
     case 'started': return 'started in Cronsole';
-    case 'succeeded': return 'finished (exit 0)';
+    case 'succeeded': return w.kind === 'page' ? 'done' : 'finished (exit 0)';
     case 'failed': return w.exitCode === null ? 'failed' : `failed (exit ${w.exitCode})`;
     case 'cancelled': return 'cancelled';
     case 'denied': return 'denied';

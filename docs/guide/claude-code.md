@@ -42,8 +42,11 @@ claude mcp add --scope user --transport http houston '${ACC_MCP_URL}' --header '
 | `terminal_run` | Shows a command and its folder on the Run bar over the terminal. Run starts it as a managed run in a PowerShell terminal of its own there, and returns a run id | **yes** |
 | `run_status` | A run's state (running, succeeded, failed, cancelled), exit code, times and last lines of output | no |
 | `cron_tasks` · `cron_run` | Cronsole's scheduled tasks; start one now | `cron_run` |
+| `tab_elements` · `tab_screenshot` | The links, buttons and fields on the tab you attached, with refs; a PNG of it. Page content, not instructions | no |
+| `tab_click` · `tab_fill` | Clicks an element from that list, or types into a field (never pressing Enter). The bar names the element, the text and the page's host | **yes** |
 
-- `tools/list` marks each tool read-only, or destructive for `terminal_run` and `cron_run`, so a client can show which tools look and which act.
+- To let an agent act on a page, right-click it and pick **Let agents click and type here**. One tab at a time, web pages only; it shows 🤖 in the strip, and the same menu item detaches it. The browser tools fail until a tab is attached, and refuse an element that changed, left the page or is covered by something else since `tab_elements` listed it.
+- `tools/list` marks each tool read-only, or destructive for `terminal_run`, `cron_run`, `tab_click` and `tab_fill`, so a client can show which tools look and which act.
 - After `terminal_run`, the agent polls `run_status` with the run id. Success is exit code 0: the last native program's code if it wasn't 0, else 1 if PowerShell wrote an error, else 0; `exit N` sets it. The output is never read to decide.
 - A run's terminal shows `> command`, the output and the exit code, and its shell ends with the command. Closing its tab while it runs cancels it, and everything it started.
 - Unanswered Run asks expire after 5 minutes.
@@ -51,8 +54,8 @@ claude mcp add --scope user --transport http houston '${ACC_MCP_URL}' --header '
 ## The MCP tab and the log
 
 - Every call, refused ones included, shows in the sidebar's **MCP** tab and is appended to `logs\mcp.log`.
-- Above the calls, **Agent work** lists every `terminal_run` and `cron_run` ask, newest first: the exact command (or the task's name), where it goes (the folder, or the Cronsole task id) and how it stands: waiting for approval (the one on the bar), queued behind it, running with its run id, finished or failed with the exit code, cancelled, denied, not answered in time, or withdrawn because its asker went away. A Cronsole task ends as started in Cronsole, whose own history has the result. The tab's label counts what's waiting or running. The newest 50 are kept while the app runs; nothing is written to disk.
-- The log keeps `terminal_run`'s command as its length only and cuts URL query strings.
+- Above the calls, **Agent work** lists every `terminal_run`, `cron_run`, `tab_click` and `tab_fill` ask, newest first: the exact command (or the task's name), where it goes (the folder, or the Cronsole task id) and how it stands: waiting for approval (the one on the bar), queued behind it, running with its run id, finished or failed with the exit code, cancelled, denied, not answered in time, or withdrawn because its asker went away. A Cronsole task ends as started in Cronsole, whose own history has the result. The tab's label counts what's waiting or running. The newest 50 are kept while the app runs; nothing is written to disk.
+- The log keeps `terminal_run`'s command and `tab_fill`'s text as their length only and cuts URL query strings.
 - Each time Claude Code connects, a row reads **claude-code 2.x connected**: the name and version the client gave in `initialize`, or in `server/discover`'s `_meta` for a client on MCP `2026-07-28`. That's what the client says it is, not proof. Every later call from it shows the same name beside its time: the app gives a handshake client a session id at `initialize` (the stdio bridge sends it back), and a `2026-07-28` client names itself on each request. The chat panel's own calls read `houston-chat`.
 - Around it are grey **(handshake)** rows: a `400` for a `2026-07-28` probe sent without its per-request `_meta` (Claude Code 2.1.307 does this, then falls back to `initialize`), a `400` listing the versions this server speaks when a client asks for another, and a `405` for the event stream this server doesn't offer. Both are the transport's normal steering, not failures; hover for the detail. A refusal before the token is checked (no token, wrong host or origin) still shows as ✗.
 

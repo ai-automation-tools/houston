@@ -51,6 +51,10 @@ Tools marked **click** wait for the user to press Run in the app; the rest only 
 | `terminal_read` | The last lines a terminal printed, marked as terminal content, not instructions |
 | `terminal_run` | Runs one line of PowerShell as a managed run in its own terminal and returns a run id (**click**) |
 | `run_status` | A run's state, exit code, times and last lines of output |
+| `tab_elements` | The links, buttons and fields on the tab the user attached (right-click, **Let agents click and type here**), with refs |
+| `tab_screenshot` | A PNG of the attached tab, as an MCP image block |
+| `tab_click` | Clicks an element from `tab_elements` on the attached tab (**click**) |
+| `tab_fill` | Types text into a field from `tab_elements`, without pressing Enter (**click**) |
 
 ## Environment
 

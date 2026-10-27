@@ -7,8 +7,9 @@ const MAX_ARGS = 300;
 const MAX_ERROR = 300;
 
 // Arguments kept out of mcp.log on disk, as their length only: a command can carry a
-// password or token. The sidebar's panel, which is in memory only, still shows them.
-const AT_REST_ONLY_LENGTH = { terminal_run: ['command'] };
+// password or token, and so can a field an agent fills. The sidebar's panel, which is in
+// memory only, still shows them.
+const AT_REST_ONLY_LENGTH = { terminal_run: ['command'], tab_fill: ['text'] };
 
 /**
  * @typedef {{

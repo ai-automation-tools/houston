@@ -107,6 +107,11 @@ async function answer(msg, tools, version, signal, modern) {
     if (!isObject(args)) return rpcError(id, -32602, 'arguments must be an object');
     try {
       const out = await tool.run(args, { signal });
+      // An `image` ({ data, mimeType }, as tab_screenshot gives) goes as an image block; the rest as JSON.
+      if (isObject(out) && isObject(out.image) && typeof out.image.data === 'string' && typeof out.image.mimeType === 'string') {
+        const { image, ...rest } = out;
+        return { jsonrpc: '2.0', id, result: { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }, { type: 'text', text: JSON.stringify(rest) }], structuredContent: rest } };
+      }
       // structuredContent must be a JSON object; anything else goes as text only.
       return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(out ?? null) }], ...(isObject(out) && { structuredContent: out }) } };
     } catch (err) {
