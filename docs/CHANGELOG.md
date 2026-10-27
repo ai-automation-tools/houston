@@ -19,6 +19,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Security**
 
+- **`ci.yml` declares `permissions: contents: read`** (security sweep, 2026-10-26). The repo default is already read; this pins it.
 - **Electron 44.8.0 → 44.9.3 and undici 7.30.0 → 7.30.1** (lockfile only, both inside the existing ranges), so CI's `npm audit` passes again: GHSA-jr5w-w6x2-84p9 (Electron, compromised eMudhra intermediates) and three undici advisories (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c; undici comes in through `@electron/get`). The audit job had been failing every PR since the advisories landed, starting with #64.
 
 **Added**
