@@ -85,6 +85,7 @@ npm start
 | Connect Claude Code | [claude-code.md](docs/guide/claude-code.md) |
 | Turn on the Chat tab | [chat.md](docs/guide/chat.md) |
 | Show Cronsole's tasks | [cronsole.md](docs/guide/cronsole.md) |
+| Put two agents in a debate, a podcast or a collaboration | [Roundtable](https://github.com/ai-automation-tools/roundtable): its web page in a browser tab, each agent's CLI in a terminal tab |
 
 ## ⌨️ Shortcuts
 
