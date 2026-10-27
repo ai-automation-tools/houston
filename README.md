@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Electron-44.8-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 44.8">
+  <img src="https://img.shields.io/badge/Electron-45.0-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 45.0">
   <img src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 24">
   <img src="https://img.shields.io/badge/xterm.js-6.0-000000?style=flat-square" alt="xterm.js 6.0">
   <img src="https://img.shields.io/badge/node--pty-1.1-6B7280?style=flat-square" alt="node-pty 1.1">

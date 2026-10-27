@@ -18,7 +18,7 @@ HTTP API rather than scanning disk. It's a public `ai-automation-tools` project
 
 | Part | What |
 |:---|:---|
-| Runtime | Electron 44, one `BaseWindow`: a shell `WebContentsView` plus one sandboxed `WebContentsView` per browser tab |
+| Runtime | Electron 45, one `BaseWindow`: a shell `WebContentsView` plus one sandboxed `WebContentsView` per browser tab |
 | Extensions | electron-chrome-extensions 4.9 (GPL-3.0) + electron-chrome-web-store 0.13 |
 | Ad blocking | @ghostery/adblocker-electron 2.20 (MPL-2.0), owns the browse session's `webRequest` `onBeforeRequest`/`onHeadersReceived` |
 | Terminal | node-pty 1.1 (prebuilt N-API binaries, bundled ConPTY) + xterm.js 6 |

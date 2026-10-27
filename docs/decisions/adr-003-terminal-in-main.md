@@ -23,7 +23,7 @@
 ## Why
 
 - **No page can start a shell with chosen arguments.** Browser tabs have no IPC access, and even the shell can only pick a folder. This carries over the rule from the Project Control Center's ADR-004, written after looking at how ttyd's URL arguments could be abused.
-- **No native build step.** node-pty 1.1.0 ships N-API prebuilds that load in Electron 44 without `electron-rebuild` (verified on this machine). That removes the Visual Studio toolchain from setup.
+- **No native build step.** node-pty 1.1.0 ships N-API prebuilds that load in Electron 44 and 45 without `electron-rebuild` (verified on this machine; 45 on 2026-10-27). That removes the Visual Studio toolchain from setup.
 - **The bundled ConPTY avoids two bugs found in testing.** With Windows' own ConPTY, killing a session forks node-pty's console-list helper, which crashed with `AttachConsole failed` during app shutdown and left the app running. The bundled `conpty.dll` path kills without the helper.
 
 ## Consequences

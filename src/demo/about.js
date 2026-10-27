@@ -35,7 +35,7 @@ export const ABOUT_HTML = `<article class="demo-doc">
       ${badge('license', 'GPL-3.0', '#8B5CF6')}
     </p>
     <p class="badges">
-      ${tech('Electron 44', '#47848F')}
+      ${tech('Electron 45', '#47848F')}
       ${tech('Node.js 24', '#339933')}
       ${tech('xterm.js 6', '#3f3f46')}
       ${tech('PowerShell 7', '#5391FE')}

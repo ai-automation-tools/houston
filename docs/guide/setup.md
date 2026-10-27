@@ -69,6 +69,7 @@ Everything lives under `%APPDATA%\ai-command-center`.
 | `workspaces.json` | Workspaces, their tabs and terminal folders |
 | `layout.json` | Splitter sizes, terminal and chat pane open or not, bookmark source, ad blocking on or off |
 | `recent.json` | The Recent list |
+| `runs.json` | The last 50 `terminal_run` runs: command, folder, result, changed files and output |
 | `chats\<workspace>\` | That workspace's chat conversations: `index.json` and one file each |
 | `mcp.json` | This launch's MCP address and token; deleted on quit |
 | `logs\app.log` | Crashes and errors in the app's own processes |
