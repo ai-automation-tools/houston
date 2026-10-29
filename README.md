@@ -60,7 +60,7 @@ An agent (Claude Code, or Claude in the sidebar) can drive it, and runs nothing 
 | **🔖 Bookmarks · 🕘 Recent · 🔍 Search** | Your browser's bookmarks, what you opened, one search over all of it |
 | [**🤖 MCP server**](docs/mcp-server.md) | Sixteen tools so Claude Code can see and act in the window, a tab you attach included, and what it asked to run and how that went |
 | **💬 Chat** | Claude in a pane on the right, with the same tools; named, searchable conversations per workspace |
-| **⏱️ Cron** | [Cronsole](https://github.com/ai-automation-tools/cronsole)'s scheduled tasks and their runs |
+| **⏱️ Cron** | [Cronsole](https://github.com/ai-automation-tools/cronsole)'s scheduled tasks and their runs, with a Docs filter for the docs upkeep jobs |
 | **🌿 Git** | The workspace repo's branch and changed files, each diff a click away (read-only) |
 | **🚀 Dev** | Start, open, restart and stop the workspace's `npm run dev` style servers, with their logs |
 | **🔌 Connections** | Hub, Cronsole, shells, chat and MCP: working or not, and what to set |

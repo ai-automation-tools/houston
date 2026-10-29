@@ -12,6 +12,7 @@ import path from 'node:path';
 import { installExtension } from 'electron-chrome-web-store';
 import { listExtensions } from './extensions.js';
 import { cleanOutput } from '../shared/output.js';
+import { docsTasks } from '../shared/cronsole.js';
 
 /** @typedef {import('./tabs.js').Tabs} Tabs */
 /** @typedef {import('./terminal.js').Terminals} Terminals */
@@ -429,6 +430,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
     const cronPanel = await wc.executeJavaScript(`(async () => {
       document.querySelector('.side-tabs [data-panel="cron"]').click();
       for (let i = 0; i < 60 && /Asking/.test(document.getElementById('cron-list').textContent); i++) await new Promise((r) => setTimeout(r, 500));
+      const docs = document.getElementById('cron-docs');
+      docs.click();
+      const docsRows = [...document.querySelectorAll('#cron-list .row.task')].map((r) => r.querySelector('.name').textContent);
+      docs.click();
       const rows = [...document.querySelectorAll('#cron-list .row.task')];
       let runs = [];
       let runsNote = null;
@@ -450,6 +455,9 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       return {
         info: await window.acc.cronsole.info(),
         tasks: rows.length,
+        docsRows,
+        docsPressed: docs.getAttribute('aria-pressed'),
+        list: rows.length ? await window.acc.cronsole.tasks() : [],
         first: rows.slice(0, 3).map((r) => r.querySelector('.name').textContent + ' · ' + r.querySelector('.sub').textContent),
         note: rows.length ? null : document.getElementById('cron-list').textContent.slice(0, 200),
         runs: runs.slice(0, 2).map((r) => r.querySelector('.name').textContent),
@@ -460,8 +468,11 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         failedActive: rows.filter((r) => r.classList.contains('failed') && /Status: ACTIVE/.test(r.title)).length,
       };
     })()`);
-    console.log(`[smoke] cronsole=${JSON.stringify(cronPanel)} tabs=${JSON.stringify(tabs.list().map((t) => t.url))}`);
+    console.log(`[smoke] cronsole=${JSON.stringify({ ...cronPanel, list: cronPanel.list.length })} tabs=${JSON.stringify(tabs.list().map((t) => t.url))}`);
     check('Cronsole: the Cron tab lists tasks and Open Cronsole keeps one pinned tab first', cronPanel.tasks > 0 && cronPanel.pinnedTabs === 1 && cronPanel.pinnedFirst, cronPanel.note ?? cronPanel.info, { live: true });
+    const docsNames = docsTasks(cronPanel.list).map((t) => t.name);
+    check('Cronsole: the Docs button shows only the docs upkeep tasks, and again all of them', cronPanel.tasks > 0 && cronPanel.docsPressed === 'false'
+      && JSON.stringify(cronPanel.docsRows) === JSON.stringify(docsNames), { docsRows: cronPanel.docsRows, docsNames }, { live: true });
     check('Cronsole: the Cron tab\'s label counts the active tasks whose last run failed', cronPanel.tasks > 0 && cronPanel.badge === String(cronPanel.failedActive), { badge: cronPanel.badge, failedActive: cronPanel.failedActive }, { live: true });
     const run = tabs.list().find((t) => t.url.startsWith('acc://run/'));
     const runTab = run && tabs.tabs.get(run.id);
