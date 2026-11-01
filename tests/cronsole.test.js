@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_UI, cronsoleConfig, failedTasks, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
+import { DEFAULT_UI, cronsoleConfig, docsTasks, failedTasks, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
 
 test('cronsoleConfig reads the server path and the UI origin, http(s) only', () => {
   assert.deepEqual(cronsoleConfig({}), { server: '', ui: DEFAULT_UI });
@@ -128,6 +128,15 @@ test('failedTasks counts active tasks whose last run failed', () => {
   ];
   assert.deepEqual(failedTasks(tasks).map((x) => x.id), ['a', 'b']);
   assert.deepEqual(failedTasks([]), []);
+});
+
+test('docsTasks keeps tasks whose name has a docs word, whole words only', () => {
+  const t = /** @type {import('../src/shared/cronsole.js').CronTask} */ ({ ...TASK });
+  const names = ['Docs link check', 'README refresh', 'diagram-upkeep', 'weekly_changelog', 'Doc drift (houston)', 'Documentation sweep',
+    'Dockerfile lint', 'Roadmap routine', 'Nightly backup', 'readmeish', 'docsite deploy', ''];
+  const kept = docsTasks(names.map((name, i) => ({ ...t, id: String(i), name }))).map((x) => x.name);
+  assert.deepEqual(kept, ['Docs link check', 'README refresh', 'diagram-upkeep', 'weekly_changelog', 'Doc drift (houston)', 'Documentation sweep']);
+  assert.deepEqual(docsTasks([]), []);
 });
 
 const RUN = { id: 'e1', status: 'FAILURE', triggeredAt: '2026-10-04T02:00:00.000Z', durationMs: 4200, log: '2 broken links', platformRunId: null };

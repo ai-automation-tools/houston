@@ -214,6 +214,19 @@ export function failedTasks(tasks) {
   return tasks.filter((t) => t.status === 'ACTIVE' && taskSummary(t, 0).failed);
 }
 
+/** A whole word that names a docs job: doc, docs, documentation, readme, changelog, diagram(s). */
+const DOCS_WORD = /(?:^|[^a-z])(?:docs?|documentation|readme|changelog|diagrams?)(?:[^a-z]|$)/i;
+
+/**
+ * The docs-upkeep jobs, for the Cron tab's Docs filter: tasks whose name says they keep
+ * docs current ("Docs link check", "README refresh", "diagram-upkeep"). By name only,
+ * since Cronsole has no tags; "Dockerfile lint" and "Roadmap routine" aren't docs jobs.
+ * @param {CronTask[]} tasks
+ */
+export function docsTasks(tasks) {
+  return tasks.filter((t) => DOCS_WORD.test(t.name));
+}
+
 /**
  * A task's last few runs, newest first, through Cronsole's get_task_history. Only runs
  * Cronsole performed are there; a Windows task firing on its own trigger isn't.

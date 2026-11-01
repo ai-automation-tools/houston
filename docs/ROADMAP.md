@@ -17,7 +17,7 @@ Ordered by what blocks what; [build-plan.md](product/build-plan.md) has the reas
 Markers: `- [ ]` open, `- [-]` claimed by a run in progress, `- [x]` done, `- [!]` blocked (the reason follows on the line). `🔒 Needs Mike` marks an item only Mike can do; the routine skips it.
 
 > [!NOTE]
-> **Where we are, 2026-10-27.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is in (2026-10-27). LastPass works, the app is on Electron 45 and the chat on API version `2026-10-21`, all since 2026-10-27, so the upstream queue is empty.
+> **Where we are, 2026-10-28.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is in (2026-10-27). LastPass works, the app is on Electron 45 and the chat on API version `2026-10-21`, all since 2026-10-27, so the upstream queue is empty. The Cron tab's Docs filter (2026-10-28) is the first of the Later items.
 
 ## 🧭 Phase 0: decide (done 2026-09-29)
 
@@ -172,7 +172,7 @@ APIs the neighbours already expose, found in the 2026-10-05 review.
 
 Moved behind Milestones A to D on 2026-10-20: none of these helps the edit, run and check loop. The IDE line moved to Milestone C.
 
-- [ ] Docs upkeep view, as a filter on the Cron tab (the docs-maintenance jobs and their reports) rather than a panel of its own
+- [x] Docs upkeep view, as a filter on the Cron tab (the docs-maintenance jobs and their reports) rather than a panel of its own — done 2026-10-28, roadmap run: a **Docs** toggle on the Cron tab keeps the tasks with doc, docs, documentation, readme, changelog or diagram as a whole word in their name (Cronsole has no tags); a task unfolds its runs and a run opens its report as before. `docsTasks` in `src/shared/cronsole.js`, 1 test; `npm run smoke -- --live` checks the filtered rows (four of Mike's tasks matched)
 - [ ] AI news panel and AI bookmarks feed, read from configurable RSS or Markdown sources
 - [ ] Phone channel through an existing gateway (Claude Remote Control, Hermes or OpenClaw). Needs its own ADR first: pairing, per-device scopes and revocation. Never exposes the MCP port as it is
 

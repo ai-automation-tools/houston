@@ -117,6 +117,7 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .row .acts button:hover { color: var(--text); border-color: var(--line-2); }
 .cron-tools { display: flex; gap: 6px; }
 .cron-tools button { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+.cron-tools button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .row.task.failed .icon, .row.task.failed .sub { color: var(--bad); }
 .row.run .name { font-size: 12px; color: var(--text-2); }
 .row.run.failed .icon { color: var(--bad); }

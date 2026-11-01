@@ -32,6 +32,7 @@ ACC_CRONSOLE_MCP=<cronsole>/mcp-server/dist/index.js
 | Click a run | Opens `acc://run/<task>/<run>` in a tab: the run's log, or for a platform run (a Claude routine, a GitHub Action) what `get_run_output` returns |
 | **Open Cronsole** | Shows Cronsole's UI in a pinned tab, first in the strip, with no close button (Ctrl+W still closes it) |
 | **Refresh** | Asks Cronsole again |
+| **Docs** | The docs upkeep view: only the tasks with doc, docs, documentation, readme, changelog or diagram as a word in their name. Click a task for its runs and a run for its report. Click **Docs** again for every task |
 
 - Only runs Cronsole performed are listed. A Windows task that fires on its own trigger shows none here; Cronsole's UI has those.
 - A tab on Cronsole's address is the pinned tab. **Open Cronsole** goes back to it instead of opening another.

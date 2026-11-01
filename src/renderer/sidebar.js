@@ -2,7 +2,7 @@
 // plus Hub's own favorites), Recent, and one search box across all three; plus MCP,
 // the log of calls agents made to the app's MCP server and the run history; and Cron, Cronsole's tasks.
 
-import { failedTasks, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
+import { docsTasks, failedTasks, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
 import { diffAreas, gitUrl } from './shared/git.js';
 import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
@@ -38,6 +38,8 @@ export class Sidebar {
     this.api = api;
     this.openCronsole = openCronsole;
     this.cronLoaded = false;
+    /** @type {import('./shared/cronsole.js').CronTask[] | null} The last list Cronsole gave, for the Docs filter. */
+    this.cronTasks = null;
     this.openUrl = openUrl;
     this.openTerminal = openTerminal;
     this.viewDoc = viewDoc;
@@ -95,6 +97,11 @@ export class Sidebar {
     });
     document.getElementById('cron-open')?.addEventListener('click', () => this.openCronsole());
     document.getElementById('cron-refresh')?.addEventListener('click', () => this.loadCron());
+    document.getElementById('cron-docs')?.addEventListener('click', (e) => {
+      const btn = /** @type {HTMLElement} */ (e.currentTarget);
+      btn.setAttribute('aria-pressed', String(btn.getAttribute('aria-pressed') !== 'true'));
+      if (this.cronTasks) this.renderCron(this.cronTasks);
+    });
     document.getElementById('git-refresh')?.addEventListener('click', () => this.loadGit());
     document.getElementById('dev-refresh')?.addEventListener('click', () => this.loadDev());
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
@@ -665,27 +672,41 @@ export class Sidebar {
     try {
       const tasks = await this.api.cronsole.tasks();
       this.showCronFailures(failedTasks(tasks));
-      host.innerHTML = '';
-      if (!tasks.length) host.append(note('Cronsole has no tasks.'));
-      const now = Date.now();
-      for (const t of tasks) {
-        const s = taskSummary(t, now);
-        const row = document.createElement('div');
-        row.className = `row task${s.failed ? ' failed' : ''}`;
-        row.tabIndex = 0;
-        row.style.paddingLeft = '10px';
-        row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
-        q(row, '.icon').textContent = s.icon;
-        q(row, '.name').textContent = t.name;
-        q(row, '.sub').textContent = s.sub;
-        row.title = s.title;
-        row.addEventListener('click', () => this.toggleRuns(row, t.id));
-        row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
-        host.append(row);
-      }
+      this.cronTasks = tasks;
+      this.renderCron(tasks);
     } catch (err) {
+      this.cronTasks = null;
       host.innerHTML = '';
       host.append(note(errText(err), true));
+    }
+  }
+
+  /**
+   * The task rows, only the docs-upkeep ones while the Docs button is pressed.
+   * @param {import('./shared/cronsole.js').CronTask[]} all
+   */
+  renderCron(all) {
+    const host = this.el.cronList;
+    const docsOnly = document.getElementById('cron-docs')?.getAttribute('aria-pressed') === 'true';
+    const tasks = docsOnly ? docsTasks(all) : all;
+    host.innerHTML = '';
+    if (!all.length) host.append(note('Cronsole has no tasks.'));
+    else if (!tasks.length) host.append(note('No docs upkeep tasks: none has doc, readme, changelog or diagram in its name.'));
+    const now = Date.now();
+    for (const t of tasks) {
+      const s = taskSummary(t, now);
+      const row = document.createElement('div');
+      row.className = `row task${s.failed ? ' failed' : ''}`;
+      row.tabIndex = 0;
+      row.style.paddingLeft = '10px';
+      row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
+      q(row, '.icon').textContent = s.icon;
+      q(row, '.name').textContent = t.name;
+      q(row, '.sub').textContent = s.sub;
+      row.title = s.title;
+      row.addEventListener('click', () => this.toggleRuns(row, t.id));
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
+      host.append(row);
     }
   }
 
