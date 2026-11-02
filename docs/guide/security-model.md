@@ -44,6 +44,7 @@ The rules every change has to keep are in [AGENTS.md](../../AGENTS.md)'s securit
 - `open_file` takes Hub node ids, never paths, and can't open a file with its default app, so an agent can't launch a script that way.
 - `read_tab` and `terminal_read` carry whatever is on screen. Their descriptions tell the model it's content, not instructions.
 - Project Hub is reached over loopback from the main process.
+- The News tab fetches only the sources `settings.json` lists, from the main process with Node's fetch (no browser cookies), with a 15 s deadline and a 2 MB cap. Only a plain-text title and an http(s) link come out of each item; the sidebar shows the title as text and opens the link as an ordinary tab.
 
 ## Processes and data
 

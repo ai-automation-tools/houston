@@ -49,6 +49,10 @@ Per-machine settings live in `%APPDATA%\ai-command-center\settings.json`. You on
   "quickLinks": [
     { "label": "Project Hub", "url": "http://127.0.0.1:4273" },
     { "label": "Chrome Web Store", "url": "https://chromewebstore.google.com" }
+  ],
+  "newsSources": [
+    { "label": "Some AI blog", "url": "https://blog.example.com/feed.xml" },
+    { "label": "Weekly digest", "url": "D:/notes/ai-digest.md" }
   ]
 }
 ```
@@ -57,6 +61,7 @@ Per-machine settings live in `%APPDATA%\ai-command-center\settings.json`. You on
 |:---|:---|
 | `hubUrl` | Where Project Hub answers. `ACC_HUB_URL` in the environment overrides it. It must be on this machine unless `ACC_HUB_REMOTE=1` is set. |
 | `quickLinks` | The buttons on the empty tab page. http(s) only, twelve at most. |
+| `newsSources` | The News tab's sources, none by default: each a label and an RSS or Atom feed, a Markdown page (http or https), or an absolute path to a local `.md` file. Twelve at most. |
 
 Broken values fall back to the defaults. The chat key, the model and Cronsole's path go in the clone's `.env` instead (see [chat.md](chat.md) and [cronsole.md](cronsole.md)).
 

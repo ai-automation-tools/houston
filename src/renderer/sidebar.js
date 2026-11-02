@@ -1,6 +1,7 @@
 // The left sidebar: Files (Project Hub's tree), Bookmarks (browser profiles Hub reads,
 // plus Hub's own favorites), Recent, and one search box across all three; plus MCP,
-// the log of calls agents made to the app's MCP server and the run history; and Cron, Cronsole's tasks.
+// the log of calls agents made to the app's MCP server and the run history; Cron, Cronsole's tasks;
+// and News, headlines from the sources settings.json lists.
 
 import { docsTasks, failedTasks, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
 import { diffAreas, gitUrl } from './shared/git.js';
@@ -61,6 +62,9 @@ export class Sidebar {
       bookmarkTree: /** @type {HTMLElement} */ (document.getElementById('bookmark-tree')),
       source: /** @type {HTMLSelectElement} */ (document.getElementById('bookmark-source')),
       recent: /** @type {HTMLElement} */ (document.getElementById('panel-recent')),
+      news: /** @type {HTMLElement} */ (document.getElementById('panel-news')),
+      newsList: /** @type {HTMLElement} */ (document.getElementById('news-list')),
+      newsSources: /** @type {HTMLElement} */ (document.getElementById('news-sources')),
       mcp: /** @type {HTMLElement} */ (document.getElementById('panel-mcp')),
       mcpList: /** @type {HTMLElement} */ (document.getElementById('mcp-list')),
       runsSearch: /** @type {HTMLInputElement} */ (document.getElementById('runs-search')),
@@ -103,6 +107,8 @@ export class Sidebar {
       if (this.cronTasks) this.renderCron(this.cronTasks);
     });
     document.getElementById('git-refresh')?.addEventListener('click', () => this.loadGit());
+    document.getElementById('news-refresh')?.addEventListener('click', () => this.loadNews());
+    this.newsLoaded = false;
     document.getElementById('dev-refresh')?.addEventListener('click', () => this.loadDev());
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
     api.recent.onChanged((/** @type {any[]} */ list) => { this.recent = list; this.renderRecent(); });
@@ -418,6 +424,45 @@ export class Sidebar {
     }
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
     return wrap;
+  }
+
+  /** The News tab: every source fetched by main, newest headline first; a click opens it as a tab. */
+  async loadNews() {
+    this.newsLoaded = true;
+    const host = this.el.newsList;
+    host.innerHTML = '';
+    host.append(note('Fetching headlines…'));
+    this.el.newsSources.textContent = '';
+    try {
+      const { sources, items } = /** @type {{ sources: { label: string, count: number, error?: string }[], items: import('./shared/news.js').NewsItem[] }} */ (await this.api.news.list());
+      host.innerHTML = '';
+      if (!sources.length) {
+        host.append(note('No news sources yet. Add "newsSources" to settings.json: each a label and an RSS or Atom feed, a Markdown page, or a local .md file. See docs/guide/setup.md.'));
+        return;
+      }
+      const failed = sources.filter((s) => s.error);
+      this.el.newsSources.textContent = `${sources.length} source${sources.length === 1 ? '' : 's'}${failed.length ? `, ${failed.length} failing` : ''}`;
+      this.el.newsSources.title = sources.map((s) => `${s.label}: ${s.error || `${s.count} headlines`}`).join('\n');
+      for (const s of failed) host.append(note(`${s.label}: ${s.error}`, true));
+      if (!items.length) host.append(note('No headlines in these sources.'));
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.tabIndex = 0;
+        row.style.paddingLeft = '10px';
+        row.innerHTML = '<span class="icon">📰</span><span class="name"></span><span class="sub"></span>';
+        q(row, '.name').textContent = item.title;
+        q(row, '.sub').textContent = item.at ? ago(item.at) : '';
+        row.title = [item.title, item.source, item.url, item.at && new Date(item.at).toLocaleString()].filter(Boolean).join('\n');
+        row.addEventListener('click', (e) => this.openUrl(item.url, { background: e.ctrlKey }));
+        row.addEventListener('auxclick', (e) => { if (e.button === 1) this.openUrl(item.url, { background: true }); });
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
+        host.append(row);
+      }
+    } catch (err) {
+      host.innerHTML = '';
+      host.append(note(errText(err), true));
+    }
   }
 
   renderRecent() {
@@ -759,11 +804,13 @@ export class Sidebar {
     this.el.files.hidden = name !== 'files';
     this.el.bookmarks.hidden = name !== 'bookmarks';
     this.el.recent.hidden = name !== 'recent';
+    this.el.news.hidden = name !== 'news';
     this.el.mcp.hidden = name !== 'mcp';
     this.el.cron.hidden = name !== 'cron';
     this.el.git.hidden = name !== 'git';
     this.el.dev.hidden = name !== 'dev';
     if (name === 'cron' && !this.cronLoaded) this.loadCron();
+    if (name === 'news' && !this.newsLoaded) this.loadNews();
     if (name === 'git') this.loadGit();
     if (name === 'dev') this.loadDev();
   }
@@ -781,7 +828,7 @@ export class Sidebar {
       this.show(this.current);
       return;
     }
-    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = true;
+    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = true;
     res.hidden = false;
     res.innerHTML = '';
 

@@ -173,7 +173,7 @@ APIs the neighbours already expose, found in the 2026-10-05 review.
 Moved behind Milestones A to D on 2026-10-20: none of these helps the edit, run and check loop. The IDE line moved to Milestone C.
 
 - [x] Docs upkeep view, as a filter on the Cron tab (the docs-maintenance jobs and their reports) rather than a panel of its own — done 2026-10-28, roadmap run: a **Docs** toggle on the Cron tab keeps the tasks with doc, docs, documentation, readme, changelog or diagram as a whole word in their name (Cronsole has no tags); a task unfolds its runs and a run opens its report as before. `docsTasks` in `src/shared/cronsole.js`, 1 test; `npm run smoke -- --live` checks the filtered rows (four of Mike's tasks matched)
-- [ ] AI news panel and AI bookmarks feed, read from configurable RSS or Markdown sources
+- [x] AI news panel and AI bookmarks feed, read from configurable RSS or Markdown sources — done 2026-11-01, roadmap run: a **News** tab in the sidebar lists headlines from `settings.json`'s `newsSources` (an RSS or Atom feed, a Markdown page, or a local `.md` file such as a digest or a bookmarks note, whose `[title](url)` links become headlines), newest first, each link once, a click opening it as a tab. Main fetches each source with Node's fetch, a 15 s deadline and a 2 MB cap; a failing source says why while the rest show. `parseNews` and `mergeNews` in `src/shared/news.js` (5 tests) and the sources in `settings.js` (1 test); `npm run smoke` reads a local Markdown source and opens its headline
 - [ ] Phone channel through an existing gateway (Claude Remote Control, Hermes or OpenClaw). Needs its own ADR first: pairing, per-device scopes and revocation. Never exposes the MCP port as it is
 
 ### Daily use, round 2

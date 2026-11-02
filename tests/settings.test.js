@@ -47,3 +47,29 @@ test('a Hub that is not on this machine needs ACC_HUB_REMOTE=1', () => {
   assert.equal(settingsFrom({ hubUrl: 'https://hub.example:9/' }, { ACC_HUB_REMOTE: '1' }).hubUrl, 'https://hub.example:9');
   assert.equal(settingsFrom({}, { ACC_HUB_URL: 'http://[::1]:4273', ACC_HUB_REMOTE: '0' }).hubUrl, 'http://[::1]:4273');
 });
+
+test('settingsFrom keeps news sources that are web addresses or local .md files, none by default', () => {
+  assert.deepEqual(settingsFrom({}).newsSources, []);
+  assert.deepEqual(settingsFrom({ newsSources: 'nope' }).newsSources, []);
+  const s = settingsFrom({
+    newsSources: [
+      { label: ' Feed ', url: 'https://news.example.com/feed/' },
+      { label: 'Digest', url: 'D:/work/notes/ai-digest.md' },
+      { label: 'Backslashes', url: 'C:\\Users\\dev\\links.MD' },
+      { label: 'Not markdown', url: 'D:/work/notes/secrets.txt' },
+      { label: 'Relative', url: 'notes/digest.md' },
+      { label: 'Climbs out', url: 'D:/work/../other/digest.md' },
+      { label: 'File URL', url: 'file:///D:/work/digest.md' },
+      { label: '', url: 'https://nolabel.example.com/' },
+      { url: 'https://nolabel.example.com/' },
+      null,
+    ],
+  });
+  assert.deepEqual(s.newsSources, [
+    { label: 'Feed', url: 'https://news.example.com/feed/' },
+    { label: 'Digest', url: 'D:/work/notes/ai-digest.md' },
+    { label: 'Backslashes', url: 'C:\\Users\\dev\\links.MD' },
+  ]);
+  const many = settingsFrom({ newsSources: Array.from({ length: 20 }, (_, i) => ({ label: `n${i}`, url: `https://n${i}.example.com/` })) });
+  assert.equal(many.newsSources.length, 12);
+});

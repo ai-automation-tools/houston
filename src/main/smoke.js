@@ -474,6 +474,22 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
     check('Cronsole: the Docs button shows only the docs upkeep tasks, and again all of them', cronPanel.tasks > 0 && cronPanel.docsPressed === 'false'
       && JSON.stringify(cronPanel.docsRows) === JSON.stringify(docsNames), { docsRows: cronPanel.docsRows, docsNames }, { live: true });
     check('Cronsole: the Cron tab\'s label counts the active tasks whose last run failed', cronPanel.tasks > 0 && cronPanel.badge === String(cronPanel.failedActive), { badge: cronPanel.badge, failedActive: cronPanel.failedActive }, { live: true });
+    if (process.env.ACC_SMOKE_SEEDED) {
+      const news = await wc.executeJavaScript(`(async () => {
+        document.getElementById('search').value = '';
+        document.getElementById('search').dispatchEvent(new Event('input'));
+        document.querySelector('.side-tabs [data-panel="news"]').click();
+        for (let i = 0; i < 40 && !document.querySelector('#news-list .row'); i++) await new Promise((r) => setTimeout(r, 100));
+        const rows = [...document.querySelectorAll('#news-list .row')];
+        rows[0]?.click();
+        await new Promise((r) => setTimeout(r, 800));
+        document.querySelector('.side-tabs [data-panel="files"]').click();
+        return { shown: rows.map((r) => r.querySelector('.name').textContent), sources: document.getElementById('news-sources').textContent };
+      })()`);
+      const opened = tabs.list().some((t) => t.url === 'https://example.com/smoke-news');
+      check('the News tab lists a local Markdown source\'s headline, and a click opens it as a tab',
+        news.shown[0] === 'Smoke headline' && news.sources === '1 source' && opened, { ...news, opened });
+    }
     const run = tabs.list().find((t) => t.url.startsWith('acc://run/'));
     const runTab = run && tabs.tabs.get(run.id);
     if (runTab) {
