@@ -32,6 +32,7 @@ import { Activity, activityRows } from '../shared/activity.js';
 import { menuItems } from '../shared/menu.js';
 import { HUB_FAVORITES } from '../shared/tree.js';
 import { isPermissionAllowed } from '../shared/permissions.js';
+import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
@@ -122,6 +123,29 @@ function handle(channel, fn) {
 /** @param {string} channel @param {(...args: any[]) => void} fn */
 function on(channel, fn) {
   ipcMain.on(channel, (e, ...args) => { if (fromShell(e)) fn(...args); });
+}
+
+const NEWS_TIMEOUT_MS = 15_000;
+const NEWS_MAX_BYTES = 2_000_000;
+
+/**
+ * One News source's text: an http(s) address fetched with a deadline and a size cap, or
+ * a local `.md` path from settings.json read from disk. Node's fetch, so no browse-session cookies go with it.
+ * @param {string} url
+ */
+async function readNewsSource(url) {
+  if (!/^https?:/i.test(url)) {
+    const stat = await fs.promises.stat(url);
+    if (stat.size > NEWS_MAX_BYTES) throw new Error('The file is over 2 MB');
+    return fs.promises.readFile(url, 'utf8');
+  }
+  const res = await fetch(url, { signal: AbortSignal.timeout(NEWS_TIMEOUT_MS), headers: { accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/markdown, text/plain;q=0.9, */*;q=0.5' } })
+    .catch((err) => { throw new Error(err?.name === 'TimeoutError' ? `No answer within ${NEWS_TIMEOUT_MS / 1000} s` : "Couldn't reach it"); });
+  if (!res.ok) throw new Error(`It returned ${res.status}`);
+  if (Number(res.headers.get('content-length')) > NEWS_MAX_BYTES) throw new Error('The answer is over 2 MB');
+  const text = await res.text();
+  if (text.length > NEWS_MAX_BYTES) throw new Error('The answer is over 2 MB');
+  return text;
 }
 
 /** @param {Electron.MenuItemConstructorOptions[]} [extensions] the Extensions submenu, once they're set up */
@@ -576,6 +600,22 @@ async function createWindow() {
   handle('hub:favorites', () => hub.favorites());
   handle('hub:favorite', (url, name) => hub.favorite(String(url || ''), String(name || url || '')));
   handle('hub:open', (id, how, label) => openInHub(String(id), how === 'reveal' ? 'reveal' : how === 'default' ? 'default' : 'code', String(label || id)));
+
+  // The News tab: each source settings.json lists, fetched or read here, never named by the renderer.
+  handle('news:list', async () => {
+    const sources = store.settings().newsSources;
+    const results = await Promise.all(sources.map(async (s) => {
+      try {
+        return { label: s.label, items: parseNews(await readNewsSource(s.url), s.label) };
+      } catch (err) {
+        return { label: s.label, items: [], error: err instanceof Error ? err.message : String(err) };
+      }
+    }));
+    return {
+      sources: results.map(({ label, items, error }) => ({ label, count: items.length, error })),
+      items: mergeNews(results.map((r) => r.items)),
+    };
+  });
 
   handle('tabs:create', (input) => tabs.create(toUrl(String(input || 'about:blank'))).id);
   handle('tabs:activate', (id) => tabs.activate(Number(id)));

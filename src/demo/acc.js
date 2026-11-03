@@ -7,6 +7,7 @@ import { toUrl } from '../shared/url.js';
 import { docIdFromUrl, isDocUrl } from '../shared/docs.js';
 import { pushRecent } from '../shared/recent.js';
 import { toggleFavorite } from '../shared/favorites.js';
+import { mergeNews, parseNews } from '../shared/news.js';
 import { trayItem } from '../shared/chat.js';
 import { chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { searchConversations } from '../shared/conversations.js';
@@ -321,6 +322,17 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       },
       open: async () => { throw new Error('VS Code and Explorer open from the desktop app, not the demo.'); },
       onChanged: listen('hub:changed'),
+    },
+
+    // Made-up headlines from a made-up feed and a Markdown digest; nothing is fetched.
+    news: {
+      list: async () => ({
+        sources: [{ label: 'Example AI feed', count: 2 }, { label: 'Weekly digest', count: 2 }],
+        items: mergeNews([
+          parseNews(`<rss><channel><item><title>A new model tops the coding benchmark</title><link>https://news.example.com/model</link><pubDate>${new Date(Date.now() - 3 * HOUR).toUTCString()}</pubDate></item><item><title>Agents that check their own work</title><link>https://news.example.com/agents</link><pubDate>${new Date(Date.now() - 30 * HOUR).toUTCString()}</pubDate></item></channel></rss>`, 'Example AI feed'),
+          parseNews('## This week\n- [MCP clients compared](https://digest.example.com/mcp)\n- [Prompt caching, explained](https://digest.example.com/caching)', 'Weekly digest'),
+        ]),
+      }),
     },
 
     tabs: {

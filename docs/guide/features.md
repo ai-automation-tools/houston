@@ -57,6 +57,10 @@
 - **Recent:** pages, files and terminals you've opened.
 - **Search** (Ctrl+Shift+F): one box across files, bookmarks and Recent.
 
+## 📰 News
+
+The **News** tab lists headlines from the sources in `settings.json`'s `newsSources` ([setup.md](setup.md#settings)), newest first, each link once. A source can be an RSS or Atom feed, a Markdown page on the web, or a local `.md` file such as a weekly AI digest or a bookmarks note: every `[title](https://…)` link in it becomes a headline, and a `## 2026-10-30` heading dates the links under it. Click a headline to open it in a tab (Ctrl+click or middle-click for a background tab). The sources are fetched when you first open the tab and again on **Refresh**; one that fails says why at the top while the rest still show.
+
 ## 🌿 Git
 
 - The **Git** tab in the sidebar shows the active workspace's repo: its branch, the upstream it tracks and how far ahead or behind it is, then the changed files grouped as Conflicts, Staged, Changes and Untracked.

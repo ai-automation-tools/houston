@@ -34,7 +34,13 @@ if (profile) {
   env.ACC_USER_DATA = profile;
   // settings.json only (the Hub address and quick links): nothing signed in, no history.
   const settings = path.join(process.env.APPDATA || '', 'ai-command-center', 'settings.json');
-  if (fs.existsSync(settings)) fs.copyFileSync(settings, path.join(profile, 'settings.json'));
+  /** @type {Record<string, unknown>} */
+  let copied = {};
+  try { copied = JSON.parse(fs.readFileSync(settings, 'utf8')); } catch { /* none, or not JSON: defaults */ }
+  // The News tab reads one local Markdown source, so the run needs no network for it.
+  const news = path.join(profile, 'smoke-news.md');
+  fs.writeFileSync(news, '## 2026-10-30\n- [Smoke headline](https://example.com/smoke-news)\n');
+  fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ ...copied, newsSources: [{ label: 'Smoke digest', url: news }] }));
   // An old single-conversation chat.json, so the run checks it moves into the conversation list.
   fs.writeFileSync(path.join(profile, 'chat.json'), JSON.stringify([
     { role: 'user', content: 'Smoke: how do I ship acme-api?' },

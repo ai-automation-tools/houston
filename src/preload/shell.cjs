@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('acc', {
     onChanged: listen('hub:changed'),
   },
 
+  news: {
+    list: invoke('news:list'),
+  },
+
   tabs: {
     create: invoke('tabs:create'),
     activate: invoke('tabs:activate'),

@@ -7,7 +7,25 @@ export const PROJECT_HUB_REPO = 'https://github.com/ai-automation-tools/project-
 const MAX_LINKS = 12;
 const MAX_LABEL = 40;
 
-/** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[] }} Settings */
+/** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[], newsSources: { label: string, url: string }[] }} Settings */
+
+/**
+ * A News source: an http(s) feed or Markdown address, or an absolute path to a local
+ * `.md` file (only settings.json can name one; the renderer never does). Null otherwise.
+ * @param {unknown} value
+ */
+function newsSource(value) {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (/^[a-z]:[\\/][^\0]*\.md$/i.test(v) && !/(^|[\\/])\.\.([\\/]|$)/.test(v)) return v;
+  // Not httpUrl(): a feed's trailing slash can matter.
+  try {
+    const u = new URL(v);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * An http(s) URL with no trailing slash, or null.
@@ -54,8 +72,17 @@ export function settingsFrom(raw, env = {}) {
     if (url && label) quickLinks.push({ label, url });
     if (quickLinks.length === MAX_LINKS) break;
   }
+  /** @type {{ label: string, url: string }[]} */
+  const newsSources = [];
+  for (const n of Array.isArray(d.newsSources) ? d.newsSources : []) {
+    const url = newsSource(n?.url);
+    const label = typeof n?.label === 'string' ? n.label.trim().slice(0, MAX_LABEL) : '';
+    if (url && label) newsSources.push({ label, url });
+    if (newsSources.length === MAX_LINKS) break;
+  }
   return {
     hubUrl,
+    newsSources,
     quickLinks: quickLinks.length ? quickLinks : [
       { label: 'Project Hub', url: hubUrl },
       { label: 'Chrome Web Store', url: 'https://chromewebstore.google.com' },
