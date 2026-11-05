@@ -47,6 +47,7 @@ const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const SERVE = [
   ['/vendor/xterm/', path.join(ROOT, 'node_modules', '@xterm', 'xterm')],
   ['/vendor/addon-fit/', path.join(ROOT, 'node_modules', '@xterm', 'addon-fit')],
+  ['/vendor/addon-search/', path.join(ROOT, 'node_modules', '@xterm', 'addon-search')],
   ['/shared/', path.join(ROOT, 'src', 'shared')],
   ['/', path.join(ROOT, 'src', 'renderer')],
 ];
