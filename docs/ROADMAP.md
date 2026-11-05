@@ -183,7 +183,7 @@ Nice to have; found in the 2026-10-05 review.
 - [x] Right-click in the terminal copies a selection or pastes — 2026-10-20; `src/renderer/terminal.js`
 - [x] Manage extensions: an **Extensions** menu with Get extensions…, and per extension Options, Web Store page and Remove (uninstalls for good) — 2026-10-20; `extensionsMenu` in `src/main/extensions.js`
 - [x] Ad and tracker blocking, on by default with a menu toggle: Ghostery's engine with EasyList/EasyPrivacy, since Web Store MV3 blockers can't work in Electron — 2026-10-20, Mike's call on the dependency; `src/main/adblock.js`
-- [ ] Address bar suggestions from Recent and bookmarks as you type, picked with the arrow keys
+- [x] Address bar suggestions from Recent and bookmarks as you type, picked with the arrow keys — done 2026-11-04, roadmap run: a list under the address bar of the web pages in Recent, Hub's favorites and the Bookmarks tab's source whose title or URL holds every typed word (eight at most, each URL once, a URL or title starting with the first word first); ↑/↓ highlight, Enter opens, Escape closes, and with nothing highlighted Enter still goes to the typed text. The browser tab hides while the list shows, as for the palette. `src/shared/suggest.js` (7 tests), wired in `src/renderer/app.js`, with a smoke check
 - [ ] Tabs: drag to reorder, duplicate, mute, and pin any tab (today only Cronsole's is pinned)
 - [ ] Downloads: `will-download` handled so a finished download shows a toast with Reveal in Explorer, and lands in Recent
 - [ ] Light theme for the shell, following `prefers-color-scheme` the way document pages already do

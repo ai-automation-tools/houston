@@ -87,7 +87,8 @@
         <button class="icon-btn" data-cmd="forward" title="Forward" aria-label="Forward">→</button>
         <button class="icon-btn" data-cmd="reload" title="Reload (F5)" aria-label="Reload">⟳</button>
         <form id="address-form">
-          <input id="address" type="text" placeholder="Search or enter address  (Alt+D)" autocomplete="off" spellcheck="false" aria-label="Address">
+          <input id="address" type="text" placeholder="Search or enter address  (Alt+D)" autocomplete="off" spellcheck="false" aria-label="Address" role="combobox" aria-controls="address-suggest" aria-expanded="false" aria-autocomplete="list">
+          <div id="address-suggest" role="listbox" aria-label="Suggestions from Recent and bookmarks" hidden></div>
         </form>
         <button id="star" class="icon-btn" title="Add to Project Hub favorites" aria-label="Add to Project Hub favorites" aria-pressed="false" hidden>☆</button>
         <form id="find-form" role="search" aria-label="Find in page" hidden>

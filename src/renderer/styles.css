@@ -213,7 +213,10 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .tab.loading .title::before { content: "◌ "; color: var(--accent); }
 
 #navbar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
-#address-form { flex: 1; }
+#address-form { flex: 1; position: relative; }
+/* Suggestions under the address bar. The browser tab is hidden while they show, as for the palette. */
+#address-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10; padding: 4px 0; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); box-shadow: 0 8px 24px #0008; }
+#address-suggest[hidden] { display: none; }
 #find-form { display: flex; align-items: center; gap: 2px; padding-left: 6px; border-left: 1px solid var(--line); }
 #find-form[hidden] { display: none; }
 #find-input { width: 180px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; outline: none; }
