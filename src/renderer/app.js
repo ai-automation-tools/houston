@@ -6,7 +6,8 @@ import { startChat } from './chat.js';
 import { TerminalPanel } from './terminal.js';
 import { createPalette } from './palette.js';
 import { createConnections } from './connections.js';
-import { defaultAction, search } from './shared/tree.js';
+import { defaultAction, flattenBookmarks, search } from './shared/tree.js';
+import { stepSelection, suggestAddresses } from './shared/suggest.js';
 import { docUrl, isDocUrl } from './shared/docs.js';
 import { cycleTab, pickTab } from './shared/session.js';
 import { isCronsoleUrl } from './shared/cronsole.js';
@@ -335,7 +336,8 @@ star.addEventListener('click', async () => {
 
 $('address-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const text = address.value.trim();
+  const text = (pickedSuggestion() || address.value).trim();
+  closeSuggest();
   if (!text) return;
   if (activeTab === null) api.tabs.create(text);
   else api.tabs.navigate(text);
@@ -360,6 +362,7 @@ function newTab() {
   $('empty').hidden = false;
 }
 address.addEventListener('blur', () => {
+  closeSuggest();
   // Leaving the address bar without navigating returns to the tab that was showing.
   setTimeout(() => {
     if (activeTab === null && tabEls.size && document.activeElement !== address) {
@@ -412,6 +415,82 @@ api.tabs.onFound((/** @type {number} */ id, /** @type {{ active: number, total: 
 // ---- sidebar -----------------------------------------------------------------
 
 const sidebar = new Sidebar({ api, layout, openUrl, openTerminal: (cwd) => openTerminal(cwd), viewDoc, openCronsole });
+
+// ---- address-bar suggestions -------------------------------------------------
+// Pages from Recent, Hub's favorites and the sidebar's bookmark source that match
+// what's typed (shared/suggest.js). The arrows move the highlight, Enter opens it,
+// Escape closes the list; with nothing highlighted Enter goes to the typed text.
+
+const suggestBox = $('address-suggest');
+/** @type {import('./shared/suggest.js').Suggestion[]} */
+let suggestions = [];
+let suggestSel = -1;
+
+/** The highlighted suggestion's URL, if one is. */
+function pickedSuggestion() {
+  return suggestSel >= 0 ? suggestions[suggestSel]?.url || '' : '';
+}
+
+function closeSuggest() {
+  suggestions = [];
+  suggestSel = -1;
+  if (suggestBox.hidden) return;
+  suggestBox.hidden = true;
+  address.setAttribute('aria-expanded', 'false');
+  address.removeAttribute('aria-activedescendant');
+  if (activeTab !== null) api.tabs.setHidden(false);
+}
+
+function markSuggest() {
+  suggestBox.querySelectorAll('.pal-row').forEach((row, i) => {
+    row.classList.toggle('active', i === suggestSel);
+    row.setAttribute('aria-selected', String(i === suggestSel));
+  });
+  if (suggestSel >= 0) address.setAttribute('aria-activedescendant', `sug-${suggestSel}`);
+  else address.removeAttribute('aria-activedescendant');
+}
+
+function renderSuggest() {
+  const bookmarks = [...flattenBookmarks(Array.isArray(favorites) ? favorites : []), ...sidebar.bookmarkIndex];
+  suggestions = suggestAddresses({ recent: sidebar.recent, bookmarks }, address.value);
+  suggestSel = -1;
+  if (!suggestions.length) { closeSuggest(); return; }
+  suggestBox.innerHTML = '';
+  suggestions.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'row pal-row';
+    row.id = `sug-${i}`;
+    row.setAttribute('role', 'option');
+    row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
+    /** @type {HTMLElement} */ (row.querySelector('.icon')).textContent = s.kind === 'recent' ? '🕘' : '★';
+    /** @type {HTMLElement} */ (row.querySelector('.name')).textContent = s.title;
+    /** @type {HTMLElement} */ (row.querySelector('.sub')).textContent = s.url;
+    // mousedown would blur the address bar and close the list before the click lands.
+    row.addEventListener('mousedown', (e) => e.preventDefault());
+    row.addEventListener('mousemove', () => { if (suggestSel !== i) { suggestSel = i; markSuggest(); } });
+    row.addEventListener('click', () => { suggestSel = i; $('address-form').requestSubmit(); });
+    suggestBox.append(row);
+  });
+  if (suggestBox.hidden) {
+    suggestBox.hidden = false;
+    address.setAttribute('aria-expanded', 'true');
+    api.tabs.setHidden(true);
+  }
+  markSuggest();
+}
+
+address.addEventListener('input', renderSuggest);
+address.addEventListener('keydown', (e) => {
+  if (suggestBox.hidden) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    suggestSel = stepSelection(suggestSel, e.key === 'ArrowDown' ? 1 : -1, suggestions.length);
+    markSuggest();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeSuggest();
+  }
+});
 
 // ---- workspaces --------------------------------------------------------------
 

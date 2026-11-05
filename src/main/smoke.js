@@ -519,6 +519,29 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
     console.log(`[smoke] palette=${JSON.stringify(pal)}`);
     check('Ctrl+K opens the palette with tabs and terminals, and Enter runs the top match', pal.open && pal.tabs === tabs.list().length && pal.terminals > 0
       && pal.first === 'Show Recent' && pal.closed && pal.panel === 'recent', pal);
+    // Address-bar suggestions: example.com is in Recent by now; typing lists it, the
+    // arrow highlights it, Escape closes the list without navigating.
+    if (!process.env.ACC_SMOKE_URL) {
+      const sug = await wc.executeJavaScript(`(async () => {
+        const input = document.getElementById('address');
+        const box = document.getElementById('address-suggest');
+        input.focus();
+        input.value = 'example';
+        input.dispatchEvent(new Event('input'));
+        const urls = [...box.querySelectorAll('.pal-row .sub')].map((s) => s.textContent);
+        const shown = !box.hidden && input.getAttribute('aria-expanded') === 'true';
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        const active = box.querySelector('.pal-row.active .sub')?.textContent;
+        const described = input.getAttribute('aria-activedescendant');
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const closed = box.hidden && input.getAttribute('aria-expanded') === 'false';
+        input.blur();
+        return { shown, urls, active, described, closed };
+      })()`);
+      console.log(`[smoke] suggest=${JSON.stringify(sug)}`);
+      check('typing in the address bar suggests Recent pages; the arrow highlights one and Escape closes the list',
+        sug.shown && sug.urls.some((/** @type {string} */ u) => /^https:\/\/example\.com/.test(u)) && sug.active === sug.urls[0] && sug.described === 'sug-0' && sug.closed, sug);
+    }
     // Connections: the status dot opens it, every row has a state, and Retry rechecks one row.
     const conn = await wc.executeJavaScript(`(async () => {
       const wait = async (ok) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 100)); };
