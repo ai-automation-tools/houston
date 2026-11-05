@@ -5,16 +5,23 @@
 // the app (new port, new token) needs no client restart. HOUSTON_MCP_JSON overrides the
 // file's path. A modern (2026-07-28) request's _meta goes into the headers HTTP wants
 // mirrored, and the Mcp-Session-Id the app gives at initialize goes back on every later
-// request, so the MCP tab names the client on each call. Never write anything but
-// replies to stdout.
+// request, so the MCP tab names the client on each call. While the app is closed the
+// bridge answers itself: the handshake and the tool list as usual, so a client lists the
+// server as connected, and every tool call with "Houston isn't running". Never write
+// anything but replies to stdout.
 
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import readline from 'node:readline';
-import { mirrorHeaders } from '../src/shared/mcp.js';
+import { checkRequest, handleMessage, mirrorHeaders } from '../src/shared/mcp.js';
+import { allTools } from '../src/shared/tools.js';
 
 const infoFile = process.env.HOUSTON_MCP_JSON || path.join(process.env.APPDATA || '', 'ai-command-center', 'mcp.json');
+const NOT_RUNNING = "Houston isn't running. Start the app, then retry.";
+// The real tools' names and schemas over sources that all refuse, for answering offline.
+const offlineTools = allTools(/** @type {any} */ (new Proxy({}, { get: () => () => { throw new Error(NOT_RUNNING); } })));
+const version = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 /** @type {Set<http.ClientRequest>} */
 const pending = new Set();
 let closed = false;
@@ -40,7 +47,7 @@ function forward(line) {
   try {
     info = JSON.parse(fs.readFileSync(infoFile, 'utf8'));
   } catch {
-    return fail("Houston isn't running (no mcp.json). Start the app, then retry.");
+    return offline(msg);
   }
   const body = Buffer.from(line);
   // node:http, not fetch: fetch gives up on headers after 300 s, and terminal_run waits
@@ -68,6 +75,17 @@ function forward(line) {
   req.on('error', () => { pending.delete(req); fail("Houston isn't answering. Is the app running?"); });
   pending.add(req);
   req.end(body);
+}
+
+/**
+ * Answers a message with the app closed, the way the app would, but every tool fails.
+ * @param {any} msg
+ */
+async function offline(msg) {
+  const headers = Object.fromEntries(Object.entries(mirrorHeaders(msg)).map(([k, v]) => [k.toLowerCase(), v]));
+  const { modern, reject } = checkRequest(msg, headers);
+  const out = reject ? reject.out : await handleMessage(msg, offlineTools, version, undefined, modern);
+  if (out) send(out);
 }
 
 readline.createInterface({ input: process.stdin }).on('line', (line) => { if (line.trim()) forward(line); })

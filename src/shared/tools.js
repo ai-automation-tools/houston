@@ -436,3 +436,13 @@ export function tabTools(src) {
     }],
   ]);
 }
+
+/**
+ * Every tool the app serves, in one map: main.js serves it, and the stdio bridge lists
+ * it while the app is closed so clients still see the server and its tools.
+ * @param {Sources} src
+ * @returns {Map<string, Tool>}
+ */
+export function allTools(src) {
+  return new Map([...readOnlyTools(src), ...navigationTools(src), ...terminalTools(src), ...cronTools(src), ...tabTools(src)]);
+}
