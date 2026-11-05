@@ -519,6 +519,29 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
     console.log(`[smoke] palette=${JSON.stringify(pal)}`);
     check('Ctrl+K opens the palette with tabs and terminals, and Enter runs the top match', pal.open && pal.tabs === tabs.list().length && pal.terminals > 0
       && pal.first === 'Show Recent' && pal.closed && pal.panel === 'recent', pal);
+    // Terminal search: with a terminal focused, Ctrl+F searches its buffer instead of the page.
+    await wc.executeJavaScript(`document.querySelector('#term-host .term-pane:not([hidden]) textarea')?.focus()`);
+    wc.send('shortcut', 'find');
+    await wait(300);
+    const tfind = await wc.executeJavaScript(`(async () => {
+      const input = document.getElementById('find-input');
+      const placeholder = input.placeholder;
+      // A word the terminal shows: a shell's prompt or a run's output, whichever is active. A new shell may not have printed yet.
+      const rows = () => document.querySelector('#term-host .term-pane:not([hidden]) .xterm-rows')?.textContent.trim() ?? '';
+      for (let i = 0; i < 50 && !/[A-Za-z]{4,}/.test(rows()); i++) await new Promise((r) => setTimeout(r, 100));
+      const shown = rows().slice(0, 80);
+      input.value = shown.match(/[A-Za-z]{4,}/)?.[0] ?? 'nothing-shown';
+      input.dispatchEvent(new Event('input'));
+      await new Promise((r) => setTimeout(r, 300));
+      const count = document.getElementById('find-count').textContent;
+      const marks = document.querySelectorAll('#term-host .xterm-find-result-decoration, #term-host .xterm-find-active-result-decoration').length;
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 100));
+      return { shown, word: input.value, placeholder, count, marks, closed: document.getElementById('find-form').hidden, refocused: document.activeElement?.closest('#term-host') !== null };
+    })()`);
+    console.log(`[smoke] terminal find=${JSON.stringify(tfind)}`);
+    check('Ctrl+F in a focused terminal searches its output, counts the matches, and Escape returns focus to it',
+      tfind.placeholder === 'Find in terminal' && /^[1-9]\d*\/[1-9]\d*$/.test(tfind.count) && tfind.closed && tfind.refocused, tfind);
     // Connections: the status dot opens it, every row has a state, and Retry rechecks one row.
     const conn = await wc.executeJavaScript(`(async () => {
       const wait = async (ok) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 100)); };

@@ -187,7 +187,7 @@ Nice to have; found in the 2026-10-05 review.
 - [ ] Tabs: drag to reorder, duplicate, mute, and pin any tab (today only Cronsole's is pinned)
 - [ ] Downloads: `will-download` handled so a finished download shows a toast with Reveal in Explorer, and lands in Recent
 - [ ] Light theme for the shell, following `prefers-color-scheme` the way document pages already do
-- [!] Terminal search with `@xterm/addon-search` (MIT) — blocked: needs a new dependency, which the routine never installs; Mike adds it by hand
+- [x] Terminal search with `@xterm/addon-search` (MIT) — done 2026-11-05, by hand (Mike approved the dependency): Ctrl+F with a terminal focused opens the find bar on that terminal's output and scrollback instead of the page, highlights every match, counts them, and Enter / Shift+Enter step through; Escape gives focus back to the terminal. `npm run smoke` checks it
 - [ ] Terminals: rename a tab, font size, and output sent to the renderer in batches so a noisy build doesn't flood IPC
 - [ ] Keyboard and screen-reader pass: the Files tree and tab strip work from the keyboard, focus is visible, the confirm bar takes focus, splitters report their value
 - [ ] Measure memory per tab with ten tabs open, before deciding whether idle tabs need suspending

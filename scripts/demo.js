@@ -20,6 +20,7 @@ const copies = [
   ['node_modules/@xterm/xterm/css', 'vendor/xterm/css'],
   ['node_modules/@xterm/xterm/lib', 'vendor/xterm/lib'],
   ['node_modules/@xterm/addon-fit/lib', 'vendor/addon-fit/lib'],
+  ['node_modules/@xterm/addon-search/lib', 'vendor/addon-search/lib'],
 ];
 for (const [from, to] of copies) fs.cpSync(path.join(root, from), path.join(out, to), { recursive: true });
 

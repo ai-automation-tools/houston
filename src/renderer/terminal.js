@@ -2,6 +2,7 @@
 
 import { Terminal } from './vendor/xterm/lib/xterm.mjs';
 import { FitAddon } from './vendor/addon-fit/lib/addon-fit.mjs';
+import { SearchAddon } from './vendor/addon-search/lib/addon-search.mjs';
 import { findLinks } from './shared/links.js';
 
 const THEME = {
@@ -10,7 +11,13 @@ const THEME = {
   brightBlack: '#52525b', brightRed: '#fca5a5', brightGreen: '#6ee7b7', brightYellow: '#fde68a', brightBlue: '#93c5fd', brightMagenta: '#d8b4fe', brightCyan: '#67e8f9', brightWhite: '#fafafa',
 };
 
-/** @typedef {{ id: number, term: Terminal, fit: FitAddon, pane: HTMLElement, tab: HTMLElement, exited: boolean, powershell: boolean, ws: string }} Session */
+/** Find-bar highlights: every match, the current one brighter, both marked in the scrollbar. */
+const FIND_DECOR = {
+  matchBackground: '#fbbf2455', matchOverviewRuler: '#fbbf24',
+  activeMatchBackground: '#38bdf8aa', activeMatchColorOverviewRuler: '#38bdf8',
+};
+
+/** @typedef {{ id: number, term: Terminal, fit: FitAddon, search: SearchAddon, pane: HTMLElement, tab: HTMLElement, exited: boolean, powershell: boolean, ws: string }} Session */
 
 export class TerminalPanel {
   /** @param {{ host: HTMLElement, tabs: HTMLElement, api: any, openLink: (url: string) => void }} opts */
@@ -25,6 +32,8 @@ export class TerminalPanel {
     this.activeId = null;
     /** The workspace whose terminals show; the others keep running, hidden. */
     this.ws = '';
+    /** Gets the active terminal's match count while the find bar searches it. @type {((r: { resultIndex: number, resultCount: number }) => void) | null} */
+    this.onFindResults = null;
 
     api.term.onData((/** @type {number} */ id, /** @type {string} */ data) => this.sessions.get(id)?.term.write(data));
     api.term.onExit((/** @type {number} */ id, /** @type {number} */ code) => {
@@ -40,9 +49,9 @@ export class TerminalPanel {
 
   /** @param {string} [cwd] @param {string} [shell] profile id from app:info's shells; the default when left out */
   async open(cwd, shell) {
-    const { term, fit, pane } = this.mount();
+    const { term, fit, search, pane } = this.mount();
     const info = await this.api.term.create({ cwd, shell, cols: term.cols, rows: term.rows });
-    return this.wire(info, term, fit, pane);
+    return this.wire(info, term, fit, search, pane);
   }
 
   /**
@@ -50,9 +59,9 @@ export class TerminalPanel {
    * @param {{ id: number, cwd: string, shell: string, powershell: boolean, ws: string, run?: boolean }} info
    */
   attach(info) {
-    const { term, fit, pane } = this.mount();
+    const { term, fit, search, pane } = this.mount();
     this.api.term.resize(info.id, term.cols, term.rows);
-    return this.wire(info, term, fit, pane);
+    return this.wire(info, term, fit, search, pane);
   }
 
   mount() {
@@ -61,11 +70,14 @@ export class TerminalPanel {
       fontSize: 13,
       cursorBlink: true,
       scrollback: 5000,
-      allowProposedApi: false,
+      // The search addon's match highlights and count use registerDecoration, still a proposed API in xterm 6.
+      allowProposedApi: true,
       theme: THEME,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    const search = new SearchAddon();
+    term.loadAddon(search);
     term.registerLinkProvider({ provideLinks: (y, done) => done(lineLinks(term, y, this.openLink)) });
 
     const pane = document.createElement('div');
@@ -73,15 +85,16 @@ export class TerminalPanel {
     this.host.append(pane);
     term.open(pane);
     fit.fit();
-    return { term, fit, pane };
+    return { term, fit, search, pane };
   }
 
   /**
    * @param {{ id: number, cwd: string, shell: string, powershell?: boolean, ws?: string, run?: boolean }} info
-   * @param {Terminal} term @param {FitAddon} fit @param {HTMLElement} pane
+   * @param {Terminal} term @param {FitAddon} fit @param {SearchAddon} search @param {HTMLElement} pane
    */
-  wire(info, term, fit, pane) {
+  wire(info, term, fit, search, pane) {
     const id = /** @type {number} */ (info.id);
+    search.onDidChangeResults((r) => { if (id === this.activeId) this.onFindResults?.(r); });
 
     const tab = document.createElement('div');
     tab.className = `term-tab${info.run ? ' run' : ''}`;
@@ -118,7 +131,7 @@ export class TerminalPanel {
       term.focus();
     });
 
-    this.sessions.set(id, { id, term, fit, pane, tab, exited: false, powershell: Boolean(info.powershell), ws: String(info.ws || '') });
+    this.sessions.set(id, { id, term, fit, search, pane, tab, exited: false, powershell: Boolean(info.powershell), ws: String(info.ws || '') });
     this.activate(id);
     return id;
   }
@@ -166,6 +179,30 @@ export class TerminalPanel {
     const s = this.activeId !== null ? this.sessions.get(this.activeId) : null;
     if (!s || !s.pane.offsetWidth) return;
     try { s.fit.fit(); } catch { /* hidden panel */ }
+  }
+
+  /**
+   * Search the active terminal's output and scrollback, highlighting every match.
+   * @param {string} text @param {boolean} forward @param {boolean} fresh true as the text changes, false to step
+   * @returns {boolean} false when there's no terminal to search
+   */
+  find(text, forward, fresh) {
+    const s = this.activeId !== null ? this.sessions.get(this.activeId) : null;
+    if (!s) return false;
+    const opts = { decorations: FIND_DECOR, incremental: fresh && forward };
+    if (forward) s.search.findNext(text, opts);
+    else s.search.findPrevious(text, opts);
+    return true;
+  }
+
+  /** Drop every terminal's find highlights. */
+  clearFind() {
+    for (const s of this.sessions.values()) s.search.clearDecorations();
+  }
+
+  /** Whether keyboard focus is in a terminal, so Ctrl+F searches it rather than the page. */
+  hasFocus() {
+    return this.activeId !== null && this.host.contains(document.activeElement);
   }
 
   focus() {

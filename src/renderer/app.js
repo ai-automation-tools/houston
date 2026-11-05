@@ -271,7 +271,7 @@ function updateTab(t) {
 }
 
 api.tabs.onActivated((/** @type {number} */ id) => {
-  if (id !== activeTab && !findForm.hidden) closeFind();
+  if (id !== activeTab && !findForm.hidden && !findInTerminal) closeFind();
   activeTab = id;
   for (const [tid, el] of tabEls) {
     el.classList.toggle('active', tid === id);
@@ -383,30 +383,56 @@ for (const { label, url } of info.quickLinks) {
 const findForm = $('find-form');
 const findInput = /** @type {HTMLInputElement} */ ($('find-input'));
 
+// Ctrl+F searches the terminal when it has focus, otherwise the page.
+let findInTerminal = false;
+
+/** @param {boolean} forward @param {boolean} fresh */
+function runFind(forward, fresh) {
+  if (!findInput.value) return;
+  if (findInTerminal) terminals.find(findInput.value, forward, fresh);
+  else api.tabs.find(findInput.value, forward, fresh);
+}
+function stopFind() {
+  $('find-count').textContent = '';
+  if (findInTerminal) terminals.clearFind();
+  else api.tabs.stopFind();
+}
 function openFind() {
+  const toTerminal = terminals.hasFocus();
+  if (!findForm.hidden && toTerminal !== findInTerminal) stopFind();
+  findInTerminal = toTerminal;
+  const label = findInTerminal ? 'Find in terminal' : 'Find in page';
+  findInput.placeholder = label;
+  findInput.setAttribute('aria-label', label);
+  findForm.setAttribute('aria-label', label);
   findForm.hidden = false;
   findInput.focus();
   findInput.select();
-  if (findInput.value) api.tabs.find(findInput.value, true, true);
+  runFind(true, true);
 }
 function closeFind() {
   findForm.hidden = true;
-  $('find-count').textContent = '';
-  api.tabs.stopFind();
+  stopFind();
+  if (findInTerminal) terminals.focus();
 }
 findInput.addEventListener('input', () => {
-  if (findInput.value) api.tabs.find(findInput.value, true, true);
-  else { $('find-count').textContent = ''; api.tabs.stopFind(); }
+  if (findInput.value) runFind(true, true);
+  else stopFind();
 });
 findInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); if (findInput.value) api.tabs.find(findInput.value, !e.shiftKey, false); }
+  if (e.key === 'Enter') { e.preventDefault(); runFind(!e.shiftKey, false); }
   if (e.key === 'Escape') closeFind();
 });
-$('find-next').addEventListener('click', () => findInput.value && api.tabs.find(findInput.value, true, false));
-$('find-prev').addEventListener('click', () => findInput.value && api.tabs.find(findInput.value, false, false));
+$('find-next').addEventListener('click', () => runFind(true, false));
+$('find-prev').addEventListener('click', () => runFind(false, false));
 $('find-close').addEventListener('click', closeFind);
+terminals.onFindResults = (r) => {
+  if (findForm.hidden || !findInTerminal) return;
+  // resultIndex is -1 once the matches pass the highlight limit (1000).
+  $('find-count').textContent = !r.resultCount ? '0/0' : r.resultIndex < 0 ? `${r.resultCount}+` : `${r.resultIndex + 1}/${r.resultCount}`;
+};
 api.tabs.onFound((/** @type {number} */ id, /** @type {{ active: number, total: number }} */ r) => {
-  if (id === activeTab && !findForm.hidden) $('find-count').textContent = r.total ? `${r.active}/${r.total}` : '0/0';
+  if (id === activeTab && !findForm.hidden && !findInTerminal) $('find-count').textContent = r.total ? `${r.active}/${r.total}` : '0/0';
 });
 
 // ---- sidebar -----------------------------------------------------------------
