@@ -22,7 +22,7 @@ import { diffPage as gitDiff, status as gitStatus } from './git.js';
 import { DevServers } from './devservers.js';
 import { toUrl } from '../shared/url.js';
 import { chromeUserAgent, cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
-import { cronTools, navigationTools, readOnlyTools, tabTools, terminalTools } from '../shared/tools.js';
+import { allTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
 import { Runs, changedFiles, runIdFromUrl, runInfo, runRows, runStateText } from '../shared/runs.js';
@@ -488,7 +488,7 @@ async function createWindow() {
   handle('runs:list', (query) => runRows(runs.list, typeof query === 'string' ? query.slice(0, 200) : ''));
   // Terminals get the address and token, so `claude` in one can reach the app (README,
   // "Drive the app from Claude Code"). The shell loads after this, so even the first has them.
-  const mcpReady = startMcp(new Map([...readOnlyTools(sources), ...navigationTools(sources), ...terminalTools(sources), ...cronTools(sources), ...tabTools(sources)]), (e) => callLog.add(e))
+  const mcpReady = startMcp(allTools(sources), (e) => callLog.add(e))
     .then((m) => {
       mcp = m;
       terminals.env = { ACC_MCP_URL: m.url, ACC_MCP_TOKEN: m.token };
