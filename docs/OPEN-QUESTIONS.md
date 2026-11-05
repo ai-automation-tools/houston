@@ -1,6 +1,6 @@
 # Open questions
 
-Decisions only Mike can make, asked by the roadmap routine. Fill in an `- Answer:` line and the next run applies it.
+Decisions only the owner can make, asked by the roadmap routine. Fill in an `- Answer:` line and the next run applies it.
 
 ## Open
 
