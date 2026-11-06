@@ -10,6 +10,11 @@
 
 ---
 
+## 🪟 Window and tray
+
+- Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running. Click the tray icon to bring it back.
+- Right-click the tray icon for **Show Houston**, **Close to tray** and **Quit Houston**. Untick **Close to tray** there, or under **File** (Alt shows the menu), and ✕ quits instead. **File → Quit** always quits.
+
 ## 🌐 Browser
 
 - Tabs, back, forward, reload, a context menu, and ↗ to open the page in your default browser.
