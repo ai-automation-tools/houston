@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { absPath, defaultAction, fileMenu, flatten, flattenBookmarks, isContainer, search, terminalDir } from '../src/shared/tree.js';
+import { absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, search, terminalDir } from '../src/shared/tree.js';
 
 const scan = { base: 'D:/work', home: 'C:/Users/dev' };
 
@@ -87,4 +87,23 @@ test('flattenBookmarks keeps links, drops folders, records the trail', () => {
   const x = marks.find((m) => m.url === 'https://x.dev');
   assert.equal(x?.name, 'https://x.dev', 'unnamed links fall back to their url');
   assert.equal(x?.path, 'Bar / Sub / ');
+});
+
+test('faviconUrls tries the icon a tab showed, then the site root, for http(s) only', () => {
+  assert.deepEqual(faviconUrls('https://example.com/a?b#c'), ['https://example.com/favicon.ico']);
+  assert.deepEqual(faviconUrls('https://example.com/a', { 'https://example.com': 'https://cdn.example.com/i.png' }),
+    ['https://cdn.example.com/i.png', 'https://example.com/favicon.ico']);
+  assert.deepEqual(faviconUrls('http://example.com:8080/x'), ['http://example.com:8080/favicon.ico']);
+  assert.deepEqual(faviconUrls('https://example.com/', { constructor: 'x' }), ['https://example.com/favicon.ico']);
+  assert.deepEqual(faviconUrls('javascript:alert(1)'), []);
+  assert.deepEqual(faviconUrls('not a url'), []);
+});
+
+test('faviconEntry keeps http(s) pages with http(s) or small data: icons', () => {
+  assert.deepEqual(faviconEntry('https://example.com/p', 'https://example.com/i.png'), ['https://example.com', 'https://example.com/i.png']);
+  assert.deepEqual(faviconEntry('https://example.com/p', 'data:image/png;base64,AAAA'), ['https://example.com', 'data:image/png;base64,AAAA']);
+  assert.equal(faviconEntry('https://example.com/p', `data:image/png;base64,${'A'.repeat(20000)}`), null);
+  assert.equal(faviconEntry('https://example.com/p', 'chrome-extension://x/i.png'), null);
+  assert.equal(faviconEntry('acc://shell/index.html', 'https://example.com/i.png'), null);
+  assert.equal(faviconEntry('https://example.com/p', ''), null);
 });

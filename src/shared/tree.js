@@ -142,6 +142,38 @@ export function flattenBookmarks(roots) {
   return out;
 }
 
+/**
+ * Icons to try for an http(s) bookmark, best first: the one a tab showed for that
+ * site (`known`, origin -> icon URL, from the tab strip), then the site's root
+ * `/favicon.ico`. Empty for anything else (javascript:, file:, chrome:).
+ * @param {string} url
+ * @param {Record<string, string>} [known]
+ */
+export function faviconUrls(url, known = {}) {
+  let u;
+  try { u = new URL(url); } catch { return []; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return [];
+  const root = `${u.origin}/favicon.ico`;
+  const seen = Object.hasOwn(known, u.origin) ? known[u.origin] : '';
+  return seen && seen !== root ? [seen, root] : [root];
+}
+
+/**
+ * The origin -> icon pair to remember when a tab reports its favicon, or null when
+ * either isn't worth keeping (not an http(s) page, or an icon that isn't http(s) or a
+ * small data: image).
+ * @param {string} pageUrl
+ * @param {string} icon
+ * @returns {[string, string] | null}
+ */
+export function faviconEntry(pageUrl, icon) {
+  let u;
+  try { u = new URL(pageUrl); } catch { return null; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const ok = /^https?:\/\//i.test(icon) || (/^data:image\//i.test(icon) && icon.length <= 16384);
+  return ok ? [u.origin, icon] : null;
+}
+
 /** Bookmark source id for Project Hub's own favorites rather than a browser profile. */
 export const HUB_FAVORITES = '@hub-favorites';
 
