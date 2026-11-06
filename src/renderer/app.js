@@ -1,7 +1,7 @@
 // Shell UI entry point: wires the sidebar, the browser tab strip and address bar, and
 // the terminal panel, and keeps the main process told where the browser pane sits.
 
-import { Sidebar, toast } from './sidebar.js';
+import { Sidebar, rememberFavicon, toast } from './sidebar.js';
 import { startChat } from './chat.js';
 import { TerminalPanel } from './terminal.js';
 import { createPalette } from './palette.js';
@@ -265,7 +265,10 @@ function updateTab(t) {
   if (t.favicon !== undefined) {
     const img = /** @type {HTMLImageElement} */ (el.querySelector('img'));
     img.hidden = !t.favicon;
-    if (t.favicon) img.src = t.favicon;
+    if (t.favicon) {
+      img.src = t.favicon;
+      if (t.url) rememberFavicon(t.url, t.favicon);
+    }
   }
   if (t.id === activeTab) syncNavbar();
 }
