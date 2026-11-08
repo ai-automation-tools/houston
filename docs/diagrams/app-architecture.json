@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "723011fbd274dfc1f79f6e0eb055112e3d54e3b7"
+      "revision": "b13690c086d4f291ddd32040303339977ac10e53"
     }
   },
   "components": [
@@ -46,14 +46,14 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 180,
-          "end_line": 204,
+          "line": 246,
+          "end_line": 270,
           "label": "shell WebContentsView"
         },
         {
           "path": "src/preload/shell.cjs",
           "line": 22,
-          "end_line": 142,
+          "end_line": 146,
           "label": "window.acc preload"
         },
         {
@@ -81,14 +81,14 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 100,
-          "end_line": 125,
+          "line": 142,
+          "end_line": 167,
           "label": "handle() refuses other senders"
         },
         {
           "path": "src/main/main.js",
-          "line": 571,
-          "end_line": 632,
+          "line": 637,
+          "end_line": 714,
           "label": "IPC channels"
         }
       ]
@@ -122,8 +122,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 206,
-          "end_line": 211,
+          "line": 272,
+          "end_line": 277,
           "label": "deny-by-default permissions"
         }
       ]
@@ -218,8 +218,8 @@
         },
         {
           "path": "src/main/store.js",
-          "line": 83,
-          "end_line": 91,
+          "line": 84,
+          "end_line": 92,
           "label": "runs.json history"
         }
       ]
@@ -246,8 +246,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 503,
-          "end_line": 523,
+          "line": 569,
+          "end_line": 589,
           "label": "chat IPC"
         }
       ]
@@ -344,8 +344,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 379,
-          "end_line": 472,
+          "line": 445,
+          "end_line": 538,
           "label": "tools over app sources"
         }
       ]
@@ -366,8 +366,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 464,
-          "end_line": 470,
+          "line": 530,
+          "end_line": 536,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -395,8 +395,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 394,
-          "end_line": 458,
+          "line": 460,
+          "end_line": 524,
           "label": "terminal_run, cron_run, tab_click, tab_fill"
         },
         {
@@ -616,6 +616,8 @@
         "Without Project Hub the browser and terminals still work; Files and Bookmarks offer Retry",
         "The chat needs ACC_CHAT_API_KEY and ACC_CHAT_MODEL; there is no default model",
         "Cronsole starts only when ACC_CRONSOLE_MCP names its server script",
+        "The News tab reads the sources listed in settings.json from the main process, an http(s) feed or a local .md file, with a 15 second deadline and a 2 MB cap; the page never names the address",
+        "Closing the window hides Houston to the tray by default (layout.json closeToTray), so terminals, dev servers and the MCP server keep running; Quit exits",
         "Dev servers and the Git tab need a workspace folder; git and npm are found on PATH"
       ]
     }

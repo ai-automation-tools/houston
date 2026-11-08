@@ -17,6 +17,10 @@ Entries tagged with a phase in italics came off the [roadmap](ROADMAP.md).
 
 Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04), the public-release gates (all closed 2026-10-18, when the repo went public), Phase 2b, the Integrations, Milestone A (2026-10-20), Milestone B (2026-10-21), and the starts of Milestones C and D.
 
+**Changed**
+
+- **Architecture diagram re-read against the current code** (org upkeep, 2026-11-07). `main.js`, `store.js`, `shell.cjs`, `app.js`, `cronsole.js` and `tools.js` changed since the diagram was pinned. Line ranges follow the moved code (the tray and News additions shifted `main.js`), and the Optional parts card now covers the News sources and close-to-tray. Rebuilt with `--pin-head`; the homepage copies go by PR on `houston-site`.
+
 **Security**
 
 - **`ci.yml` declares `permissions: contents: read`** (security sweep, 2026-10-26). The repo default is already read; this pins it.
