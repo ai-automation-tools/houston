@@ -253,3 +253,29 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 #confirm-bar button { background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 12px; cursor: pointer; }
 #confirm-run { border-color: var(--warn) !important; color: var(--warn); }
 #confirm-bar button:focus-visible { outline: 2px solid var(--accent); }
+
+/* ---- light theme ------------------------------------------------------ */
+/* Follows Windows' app mode, like document pages (src/shared/docs.js). The terminal keeps its
+   dark xterm palette, so its panel stays dark too. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --panel: #f4f4f5;
+    --panel-2: #e4e4e7;
+    --line: #e4e4e7;
+    --line-2: #d4d4d8;
+    --text: #18181b;
+    --text-2: #52525b;
+    --text-3: #71717a;
+    --accent: #0369a1;
+    --ok: #047857;
+    --warn: #b45309;
+    --bad: #dc2626;
+    color-scheme: light;
+  }
+  #connections, #palette, #address-suggest { box-shadow: 0 16px 48px #0003; }
+  #connections::backdrop, #palette::backdrop { background: #0004; }
+  #chat-stop { border-color: var(--bad); }
+  #star.starred { color: #d97706; }
+  #terminal-panel { background: #0b0d10; }
+}

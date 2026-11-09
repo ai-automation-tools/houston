@@ -89,6 +89,10 @@ The **News** tab lists headlines from the sources in `settings.json`'s `newsSour
 
 These have their own pages: [claude-code.md](claude-code.md), [chat.md](chat.md) and [cronsole.md](cronsole.md). The chat sits in its own pane on the right, so it stays open beside Files; 💬 or Ctrl+Shift+L shows and hides it.
 
+## 🎨 Light and dark
+
+- The window follows Windows' light or dark app mode (Settings → Personalization → Colors), as document pages do. The terminal stays dark either way.
+
 ---
 
 <p align="center">

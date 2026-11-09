@@ -54,7 +54,7 @@ Plain JavaScript with JSDoc types, no bundler. Electron loads `main/main.js` dir
 | [**palette.js**](renderer/palette.js) | The command palette (Ctrl+K): a native `<dialog>` with a box and a list, keyboard and mouse picking, the browser tab hidden while it shows. `app.js` hands it the entries (actions, workspaces, tabs, terminals, and Files matches once something is typed), each with what it does. |
 | [**sidebar.js**](renderer/sidebar.js) | Files, Bookmarks and Recent panels and the search box across them, plus the MCP panel of what agents asked to run and how it went (Agent work, counted on the tab's label), the searchable run history, and the calls they made, the Cron panel of Cronsole's tasks (with a Docs filter for the docs upkeep jobs), the Git panel of the workspace repo's changes, the Dev panel of its dev servers, and the News panel of headlines from `settings.json`'s sources (the chat has its own pane), where a click unfolds a task's last runs and a run opens its output page. Clicks, hover buttons and the right-click menu on Files rows all go through one `fileAction()`. The Files tree starts at the active workspace's folder and reloads when Hub reports a change. |
 | [**terminal.js**](renderer/terminal.js) | One xterm.js instance per shell session, only the active workspace's tabs showing, with copy and paste keys and a link provider that opens web addresses in the output as tabs; tells main which session is showing, so `terminal_read` reads that one by default. |
-| [**styles.css**](renderer/styles.css) | Dark theme and the grid layout. |
+| [**styles.css**](renderer/styles.css) | Dark theme, the light one for Windows' light mode, and the grid layout. |
 
 ## 🎭 demo/ — the browser demo
 
