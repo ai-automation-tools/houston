@@ -9,7 +9,7 @@ import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
-import { HUB_FAVORITES, absPath, defaultAction, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
+import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
 
 const ICONS = {
   projects: '🗂️', root: '📦', section: '📁', cli: '🤖', folder: '📁', repo: '📘', group: '🗃️', draft: '🧪',
@@ -401,6 +401,17 @@ export class Sidebar {
     row.innerHTML = `<span class="caret">${folder ? (open ? '▾' : '▸') : ''}</span><span class="icon">${folder ? '📁' : '🔖'}</span><span class="name"></span>`;
     q(row, '.name').textContent = n.name || n.url || '';
     row.title = n.url || n.name;
+    if (!folder) {
+      // The tab strip remembers each site's real icon (app.js); /favicon.ico is the fallback.
+      const tries = faviconUrls(n.url || '', knownFavicons());
+      const img = document.createElement('img');
+      img.className = 'favicon';
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.onload = () => q(row, '.icon').replaceChildren(img);
+      img.onerror = () => { if (tries.length) img.src = /** @type {string} */ (tries.shift()); };
+      img.onerror(new Event('error'));
+    }
     wrap.append(row);
     if (folder) {
       const kids = document.createElement('div');
@@ -857,6 +868,23 @@ export class Sidebar {
       for (const r of recent) res.append(this.recentRow(r));
     }
   }
+}
+
+const FAVICONS_KEY = 'faviconsByOrigin';
+
+/** Site icons the tab strip has seen, origin -> icon URL, in the shell's localStorage. @returns {Record<string, string>} */
+function knownFavicons() {
+  try { return JSON.parse(localStorage.getItem(FAVICONS_KEY) || '{}') || {}; } catch { return {}; }
+}
+
+/** Called by app.js when a tab reports its favicon. @param {string} pageUrl @param {string} icon */
+export function rememberFavicon(pageUrl, icon) {
+  const entry = faviconEntry(pageUrl, icon);
+  if (!entry) return;
+  const known = knownFavicons();
+  if (known[entry[0]] === entry[1]) return;
+  known[entry[0]] = entry[1];
+  try { localStorage.setItem(FAVICONS_KEY, JSON.stringify(known)); } catch { /* storage full or off: bookmarks fall back to /favicon.ico */ }
 }
 
 /** @param {HTMLElement} el @param {string} sel */

@@ -2,7 +2,7 @@
 // strip, terminal panel) as a WebContentsView, with a WebContentsView per browser tab
 // stacked over the shell's content area.
 
-import { app, BaseWindow, Menu, WebContentsView, ipcMain, net, protocol, session, shell } from 'electron';
+import { app, BaseWindow, Menu, Tray, WebContentsView, ipcMain, net, protocol, session, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -22,7 +22,7 @@ import { diffPage as gitDiff, status as gitStatus } from './git.js';
 import { DevServers } from './devservers.js';
 import { toUrl } from '../shared/url.js';
 import { chromeUserAgent, cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
-import { cronTools, navigationTools, readOnlyTools, tabTools, terminalTools } from '../shared/tools.js';
+import { allTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
 import { Runs, changedFiles, runIdFromUrl, runInfo, runRows, runStateText } from '../shared/runs.js';
@@ -47,6 +47,7 @@ const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const SERVE = [
   ['/vendor/xterm/', path.join(ROOT, 'node_modules', '@xterm', 'xterm')],
   ['/vendor/addon-fit/', path.join(ROOT, 'node_modules', '@xterm', 'addon-fit')],
+  ['/vendor/addon-search/', path.join(ROOT, 'node_modules', '@xterm', 'addon-search')],
   ['/shared/', path.join(ROOT, 'src', 'shared')],
   ['/', path.join(ROOT, 'src', 'renderer')],
 ];
@@ -77,6 +78,46 @@ let convs;
 const cron = cronsole();
 /** @type {(() => void) | null} */
 let stopEvents = null;
+/** @type {Tray | null} */
+let tray = null;
+// Set on a real quit (File → Quit, the tray's Quit, a smoke run's app.quit()), so the
+// window's close goes through instead of hiding to the tray.
+let quitting = false;
+
+function showWindow() {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+/**
+ * Closing the window hides it to the tray (layout.json's closeToTray, on by default), or quits.
+ * @param {boolean} on
+ */
+function setCloseToTray(on) {
+  store.saveLayout({ closeToTray: on });
+  const item = Menu.getApplicationMenu()?.getMenuItemById('close-to-tray');
+  if (item) item.checked = on;
+  tray?.setContextMenu(trayMenu());
+}
+
+function trayMenu() {
+  return Menu.buildFromTemplate([
+    { label: 'Show Houston', click: showWindow },
+    { label: 'Close to tray', type: 'checkbox', checked: store.layout().closeToTray, click: (mi) => setCloseToTray(mi.checked) },
+    { type: 'separator' },
+    { label: 'Quit Houston', click: () => app.quit() },
+  ]);
+}
+
+// ponytail: the tray borrows the Electron binary's own icon; ship an .ico when the app gets one.
+async function createTray() {
+  tray = new Tray(await app.getFileIcon(process.execPath, { size: 'small' }));
+  tray.setToolTip('Houston');
+  tray.setContextMenu(trayMenu());
+  tray.on('click', showWindow);
+}
 
 /** @param {string} channel @param {...unknown} args */
 function send(channel, ...args) {
@@ -169,6 +210,7 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
         ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => item(`Tab ${n}`, `CmdOrCtrl+${n}`, `tab-${n}`)),
         item('Last tab', 'CmdOrCtrl+9', 'tab-last'),
         { type: 'separator' },
+        { id: 'close-to-tray', label: 'Close to tray', type: 'checkbox', checked: store.layout().closeToTray, click: (mi) => setCloseToTray(mi.checked) },
         { role: 'quit' },
       ],
     },
@@ -487,7 +529,7 @@ async function createWindow() {
   handle('runs:list', (query) => runRows(runs.list, typeof query === 'string' ? query.slice(0, 200) : ''));
   // Terminals get the address and token, so `claude` in one can reach the app (README,
   // "Drive the app from Claude Code"). The shell loads after this, so even the first has them.
-  const mcpReady = startMcp(new Map([...readOnlyTools(sources), ...navigationTools(sources), ...terminalTools(sources), ...cronTools(sources), ...tabTools(sources)]), (e) => callLog.add(e))
+  const mcpReady = startMcp(allTools(sources), (e) => callLog.add(e))
     .then((m) => {
       mcp = m;
       terminals.env = { ACC_MCP_URL: m.url, ACC_MCP_TOKEN: m.token };
@@ -671,9 +713,14 @@ async function createWindow() {
 
   handle('ext:list', () => listExtensions(browseSession));
 
-  win.on('close', () => {
+  win.on('close', (e) => {
     snapshot();
     persistSpaces();
+    // Hidden, not closed: terminals, dev servers and the MCP server keep running.
+    if (!quitting && tray && store.layout().closeToTray) {
+      e.preventDefault();
+      win?.hide();
+    }
   });
   win.on('closed', () => {
     terminals.killAll();
@@ -722,16 +769,14 @@ async function createWindow() {
   await shellView.webContents.loadURL('acc://shell/index.html');
 }
 
-app.on('second-instance', () => {
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.focus();
-});
+app.on('second-instance', showWindow);
+app.on('before-quit', () => { quitting = true; });
 
 logCrashes();
 app.whenReady().then(() => {
   serveShell();
   buildMenu();
+  createTray().catch((err) => logError('tray', err));
   return createWindow();
 }).catch((err) => {
   logError('startup', err);
@@ -744,6 +789,7 @@ app.on('window-all-closed', () => app.quit());
 // the process reaches 'quit' and then never exits. Every window is closed and every
 // terminal killed by this point (win 'closed'), so exit explicitly.
 app.on('quit', () => {
+  tray?.destroy();
   mcp?.close();
   cron.close();
   stopEvents?.();

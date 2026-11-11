@@ -61,7 +61,7 @@ export const store = {
     return next;
   },
 
-  /** @returns {{ sidebarWidth: number, terminalHeight: number, terminalOpen: boolean, chatWidth: number, chatOpen: boolean, adBlock: boolean, bookmarkSource: string }} */
+  /** @returns {{ sidebarWidth: number, terminalHeight: number, terminalOpen: boolean, chatWidth: number, chatOpen: boolean, adBlock: boolean, closeToTray: boolean, bookmarkSource: string }} */
   layout() {
     const d = readJson('layout.json', {});
     return {
@@ -71,6 +71,7 @@ export const store = {
       chatWidth: Number.isFinite(d.chatWidth) ? d.chatWidth : 380,
       chatOpen: d.chatOpen === true,
       adBlock: d.adBlock !== false,
+      closeToTray: d.closeToTray !== false,
       bookmarkSource: typeof d.bookmarkSource === 'string' ? d.bookmarkSource : '',
     };
   },

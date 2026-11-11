@@ -31,7 +31,7 @@ Register the stdio bridge once, with the path to your clone. It reads `mcp.json`
 claude mcp add --scope user houston -- node <houston>\scripts\mcp-stdio.js
 ```
 
-Codex, opencode and Antigravity take the same command (`node <houston>\scripts\mcp-stdio.js`) as a stdio server. While the app is closed the server answers every call with "Houston isn't running". An older `ai-command-center` HTTP registration can go: `claude mcp remove ai-command-center`. Using it from a terminal outside the app, and what the MCP tab shows, are in [guide/claude-code.md](guide/claude-code.md).
+Codex, opencode and Antigravity take the same command (`node <houston>\scripts\mcp-stdio.js`) as a stdio server. While the app is closed the bridge still answers the handshake and the tool list, so clients show the server as connected, and every tool call returns "Houston isn't running". An older `ai-command-center` HTTP registration can go: `claude mcp remove ai-command-center`. Using it from a terminal outside the app, and what the MCP tab shows, are in [guide/claude-code.md](guide/claude-code.md).
 
 ## Tools
 

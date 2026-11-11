@@ -21,7 +21,7 @@ claude mcp add --scope user houston -- node <houston>\scripts\mcp-stdio.js
 
 - It reads `%APPDATA%\ai-command-center\mcp.json` on every message and forwards it with that launch's token, so it works from any terminal, in the app or not, and survives the app restarting.
 - Codex, opencode and Antigravity register the same command as a stdio server.
-- Then run `claude` and ask it to, say, "open this repo's README in a tab" or "run npm test". `/mcp` shows the connection. With the app closed, every call answers "Houston isn't running".
+- Then run `claude` and ask it to, say, "open this repo's README in a tab" or "run npm test". `/mcp` shows the connection. With the app closed it still shows as connected, and every tool call answers "Houston isn't running".
 - An older `ai-command-center` registration can go: `claude mcp remove ai-command-center`.
 
 The app's own terminals also carry `ACC_MCP_URL` and `ACC_MCP_TOKEN`, for a direct HTTP registration that works only inside them. Keep the single quotes, so Claude Code stores the variable names rather than this launch's values:

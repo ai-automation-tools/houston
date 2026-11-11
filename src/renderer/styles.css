@@ -82,6 +82,7 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .row:focus-visible { outline: none; border-left-color: var(--accent); background: var(--panel-2); }
 .row .caret { width: 12px; color: var(--text-3); flex: none; text-align: center; font-size: 10px; }
 .row .icon { width: 16px; flex: none; text-align: center; }
+.row .icon .favicon { width: 16px; height: 16px; vertical-align: middle; }
 .row .name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
 .row .sub { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; font-size: 11px; max-width: 45%; }
 .row .acts { display: none; gap: 2px; flex: none; }

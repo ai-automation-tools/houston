@@ -10,7 +10,7 @@ import { createMcpServer } from '../src/shared/mcp.js';
 const TOKEN = 'b'.repeat(64);
 const tools = new Map([['echo', { description: 'Echo', inputSchema: { type: 'object' }, run: (/** @type {any} */ a) => a }]]);
 
-test('mcp-stdio bridges stdin lines to the app and says so when it is not running', async (t) => {
+test('mcp-stdio bridges stdin lines to the app, and lists its tools but fails their calls when it is not running', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-stdio-'));
   const file = path.join(dir, 'mcp.json');
   /** @type {import('../src/shared/mcplog.js').LogEntry[]} */
@@ -24,7 +24,12 @@ test('mcp-stdio bridges stdin lines to the app and says so when it is not runnin
   /** @param {object} msg */
   const ask = async (msg) => { child.stdin.write(`${JSON.stringify(msg)}\n`); return JSON.parse((await lines.next()).value); };
 
-  assert.equal((await ask({ jsonrpc: '2.0', id: 1, method: 'ping' })).error.code, -32000);
+  // App closed: the handshake and the tool list still answer, so clients list the server.
+  assert.equal((await ask({ jsonrpc: '2.0', id: 'a', method: 'initialize', params: {} })).result.serverInfo.name, 'houston');
+  assert.ok((await ask({ jsonrpc: '2.0', id: 'b', method: 'tools/list' })).result.tools.some((/** @type {any} */ t) => t.name === 'terminal_run'));
+  const down = (await ask({ jsonrpc: '2.0', id: 'c', method: 'tools/call', params: { name: 'list_tabs' } })).result;
+  assert.equal(down.isError, true);
+  assert.match(down.content[0].text, /isn't running/);
   fs.writeFileSync(file, JSON.stringify({ url: `http://127.0.0.1:${port}/mcp`, token: TOKEN }));
   assert.equal((await ask({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { clientInfo: { name: 'codex', version: '1.0' } } })).result.serverInfo.name, 'houston');
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);

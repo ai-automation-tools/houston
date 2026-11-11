@@ -78,3 +78,11 @@ test('mergeNews sorts newest first, keeps undated in order, drops repeats and ca
   assert.equal(mergeNews(lots).length, MAX_ITEMS);
   assert.deepEqual(mergeNews([]), []);
 });
+
+test('isFeed skips leading comments and stays fast on a run of them', { timeout: 2000 }, () => {
+  assert.ok(isFeed('<?xml version="1.0"?>\n<!-- a -->\n<!-- b --> <rss version="2.0"></rss>'));
+  assert.ok(isFeed('<!----><feed xmlns="http://www.w3.org/2005/Atom"></feed>'));
+  assert.equal(isFeed('<!-- never closed <rss>'), false);
+  assert.equal(isFeed('<rssx/>'), false);
+  assert.equal(isFeed('<!---->'.repeat(40) + 'x'), false);
+});
