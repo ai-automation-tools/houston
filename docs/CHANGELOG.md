@@ -19,6 +19,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Changed**
 
+- **Roadmap rechecked against the org's 2026-11 requirements** (2026-11-11). The intro names the job that works it (`ai-command-center-roadmap`) instead of a disabled task and its days. *Provider adapters* is marked blocked on its open question. New items: a Light | Dark switch saved as `houston.theme` and the News tab's carried security fix (both in Milestone D, after the build stamp), a `Start-Houston.ps1` launcher with the old name as a shim, one MCP tool count (16) in every doc, and two 🔒 Needs owner decisions: whether the data folder moves from `%APPDATA%\ai-command-center`, and the carried `sandbox` / empty-referrer / `file:` navigation items.
 - **Architecture diagram re-read against the current code** (org upkeep, 2026-11-07). `main.js`, `store.js`, `shell.cjs`, `app.js`, `cronsole.js` and `tools.js` changed since the diagram was pinned. Line ranges follow the moved code (the tray and News additions shifted `main.js`), and the Optional parts card now covers the News sources and close-to-tray. Rebuilt with `--pin-head`; the homepage copies go by PR on `houston-site`.
 
 **Security**
