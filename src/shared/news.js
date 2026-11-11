@@ -50,7 +50,16 @@ function time(s) {
 
 /** Whether a source's text is a feed rather than Markdown. @param {string} text */
 export function isFeed(text) {
-  return /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<(rss|feed|rdf:RDF)\b/i.test(text);
+  // Comments are skipped with indexOf, not a repeated regex group: a run of `<!---->`
+  // with no root element after it made the one-regex version backtrack exponentially.
+  const at = (re, i) => { re.lastIndex = i; return re.test(text) ? re.lastIndex : -1; };
+  let i = at(/\s*(?:<\?xml[^>]*>\s*)?/y, 0);
+  while (text.startsWith('<!--', i)) {
+    const end = text.indexOf('-->', i + 4);
+    if (end < 0) return false;
+    i = at(/\s*/y, end + 3);
+  }
+  return at(/<(rss|feed|rdf:RDF)\b/iy, i) >= 0;
 }
 
 /**
