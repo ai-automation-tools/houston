@@ -19,6 +19,7 @@
 
 - Tabs, back, forward, reload, a context menu, and ↗ to open the page in your default browser.
 - The address bar takes a URL, a `D:\` path, `localhost:3000`, or anything else as a search.
+- As you type, it lists matching pages from Recent and your bookmarks (Project Hub's favorites and the Bookmarks tab's source). ↑ and ↓ pick one, Enter opens it, Escape closes the list; with none picked, Enter goes to what you typed.
 - Links open as tabs. A sign-in pop-up such as "Sign in with Google" gets its own small window, so it can hand the login back.
 - ☆ in the address bar adds the page to Project Hub's favorites; click again to remove it.
 - Chrome Web Store installs work in a tab. **Extensions** in the menu bar (Alt shows it) lists them, with Options, Web Store page and Remove.
@@ -92,6 +93,10 @@ The **News** tab lists headlines from the sources in `settings.json`'s `newsSour
 ## 🤖 MCP, 💬 Chat and ⏱️ Cron
 
 These have their own pages: [claude-code.md](claude-code.md), [chat.md](chat.md) and [cronsole.md](cronsole.md). The chat sits in its own pane on the right, so it stays open beside Files; 💬 or Ctrl+Shift+L shows and hides it.
+
+## 🎨 Light and dark
+
+- The window follows Windows' light or dark app mode (Settings → Personalization → Colors), as document pages do. The terminal stays dark either way.
 
 ---
 
