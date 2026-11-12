@@ -9,7 +9,7 @@
 <p align="center">
   <a href="docs/README.md"><strong>Explore the docs »</strong></a>
   ·
-  <a href="https://houston.ai-automation-tools.dev/"><strong>Homepage</strong></a> · <a href="https://houston-demo.ai-automation-tools.dev/"><strong>Try the demo »</strong></a>
+  <a href="https://houston.ai-automation-tools.dev/"><strong>Homepage</strong></a>
 </p>
 
 <p align="center">
@@ -43,10 +43,7 @@ Houston (formerly AI Command Center) is a Windows desktop app: a browser, PowerS
 An agent (Claude Code, or Claude in the sidebar) can drive it, and runs nothing without your click.
 
 > [!NOTE]
-> **Where this is going.** Since 2026-11-12 the repo is private and Houston is being grown into an agent harness: every agent runs as a named identity inside an OS container, reaches tools and credentials only through a local gateway, and leaves an audit trail. None of that is in the app yet. The plan is [harness-requirements.md](docs/product/harness-requirements.md) and [ADR-004](docs/decisions/adr-004-core-companion-process.md); the spikes that tested it are [here](docs/decisions/spikes/2026-11-12-h0-spike-results.md); the [roadmap](docs/ROADMAP.md#agent-harness) is at milestone H1. Everything below describes the app as it runs today. The earlier public repo is archived as `houston-legacy`.
-
-> [!TIP]
-> **[Try the demo](https://houston-demo.ai-automation-tools.dev/)** in any browser. Made-up data; nothing runs or calls out.
+> **Where this is going.** Since 2026-11-12 the repo is private and Houston is being grown into an agent harness: every agent runs as a named identity inside an OS container, reaches tools and credentials only through a local gateway, and leaves an audit trail. None of that is in the app yet. The plan is [harness-requirements.md](docs/product/harness-requirements.md) and [ADR-004](docs/decisions/adr-004-core-companion-process.md); the spikes that tested it are [here](docs/decisions/spikes/2026-11-12-h0-spike-results.md); the [roadmap](docs/ROADMAP.md#agent-harness) is at milestone H1. Everything below describes the app as it runs today. The earlier public repo is archived as `houston-legacy`. The browser demo is offline until the harness build is ready to show; its address serves a one-page notice.
 
 > [!WARNING]
 > Chrome extensions mostly work: LastPass and Rakuten do, MV3 ad blockers don't. [Details](docs/guide/features.md#-browser).
