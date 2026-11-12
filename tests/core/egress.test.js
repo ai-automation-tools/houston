@@ -136,15 +136,98 @@ test('a malformed target is a 400, an unreachable one a 502, a name that does no
   assert.deepEqual(p.events.map((e) => e.reason), ['malformed target', 'connect failed: ECONNREFUSED', 'lookup failed: ENOTFOUND']);
 });
 
-test('plain-HTTP proxying is refused; origin-form requests go to the fallback, or 404 without one', async (t) => {
-  const p = await proxy(t, ['example.com:80']);
-  const get = (port, path) => new Promise((resolve) => http.get({ host: '127.0.0.1', port, path }, (res) => { res.resume(); resolve(res.statusCode); }));
-  assert.equal(await get(p.port, 'http://example.com/'), 403);
-  assert.deepEqual(p.events.map((e) => [e.decision, e.host, e.reason]), [['deny', 'example.com', 'plain HTTP is not proxied']]);
-  assert.equal(await get(p.port, '/mcp'), 404);
-  const q = await proxy(t, [], { fallback: (req, res) => res.writeHead(200).end(req.url) });
-  assert.equal(await get(q.port, '/mcp'), 200);
+/** An HTTP server on loopback that records what reached it and answers with `body`. */
+async function httpServer(t, body = 'CRL-BYTES') {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ method: req.method, url: req.url, headers: req.headers });
+    res.writeHead(200, { 'content-type': 'application/pkix-crl', 'content-length': Buffer.byteLength(body), connection: 'x-hop', 'x-hop': '1', 'x-up': 'yes' });
+    res.end(req.method === 'HEAD' ? undefined : body);
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  return { port: server.address().port, seen };
+}
+
+/** A request through the proxy. @returns {Promise<{ status: number, headers: object, body: string, error?: string }>} */
+const viaProxy = (proxyPort, method, url, headers = {}, body) => new Promise((resolve) => {
+  const req = http.request({ host: '127.0.0.1', port: proxyPort, method, path: url, headers, agent: false }, (res) => {
+    let got = '';
+    res.on('data', (d) => { got += d; });
+    res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: got }));
+    res.on('error', (e) => resolve({ status: res.statusCode, headers: res.headers, body: got, error: e.code ?? e.message }));
+    res.on('aborted', () => resolve({ status: res.statusCode, headers: res.headers, body: got, error: 'aborted' }));
+  });
+  req.on('error', (e) => resolve({ status: 0, headers: {}, body: '', error: e.code }));
+  req.end(body);
 });
+
+test('plain-HTTP GET and HEAD reach an allowed host, with hop-by-hop headers dropped both ways', async (t) => {
+  const up = await httpServer(t);
+  const p = await proxy(t, [`crl.example.com:${up.port}`]);
+  const url = `http://crl.example.com:${up.port}/gts1c3/abc.crl?x=1`;
+  const r = await viaProxy(p.port, 'GET', url, { 'proxy-authorization': 'Basic c2VjcmV0', 'proxy-connection': 'keep-alive', connection: 'x-drop', 'x-drop': '1', accept: '*/*' });
+  assert.deepEqual([r.status, r.body, r.headers['x-up'], r.headers['x-hop']], [200, 'CRL-BYTES', 'yes', undefined]);
+  const h = up.seen[0];
+  assert.deepEqual([h.method, h.url, h.headers.host, h.headers.accept], ['GET', '/gts1c3/abc.crl?x=1', `crl.example.com:${up.port}`, '*/*']);
+  for (const gone of ['proxy-authorization', 'proxy-connection', 'x-drop']) assert.equal(h.headers[gone], undefined, gone);
+  assert.equal((await viaProxy(p.port, 'HEAD', url)).status, 200);
+  assert.deepEqual(p.events.map((e) => [e.scheme, e.method, e.decision, e.host, e.address]), [
+    ['http', 'GET', 'allow', 'crl.example.com', '127.0.0.1'], ['http', 'HEAD', 'allow', 'crl.example.com', '127.0.0.1'],
+  ]);
+});
+
+test('plain HTTP: a host not on the list, another method, a body or an https URL never reaches anyone', async (t) => {
+  const up = await httpServer(t);
+  const p = await proxy(t, [`crl.example.com:${up.port}`]);
+  const url = `http://crl.example.com:${up.port}/x`;
+  const cases = [
+    ['GET', `http://other.example.com:${up.port}/x`, {}, undefined, 403, 'not on the allow-list'],
+    ['POST', url, { 'content-type': 'application/ocsp-request' }, 'abc', 405, 'plain HTTP POST is not proxied'],
+    ['PUT', url, {}, 'abc', 405, 'plain HTTP PUT is not proxied'],
+    ['GET', url, { 'content-length': '3' }, 'abc', 400, 'a GET with a body'],
+    ['GET', `https://crl.example.com:${up.port}/x`, {}, undefined, 400, 'malformed target'],
+    ['GET', `http://user:pw@crl.example.com:${up.port}/x`, {}, undefined, 400, 'malformed target'],
+  ];
+  for (const [method, target, headers, body, status, reason] of cases) {
+    const before = p.events.length;
+    const r = await viaProxy(p.port, method, target, headers, body);
+    assert.equal(r.status, status, `${method} ${target}`);
+    assert.equal(p.events[before].reason, reason, `${method} ${target}`);
+  }
+  assert.equal(up.seen.length, 0);
+});
+
+test('plain HTTP keeps the address rule: a listed name or literal that reaches loopback is refused', async (t) => {
+  const up = await httpServer(t);
+  for (const [url, lookup] of [[`http://127.0.0.1:${up.port}/`, undefined], [`http://rebind.example.com:${up.port}/`, async () => [{ address: '127.0.0.1', family: 4 }]]]) {
+    const p = await proxy(t, [], { check: () => ({ decision: 'allow' }), isPublic: undefined, lookup });
+    const r = await viaProxy(p.port, 'GET', url);
+    assert.equal(r.status, 403, url);
+    assert.match(p.events[0].reason, /non-public/, url);
+  }
+  assert.equal(up.seen.length, 0);
+});
+
+test('plain HTTP: an unreachable host is a 502, and a response over the cap is cut off', async (t) => {
+  const p = await proxy(t, ['down.example.com:1']);
+  assert.equal((await viaProxy(p.port, 'GET', 'http://down.example.com:1/')).status, 502);
+  assert.match(p.events.at(-1).reason, /connect failed/);
+  const up = await httpServer(t, 'x'.repeat(5000));
+  const q = await proxy(t, [`big.example.com:${up.port}`], { maxResponseBytes: 100 });
+  const r = await viaProxy(q.port, 'GET', `http://big.example.com:${up.port}/`);
+  assert.ok(r.error || r.body.length < 5000, 'the response was not cut off');
+});
+
+test('origin-form requests go to the fallback, or 404 without one', async (t) => {
+  const p = await proxy(t, []);
+  assert.equal((await viaProxy(p.port, 'GET', '/mcp')).status, 404);
+  const q = await proxy(t, [], { fallback: (req, res) => res.writeHead(200).end(req.url) });
+  const r = await viaProxy(q.port, 'POST', '/mcp', {}, '{}');
+  assert.deepEqual([r.status, r.body], [200, '/mcp']);
+  assert.equal(q.events.length, 0);
+});
+
 
 test('the proxy listens on 127.0.0.1 only, and closing it ends open tunnels', async (t) => {
   const echo = await echoServer(t);
