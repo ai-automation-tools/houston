@@ -18,24 +18,6 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 - Note 2026-11-12: S1 ran and containers work on Home ([results](decisions/spikes/2026-11-12-h0-spike-results.md)). This only matters if the slowdown below is rejected.
 - Answer:
 
-### Harness: is the container slowdown acceptable?
-
-- Asked: 2026-11-12 with the H0 spike results
-- Context: the bar was 1.3x. Measured: `git status` 1.19x, `node --test` 1.15x, `pytest` 1.45x, `npm install` 1.58x on 163 packages (about 1.5 seconds extra) and 1.96x on 2. Recommendation: accept it; the cost is seconds on installs and nothing suggests worse than 2x.
-- Answer:
-
-### Harness: may a test container be granted an agent's sign-in folder?
-
-- Asked: 2026-11-12 with the H0 spike results
-- Context: spike S3's last step runs Claude Code and Codex signed in, inside a container, for 10 minutes each. Their sign-in files are in the user profile, so the container needs read and write on each CLI's own config folder. ADR-004 already accepts that an agent can read its own model credential. Recommendation: yes, for those two folders only.
-- Answer:
-
-### Harness: are the draft Core schemas right?
-
-- Asked: 2026-11-12 with the H0 spike results
-- Context: `core/schemas/` holds draft identity, policy-request and audit-event schemas. Three choices to confirm: a third decision value `ask`, no tenant field, and identity ids shaped `local:<slug>`. Recommendation: accept all three.
-- Answer:
-
 ### Harness: is a one-time admin setup acceptable later?
 
 - Asked: 2026-11-12 with ADR-004
@@ -49,6 +31,27 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 - Answer:
 
 ## Answered
+
+### Harness: is the container slowdown acceptable?
+
+- Asked: 2026-11-12 with the H0 spike results
+- Context: the bar was 1.3x. Measured: `git status` 1.19x, `node --test` 1.15x, `pytest` 1.45x, `npm install` 1.58x on 163 packages (about 1.5 seconds extra) and 1.96x on 2. Recommendation: accept it; the cost is seconds on installs and nothing suggests worse than 2x.
+- Answer: Yes, accept it. (Mike, 2026-11-12)
+- Applied: 2026-11-12: ADR-004's containment half is marked confirmed
+
+### Harness: may a test container be granted an agent's sign-in folder?
+
+- Asked: 2026-11-12 with the H0 spike results
+- Context: spike S3's last step runs Claude Code and Codex signed in, inside a container, for 10 minutes each. Their sign-in files are in the user profile, so the container needs read and write on each CLI's own config folder. ADR-004 already accepts that an agent can read its own model credential. Recommendation: yes, for those two folders only.
+- Answer: Yes, those two folders only. (Mike, 2026-11-12)
+- Applied: 2026-11-12: spike S3's signed-in task was run with exactly those grants
+
+### Harness: are the draft Core schemas right?
+
+- Asked: 2026-11-12 with the H0 spike results
+- Context: `core/schemas/` holds draft identity, policy-request and audit-event schemas. Three choices to confirm: a third decision value `ask`, no tenant field, and identity ids shaped `local:<slug>`. Recommendation: accept all three.
+- Answer: Yes to all three: the `ask` decision value, no tenant field, ids shaped `local:<slug>`. (Mike, 2026-11-12)
+- Applied: 2026-11-12: the schemas' descriptions say accepted; roadmap S4 is ticked
 
 ### Should Houston build the per-client MCP tool switch, and what is it for?
 
