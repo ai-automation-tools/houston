@@ -12,7 +12,7 @@
 
 ---
 
-**Date:** 2026-11-12 · **Decided by:** Mike · **Serves:** [harness-requirements.md](../product/harness-requirements.md)
+**Date:** 2026-11-12 · **Decided by:** Mike · **Trial:** on the harness build, after H2 · **Serves:** [harness-requirements.md](../product/harness-requirements.md)
 
 ## Context
 
