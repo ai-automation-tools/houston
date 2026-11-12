@@ -100,7 +100,7 @@ Throwaway code under `spikes/`, results written to `docs/decisions/spikes/`. Eac
 
 One identity, one contained shell, one audit line. Done when AT-01 to AT-04, AT-12, AT-14 and AT-16 pass on a real machine and the output is saved.
 
-- [ ] `core/` scaffold: entry point, single-instance lock, SQLite schema v1 with a migrations runner, `core/README.md`, tests wired into `npm test`
+- [x] `core/` scaffold: entry point, single-instance lock, SQLite schema v1 with a migrations runner, `core/README.md`, tests wired into `npm test` — 2026-11-12; `npm run core`, Node's built-in `node:sqlite` so no new dependency, the database's exclusive lock as the single-instance lock, tests in `tests/core/`
 - [ ] Audit module: append, hash chain, verify on start, export; a chain break is reported and logging continues on a new segment
 - [ ] Policy module: grant rows, precedence (global deny, explicit deny, narrowest allow), canonical Windows paths; table-driven tests
 - [ ] Launch policy defaults from the spikes: `ui: { disable: false }`, enumerate on the drive roots, deny the user profile and other private trees, a clean `PATH` with `System32` first, and no workspace under a denied folder ([why](decisions/spikes/2026-11-12-h0-spike-results.md#what-this-changes))
