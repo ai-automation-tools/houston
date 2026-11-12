@@ -23,10 +23,11 @@ npm run demo     # builds the browser demo into _site/
 - Keep `npm run lint` and `npm test` green. CI runs both, plus `npm audit`, on every push.
 - Run `npm run smoke` when you touch the main process, the preload or the shell UI. What it checks is in [tests/](../../tests/README.md).
 - [AGENTS.md](../../AGENTS.md) has the standards, the security invariants and the list of things this project won't do.
+- `core/` is the harness's Core process and follows the same conventions as `src/`. `spikes/` is throwaway: nothing may import from it, and its scripts are run by hand from PowerShell.
 
 ## The roadmap routine
 
-- A scheduled routine opens PRs twice a week from `roadmap/auto-<date>` branches, one [roadmap](../ROADMAP.md) item at a time.
+- A scheduled routine (job `houston-roadmap`) opens PRs from `roadmap/auto-<date>` branches, one [roadmap](../ROADMAP.md) item at a time.
 - An org-wide sweep reviews and merges them.
 - The routine never changes dependencies. When a PR you merge changes `package.json`, quit the app and run `npm install` yourself.
 

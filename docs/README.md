@@ -27,17 +27,17 @@ Start with the roadmap if you want to know what's next, or the decisions folder 
 
 | Document | What's inside |
 |:---|:---|
-| [**🗺️ ROADMAP.md**](ROADMAP.md) | What's done and what's next. Every release gate closed on 2026-10-18 and the repo went public; the work now is Milestones A to D from the 2026-10-20 audit (A and B are done, C is under way with the Git changes view and dev servers in, and D has started with managed runs; the Integrations are done), then daily-use polish and distribution. The roadmap routine works it twice a week. |
+| [**🗺️ ROADMAP.md**](ROADMAP.md) | What's done and what's next. The workbench milestones A to D are done or under way. Since 2026-11-12 the main line of work is the agent harness, milestones H0 to H7: H0 (the spikes) closed that day and H1, the Core skeleton, is next. The `houston-roadmap` job works it one item per run. |
 | [**📋 CHANGELOG.md**](CHANGELOG.md) | Every change, newest first. Everything since 0.1.0 (the 2026-09-29 Phase 1 slice) is still under Unreleased. |
 | [**🔭 UPSTREAMS.md**](UPSTREAMS.md) | The outside services, protocols and packages the app depends on, what the code assumes about each, and where to check that it still holds. The biweekly upstream check works from it. |
-| [**❓ OPEN-QUESTIONS.md**](OPEN-QUESTIONS.md) | Decisions the roadmap routine needs from Mike; an answered one is applied on the next run. |
+| [**❓ OPEN-QUESTIONS.md**](OPEN-QUESTIONS.md) | Decisions the roadmap routine needs from Mike; an answered one is applied on the next run. Three harness questions are open and three were answered on 2026-11-12. |
 
 ## ⚖️ Design
 
 | Folder | What's inside |
 |:---|:---|
 | [**🎯 product/**](product/README.md) | The spec (must stories with acceptance criteria, the Won't list), the agent-harness requirements, and the build plan with its stop points. |
-| [**⚖️ decisions/**](decisions/README.md) | Requirements, three architecture options, and four ADRs: the Electron shell (with the extension spike), Project Hub over HTTP, the terminal, and the Core companion process for the agent harness. |
+| [**⚖️ decisions/**](decisions/README.md) | Requirements, three architecture options, four ADRs (the Electron shell, Project Hub over HTTP, the terminal, and the Core companion process for the agent harness), and the harness spike results. |
 | [**🧭 diagrams/**](diagrams/README.md) | The architecture diagram the [homepage](https://houston.ai-automation-tools.dev/#architecture) shows, with every component linked to its code, and how to rebuild it when the code moves. |
 
 <p align="right">(<a href="#docs-top">back to top</a>)</p>

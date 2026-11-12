@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-public_since_2026--10--18-2ea44f?style=for-the-badge" alt="Status: public since 2026-10-18">
+  <img src="https://img.shields.io/badge/status-private_·_harness_build-8B5CF6?style=for-the-badge" alt="Status: private, harness build">
   <img src="https://img.shields.io/badge/runs_on-Windows_11-0078D4?style=for-the-badge" alt="Runs on Windows 11">
   <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/plan-ROADMAP-8B5CF6?style=for-the-badge" alt="Roadmap"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-2ea44f?style=for-the-badge" alt="License: GPL-3.0-or-later"></a>
@@ -41,6 +41,9 @@
 
 Houston (formerly AI Command Center) is a Windows desktop app: a browser, PowerShell terminals and your project folders in one window.
 An agent (Claude Code, or Claude in the sidebar) can drive it, and runs nothing without your click.
+
+> [!NOTE]
+> **Where this is going.** Since 2026-11-12 the repo is private and Houston is being grown into an agent harness: every agent runs as a named identity inside an OS container, reaches tools and credentials only through a local gateway, and leaves an audit trail. None of that is in the app yet. The plan is [harness-requirements.md](docs/product/harness-requirements.md) and [ADR-004](docs/decisions/adr-004-core-companion-process.md); the spikes that tested it are [here](docs/decisions/spikes/2026-11-12-h0-spike-results.md); the [roadmap](docs/ROADMAP.md#agent-harness) is at milestone H1. Everything below describes the app as it runs today. The earlier public repo is archived as `houston-legacy`.
 
 > [!TIP]
 > **[Try the demo](https://houston-demo.ai-automation-tools.dev/)** in any browser. Made-up data; nothing runs or calls out.
@@ -73,7 +76,7 @@ The full tour is in [features.md](docs/guide/features.md).
 Needs Windows 11, Node.js 24, PowerShell 7 and a running [Project Hub](https://github.com/ai-automation-tools/project-hub).
 
 ```powershell
-git clone https://github.com/ai-automation-tools/houston
+git clone https://github.com/ai-automation-tools/houston   # private: needs org access
 cd houston
 npm install
 npm start
@@ -119,6 +122,8 @@ How to contribute: [contributing.md](docs/guide/contributing.md).
 | [**📖 docs/guide/**](docs/guide/README.md) | How to set up and use the app |
 | [**📚 docs/**](docs/README.md) | Roadmap, changelog, design decisions, architecture diagram |
 | [**🧩 src/**](src/README.md) | The app's code |
+| **🛡️ core/** | The harness's Core process. Only its data contracts so far: [`core/schemas/`](core/schemas/) |
+| **🧪 spikes/** | Throwaway scripts from the harness spikes. Nothing imports them |
 | [**🧪 tests/**](tests/README.md) | Unit tests and the scripted launch check |
 | **📜 scripts/** | Smoke run, lint, demo build, diagram build, launcher |
 | [**🤖 AGENTS.md**](AGENTS.md) | Rules for agents working in this repo (`CLAUDE.md` imports it) |
