@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openAudit } from './audit.js';
 import { CoreLockedError, migrate, openDb } from './db.js';
+import { markInterrupted } from './runner.js';
 
 /**
  * Where the Core keeps its state. Under the user profile on purpose: a session
@@ -29,7 +30,7 @@ export function dataDir(env = process.env) {
  * Start the Core in `dir`.
  *
  * @param {string} [dir]
- * @returns {{ dir: string, db: import('node:sqlite').DatabaseSync, schema: { from: number, to: number }, audit: ReturnType<typeof openAudit>, close: () => void }}
+ * @returns {{ dir: string, db: import('node:sqlite').DatabaseSync, schema: { from: number, to: number }, audit: ReturnType<typeof openAudit>, interrupted: string[], close: () => void }}
  * @throws {import('./db.js').CoreLockedError} when a Core already runs on `dir`
  */
 export function start(dir = dataDir()) {
@@ -40,7 +41,9 @@ export function start(dir = dataDir()) {
     // After the lock on purpose: the log has one writer because the database has one owner.
     const audit = openAudit(path.join(dir, 'audit'));
     audit.system('core.start');
-    return { dir, db, schema, audit, close: () => { audit.system('core.stop'); audit.close(); db.close(); } };
+    // Sessions a dead Core left open ended with it (AT-16).
+    const interrupted = markInterrupted(db, audit);
+    return { dir, db, schema, audit, interrupted, close: () => { audit.system('core.stop'); audit.close(); db.close(); } };
   } catch (e) {
     db.close();
     throw e;
@@ -51,7 +54,7 @@ if (import.meta.main) {
   try {
     const core = start();
     for (const b of core.audit.newBreaks) console.error(`audit chain break: ${b.segment} line ${b.line}: ${b.reason}`);
-    console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length }));
+    console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length }));
     const stop = () => { core.close(); process.exit(0); };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);

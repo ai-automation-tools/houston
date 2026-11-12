@@ -1,0 +1,224 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+import { openAudit } from '../../core/audit.js';
+import { migrate, openDb } from '../../core/db.js';
+import { RunnerError, compileGrants, createRunner, markInterrupted } from '../../core/runner.js';
+
+const WIN = process.platform === 'win32';
+// Workspaces can't sit in the user profile (launch.js refuses them), and the system temp folder
+// is in it, so these tests work in a gitignored folder in the repo.
+const SCRATCH = fileURLToPath(new URL('../../.test-tmp/', import.meta.url));
+const g = (id, resource, permission, effect = 'allow', expires_at = null) => ({ id, resource, permission, effect, expires_at });
+
+test('compileGrants: what a container can enforce, and nothing it cannot', () => {
+  const c = compileGrants([
+    g('w', 'file:D:/work/**', 'write'),
+    g('r', 'file:C:/Program Files/nodejs/**', 'read'),
+    g('f', 'file:D:/data/one.csv', 'read'),
+    g('d', 'file:D:/work/secrets/**', 'read', 'deny'),
+    g('a', 'file:D:/work/app/**', 'write', 'ask'),
+    g('l', 'file:D:/listing/**', 'list'),
+    g('mid', 'file:D:/work/*/build/**', 'write'),
+    g('old', 'file:D:/old/**', 'read', 'allow', '2020-01-01T00:00:00Z'),
+    g('n', 'net:api.openai.com:443', 'connect'),
+    g('nask', 'net:example.com:443', 'connect', 'ask'),
+    g('t', 'tool:github/*', 'call'),
+  ], new Date('2026-06-01T00:00:00Z'));
+  assert.deepEqual(c.readwrite, ['D:/work']);
+  assert.deepEqual(c.readonly, ['C:/Program Files/nodejs', 'D:/data/one.csv']);
+  assert.deepEqual(c.denied, ['D:/work/secrets']);
+  assert.deepEqual(c.net.map((x) => x.id), ['n']);
+  assert.deepEqual(c.skipped.map((s) => s.id), ['a', 'l', 'mid', 'old']);
+  assert.throws(() => compileGrants([g('bad', 'file:D:/work/**/.env', 'read', 'deny')]), (e) => e instanceof RunnerError && /bad.*can't be enforced/.test(e.message));
+  // An expired deny is dropped; one whose date doesn't parse keeps denying.
+  assert.deepEqual(compileGrants([g('x', 'file:D:/a/**', 'read', 'deny', '2020-01-01T00:00:00Z')]).denied, []);
+  assert.deepEqual(compileGrants([g('x', 'file:D:/a/**', 'read', 'deny', 'someday')]).denied, ['D:/a']);
+});
+
+/** A fake SDK: records each request and hands back a terminal the test drives. */
+function fakeSdk({ fail } = {}) {
+  const calls = [];
+  return {
+    calls,
+    spawnWithPty: async (request, options) => {
+      if (fail) throw new Error(fail);
+      let settle;
+      let waiting = false;
+      const waited = new Promise((r) => { settle = r; });
+      const streams = { input: new PassThrough(), output: new PassThrough() };
+      // Like the real SDK: the streams are gone once wait() starts draining them.
+      const take = (k) => { if (waiting) throw new Error(`${k} is unavailable because wait() began draining it`); return streams[k]; };
+      const term = {
+        get input() { return take('input'); }, get output() { return take('output'); }, streams, sizes: [], killed: 0, disposed: 0,
+        resize: (s) => term.sizes.push(s), wait: () => { waiting = true; return waited; },
+        kill: () => { term.killed++; settle({ exitCode: 1, timedOut: false }); },
+        exit: (code) => settle({ exitCode: code, timedOut: false }),
+        dispose: () => { term.disposed++; },
+      };
+      calls.push({ request, options, term });
+      return term;
+    },
+  };
+}
+
+/** A Core-shaped setup in a scratch folder: database, audit log, operator, one agent. */
+function setup(t, { status = 'active', containment = 'container', grants = [] } = {}) {
+  fs.mkdirSync(SCRATCH, { recursive: true });
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(SCRATCH, 'runner-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = openDb(':memory:');
+  migrate(db);
+  const audit = openAudit(path.join(root, 'audit'));
+  t.after(() => audit.close());
+  const at = '2026-01-01T00:00:00Z';
+  db.prepare("INSERT INTO identities (id, kind, display_name, containment, created_at, status) VALUES ('local:me', 'operator', 'Me', 'unconfined', ?, 'active')").run(at);
+  db.prepare("INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status) VALUES ('local:dev', 'ai-agent', 'Dev', 'local:me', ?, ?, ?)").run(containment, at, status);
+  const ws = path.join(root, 'ws');
+  fs.mkdirSync(ws);
+  for (const [id, resource, permission, effect = 'allow'] of [['ws', `file:${ws}/**`, 'write'], ...grants]) {
+    db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES (?, 'local:dev', ?, ?, ?, ?, 'local:me')").run(id, resource.replaceAll('\\', '/'), permission, effect, at);
+  }
+  const sdk = fakeSdk();
+  const runner = createRunner({ db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk });
+  const events = () => [...audit.events()].map((e) => e);
+  return { root, db, audit, ws, sdk, runner, events };
+}
+
+test('start: a contained session on a PTY, recorded in the database and the audit log; stop closes it', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t, { grants: [['node', 'file:C:/Program Files/nodejs/**', 'read']] });
+  const session = await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe', size: { rows: 30, columns: 100 }, program: { pathDirs: ['C:\\Program Files\\nodejs'] } });
+
+  const { request, options } = s.sdk.calls[0];
+  assert.deepEqual(options, { size: { rows: 30, columns: 100 } });
+  assert.equal(request.workingDirectory.toLowerCase(), s.ws.toLowerCase());
+  assert.ok(request.filesystem.readwritePaths.some((p) => p.toLowerCase() === s.ws.toLowerCase()));
+  assert.ok(request.filesystem.readonlyPaths.includes('C:\\Program Files\\nodejs'));
+  assert.ok(request.filesystem.deniedPaths.includes('C:\\Users'));
+  assert.deepEqual(request.network, { egress: { default: 'deny' } });
+  const temp = request.environment.TEMP;
+  assert.ok(fs.existsSync(temp));
+
+  const row = s.db.prepare('SELECT * FROM sessions WHERE id = ?').get(session.id);
+  assert.deepEqual([row.identity_id, row.attended, row.ended_at], ['local:dev', 1, null]);
+  const started = s.events().find((e) => e.type === 'session.start');
+  assert.equal(started.decision.result, 'allow');
+  assert.deepEqual(started.decision.policy_ids, ['ws']);
+  assert.deepEqual(started.launch.network, { proxy: false });
+  assert.ok(started.launch.denied.includes('C:\\Users'));
+  assert.deepEqual(s.runner.list().map((x) => x.id), [session.id]);
+  // The session's streams are the terminal's, taken before wait() started.
+  const { streams } = s.sdk.calls[0].term;
+  const typed = new Promise((r) => streams.input.once('data', (d) => r(String(d))));
+  session.input.write('dir');
+  assert.equal(await typed, 'dir');
+  const shown = new Promise((r) => session.output.once('data', (d) => r(String(d))));
+  streams.output.write('prompt> ');
+  assert.equal(await shown, 'prompt> ');
+  session.resize({ rows: 40, columns: 132 });
+  assert.deepEqual(s.sdk.calls[0].term.sizes, [{ rows: 40, columns: 132 }]);
+
+  const end = await session.stop();
+  assert.equal(end.reason, 'stopped');
+  assert.equal(s.sdk.calls[0].term.killed, 1);
+  assert.equal(s.sdk.calls[0].term.disposed, 1);
+  assert.ok(!fs.existsSync(path.dirname(temp)));
+  assert.equal(s.db.prepare('SELECT end_reason FROM sessions WHERE id = ?').get(session.id).end_reason, 'stopped');
+  assert.deepEqual(s.events().map((e) => e.type), ['session.start', 'session.end']);
+  assert.deepEqual(s.runner.list(), []);
+});
+
+test('a session that exits by itself is recorded with its exit code', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t);
+  const session = await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe /c exit 0' });
+  s.sdk.calls[0].term.exit(0);
+  assert.deepEqual(await session.done, { reason: 'exit 0', exitCode: 0 });
+  assert.equal(s.events().at(-1).outcome.status, 'ok');
+});
+
+test('start refuses, and writes a session.start deny, for each thing that would make the launch unsafe', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const cases = [
+    [{ status: 'suspended' }, {}, /identity is suspended/],
+    [{ containment: 'unconfined' }, {}, /runs unconfined/],
+    [{}, { identity: 'local:ghost' }, /unknown identity/],
+    [{}, { workspace: 'D:\\not-granted' }, /no write grant on the workspace/],
+    [{ grants: [['env', 'file:D:/x/**/.env', 'read', 'deny']] }, {}, /can't be enforced by the container/],
+    [{ grants: [['ssh', 'file:C:/Users/nobody-here/.ssh/**', 'read']] }, {}, /overlaps a global deny/],
+  ];
+  for (const [shape, change, want] of cases) {
+    const s = setup(t, shape);
+    await assert.rejects(s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe', ...change }), (e) => e instanceof RunnerError && want.test(e.message), String(want));
+    const [ev] = s.events();
+    assert.deepEqual([ev.type, ev.decision.result], ['session.start', 'deny'], String(want));
+    assert.match(ev.decision.reasons[0], want);
+    assert.equal(s.sdk.calls.length, 0);
+    assert.equal(s.db.prepare('SELECT count(*) AS n FROM sessions').get().n, 0);
+    assert.ok(!fs.existsSync(path.join(s.root, 'sessions')) || fs.readdirSync(path.join(s.root, 'sessions')).length === 0, 'temp left behind');
+  }
+  await assert.rejects(setup(t).runner.start({ identity: '', workspace: 'D:\\w', command: 'x' }), /identity is an id/);
+});
+
+test('a container that fails to start ends the session and cleans up', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t);
+  const runner = createRunner({ db: s.db, audit: s.audit, coreDir: path.join(s.root, 'core'), tempRoot: path.join(s.root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk: fakeSdk({ fail: 'backend_unavailable' }) });
+  await assert.rejects(runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe' }), /did not start: backend_unavailable/);
+  assert.match(s.db.prepare('SELECT end_reason FROM sessions').get().end_reason, /failed to start/);
+  assert.deepEqual(s.events().map((e) => e.type), ['session.start', 'session.end']);
+  assert.deepEqual(fs.readdirSync(path.join(s.root, 'sessions')), []);
+});
+
+test('a net grant starts the egress proxy on the frozen grants, and its decisions are audited', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t, { grants: [['openai', 'net:api.openai.com:443', 'connect']] });
+  const session = await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe' });
+  t.after(() => session.stop());
+  const { request } = s.sdk.calls[0];
+  const port = Number(/:(\d+)$/.exec(request.network.runtimeConfig.networkProxy)[1]);
+  assert.equal(request.environment.NODE_USE_ENV_PROXY, '1');
+  assert.deepEqual(s.events()[0].launch.network, { proxy: true, hosts: ['api.openai.com:443'] });
+
+  // A grant added after the start does not reach this session.
+  s.db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES ('late', 'local:dev', 'net:example.com:443', 'connect', 'allow', '2026-01-01T00:00:00Z', 'local:me')").run();
+  const status = await new Promise((resolve) => {
+    const c = net.connect(port, '127.0.0.1', () => c.write('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n'));
+    c.once('data', (d) => { resolve(Number(String(d).slice(9, 12))); c.destroy(); });
+  });
+  assert.equal(status, 403);
+  const ev = s.events().find((e) => e.type === 'egress.connect');
+  assert.deepEqual([ev.decision.result, ev.resource.id, ev.session_id, ev.decision.reasons[0]], ['deny', 'example.com:443', session.id, 'not on the allow-list']);
+  assert.equal(ev.decision.policy_version, s.events()[0].decision.policy_version);
+
+  await session.stop();
+  await assert.rejects(new Promise((resolve, reject) => net.connect(port, '127.0.0.1', resolve).on('error', reject)), /ECONNREFUSED/);
+});
+
+test('stopAll stops every live session', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t);
+  await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'a' });
+  await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'b' });
+  const ends = await s.runner.stopAll();
+  assert.deepEqual(ends.map((e) => e.reason), ['stopped', 'stopped']);
+  assert.ok(s.sdk.calls.every((c) => c.term.killed === 1));
+  assert.deepEqual(s.runner.list(), []);
+});
+
+test('markInterrupted closes sessions a dead Core left open (AT-16)', (t) => {
+  const db = openDb(':memory:');
+  migrate(db);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-int-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const audit = openAudit(dir);
+  t.after(() => audit.close());
+  db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at) VALUES ('local:me', 'operator', 'Me', 'unconfined', 'x');
+    INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at) VALUES ('open', 'local:me', 'D:/w', 'container', 1, 'v', 'x');
+    INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, ended_at, end_reason) VALUES ('done', 'local:me', 'D:/w', 'container', 1, 'v', 'x', 'y', 'exit 0');`);
+  assert.deepEqual(markInterrupted(db, audit), ['open']);
+  assert.equal(db.prepare("SELECT end_reason FROM sessions WHERE id = 'open'").get().end_reason, 'interrupted');
+  assert.equal(db.prepare("SELECT end_reason FROM sessions WHERE id = 'done'").get().end_reason, 'exit 0');
+  assert.deepEqual([...audit.events()].map((e) => [e.type, e.session_id, e.outcome.error_code]), [['session.end', 'open', 'interrupted']]);
+  assert.deepEqual(markInterrupted(db, audit), []);
+});
