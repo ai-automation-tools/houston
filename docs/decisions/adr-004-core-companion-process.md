@@ -64,7 +64,7 @@ Nothing else on the Won't list moves. Electron stays, Project Hub and Cronsole a
 
 ## Cost
 
-No hosting and no required service. Dependencies added to `core/`: the Execution Containers Node SDK (MIT), an MCP server library, a DPAPI binding, and SQLite. Each must be GPL-3.0-compatible and is named in the PR that adds it. Official Execution Containers builds send required diagnostic data to Microsoft; Settings must say so.
+No hosting and no required service. Dependencies added to `core/`: the Execution Containers Node SDK (MIT), an MCP server library, a DPAPI binding, and SQLite. *(2026-11-12, H1: SQLite turned out to need no package; the Core uses Node's built-in `node:sqlite`.)* Each must be GPL-3.0-compatible and is named in the PR that adds it. Official Execution Containers builds send required diagnostic data to Microsoft; Settings must say so.
 
 ## Consequences
 

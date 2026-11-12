@@ -27,7 +27,7 @@ Start with the roadmap if you want to know what's next, or the decisions folder 
 
 | Document | What's inside |
 |:---|:---|
-| [**🗺️ ROADMAP.md**](ROADMAP.md) | What's done and what's next. The workbench milestones A to D are done or under way. Since 2026-11-12 the main line of work is the agent harness, milestones H0 to H7: H0 (the spikes) closed that day and H1, the Core skeleton, is next. The `houston-roadmap` job works it one item per run. |
+| [**🗺️ ROADMAP.md**](ROADMAP.md) | What's done and what's next. The workbench milestones A to D are done or under way. Since 2026-11-12 the main line of work is the agent harness, milestones H0 to H7: H0 (the spikes) closed that day and H1, the Core skeleton, is under way. The `houston-roadmap` job works it one item per run. |
 | [**📋 CHANGELOG.md**](CHANGELOG.md) | Every change, newest first. Everything since 0.1.0 (the 2026-09-29 Phase 1 slice) is still under Unreleased. |
 | [**🔭 UPSTREAMS.md**](UPSTREAMS.md) | The outside services, protocols and packages the app depends on, what the code assumes about each, and where to check that it still holds. The biweekly upstream check works from it. |
 | [**❓ OPEN-QUESTIONS.md**](OPEN-QUESTIONS.md) | Decisions the roadmap routine needs from Mike; an answered one is applied on the next run. Three harness questions are open and three were answered on 2026-11-12. |

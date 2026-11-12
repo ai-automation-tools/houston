@@ -234,6 +234,8 @@ Container (exit 0):
 5. **The vault must not rely on DPAPI alone (S5).** Keep blobs in the Core's data folder, protect them with entropy held only by the Core, and add an abuse test that hands a container a blob.
 6. **Agent CLIs and their sign-in files live in the user profile (S3).** Each backend's manifest must name its program folder (read-only) and its credential folder (read and write), and the Identity Center must show that an agent can read its own model credential, as ADR-004 already says.
 
+**Follow-up in H1 (2026-11-12).** 1: built as `core/egress.js`, which also forwards plain-HTTP `GET` for revocation lists. 2 and 3: built as `core/launch.js`'s defaults. 4: tried elevated, fails the same way (`0x80004001`), so the criterion changed ([`spikes/h1-denial-capture.mjs`](../../../spikes/h1-denial-capture.mjs)). 5 and 6 wait for the vault (H3) and the backend manifests (H2).
+
 Smaller notes: start containers with a clean `PATH` that puts `System32` first, since the SDK shells out to `whoami`; a same-container dev server is unreachable over loopback under the default policy.
 
 ## Owner decisions
