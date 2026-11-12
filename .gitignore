@@ -1,5 +1,6 @@
 node_modules/
 .smoke/
+.test-tmp/
 _site/
 *.log
 .env

@@ -1,7 +1,7 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, builds container requests and runs the egress proxy.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, and starts contained sessions on a terminal behind an egress proxy.</em>
 </p>
 
 <p align="center">
@@ -30,6 +30,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
+| [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
@@ -227,9 +228,57 @@ Windows PowerShell ignores `HTTPS_PROXY`; it needs `-Proxy $env:HTTPS_PROXY`. Po
 
 `launchRequest` sets `NODE_USE_ENV_PROXY=1` whenever there is a proxy port, so Node's own `fetch` uses the `HTTP_PROXY` and `HTTPS_PROXY` the container sets.
 
+## ▶️ Runner
+
+[`runner.js`](runner.js) starts a session: one identity, one workspace, one command, in a container on a pseudo-terminal.
+
+```js
+const runner = createRunner({ db, audit, coreDir, tempRoot });
+const session = await runner.start({ identity: 'local:dev-codex', workspace: 'D:\\work\\app', command: 'cmd.exe', size: { rows: 30, columns: 120 } });
+session.output.on('data', show);   // session.input, session.resize(size)
+await session.stop();              // closes the container; session.done settles with the reason
+```
+
+What `start` does, in order. Each refusal writes a `session.start` deny event and leaves nothing behind:
+
+1. **The identity** must exist, be `active`, not have expired, and run on the `container` rung. `restricted-token` and `unconfined` identities are refused until H7.
+2. **The workspace** is resolved through junctions, and the identity needs an `allow` grant to write it.
+3. **Its grants are compiled** (`compileGrants`) to what a container can enforce: an `allow` `write` grant becomes a read-write folder (a container can't separate write from read), `read` a read-only one, a `deny` a denied folder. Only `dir/**` or an exact path compiles; any other wildcard skips an allow and **refuses the launch** for a deny, since the container would not enforce it. `ask` grants are skipped, because nobody can answer inside a container. `list` grants are skipped too. Tool, command, secret and session grants are left for the gateway.
+4. **Network.** If the identity holds any `net:` allow grant, an egress proxy starts for this session and decides on a **frozen copy** of the grants: one added after the start does not reach the session. Otherwise the container has no network.
+5. **The request** comes from `launchRequest`, with a temp folder at `<tempRoot>\<session id>\tmp`. `tempRoot` must be outside the user profile.
+6. **Records:** a `sessions` row, then a `session.start` event whose `launch` field lists the command, the read-write, read-only and denied folders, the network setting and the skipped grants. With no denial reports from the container ([why](../docs/product/harness-requirements.md)), this is what makes a failed read attributable.
+7. **`spawnWithPty`.** If the container doesn't start, the session ends at once as `failed to start`.
+
+When the session ends, by `stop()`, by exiting or by its 24-hour timeout, the row gets `ended_at` and an `end_reason` (`stopped`, `exit <code>`, `timeout`), a `session.end` event is written, the proxy closes and the temp folder is deleted. `runner.list()` and `runner.stopAll()` cover live sessions.
+
+The SDK hands out a terminal's streams only until `wait()` starts draining them, so the runner takes them first and exposes them as `session.input` and `session.output`.
+
+At start, the Core marks any session a dead Core left open as `interrupted` (`markInterrupted`). **That closes the record only:** a killed Core leaves the SDK's broker (`wxc-exec.exe`) and the contained process running. Found by the check below; ending them is a roadmap item.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-runner.mjs`](../spikes/h1-runner.mjs): an identity with write on a workspace, read on Node, and `registry.npmjs.org:443` and `c.pki.goog:80`, running `cmd.exe` on a PTY:
+
+```text
+>node --version                         v24.22.1
+>echo written> here.txt & type here.txt written
+>type "<root>\outside.txt"              Access is denied.
+>dir /b "%USERPROFILE%\.ssh"            Access is denied.
+>curl.exe ... https://registry.npmjs.org/   registry HTTP 200
+>curl.exe ... https://example.com/          CONNECT tunnel failed, response 403
+--- end: stopped ---
+0 core.start allow
+1 session.start allow  denied=C:\Users,<root>\core network={"proxy":true,"hosts":["registry.npmjs.org:443","c.pki.goog:80"]}
+2 egress.connect allow registry.npmjs.org:443
+3 egress.connect deny  example.com:443 (not on the allow-list)
+4 session.end allow  stopped
+5 core.stop allow
+session row: {"end_reason":"stopped"}    temp folder left: false    leftover processes: 0
+```
+
+Closing the terminal prints `Error: AttachConsole failed` from node-pty's console-list helper on stderr. It is noise: the session still ends cleanly.
+
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): ending a dead Core's containers, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 
