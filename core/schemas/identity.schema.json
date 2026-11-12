@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "houston-core/identity/v0.1",
+  "title": "Harness identity",
+  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). One principal the Core can launch or serve: the operator, an agent, a sub-agent, a service or an MCP server. Field names follow the org's agent-inventory v0.1 format where it has one (id, kind, displayName, owner, status, createdAt, lastUsedAt, grants). Secret values never appear here.",
+  "type": "object",
+  "required": ["id", "kind", "displayName", "owner", "status", "containment", "createdAt", "grants"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "description": "Stable and never reused: 'local:<slug>', e.g. 'local:dev-codex', 'local:mcp/github'.", "type": "string", "pattern": "^local:[a-z0-9][a-z0-9/_-]{0,62}$" },
+    "kind": { "enum": ["operator", "ai-agent", "sub-agent", "service-account", "mcp-server"] },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "owner": { "description": "The accountable identity id. Every identity but the operator has one.", "type": ["string", "null"] },
+    "parent": { "description": "For a sub-agent: the identity that may start it.", "type": ["string", "null"] },
+    "purpose": { "type": "string", "maxLength": 300 },
+    "backend": { "description": "Adapter manifest that launches it, e.g. 'codex', 'claude-code'. Null for the operator and for MCP servers.", "type": ["string", "null"] },
+    "status": { "description": "Lifecycle. Only 'active' can start a session; 'retired' is final.", "enum": ["draft", "active", "suspended", "retired"] },
+    "containment": { "description": "The rung this identity runs on. 'unconfined' is shown as such everywhere it appears.", "enum": ["container", "restricted-token", "unconfined"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "lastUsedAt": { "type": ["string", "null"], "format": "date-time" },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+    "retiredAt": { "type": ["string", "null"], "format": "date-time" },
+    "grants": { "type": "array", "items": { "$ref": "#/$defs/grant" } },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "grant": {
+      "description": "One permission. Anything not granted is denied. The Core compiles file and network grants to container policy at launch and checks the rest at the gateway.",
+      "type": "object",
+      "required": ["id", "resource", "permission", "effect"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "resource": { "description": "'<type>:<pattern>', e.g. 'file:D:/work/app/**', 'net:api.openai.com:443', 'tool:github/create_issue', 'command:git push*', 'secret:github-token'.", "type": "string", "pattern": "^(file|net|tool|command|secret|session):.+$" },
+        "permission": { "enum": ["read", "write", "list", "connect", "call", "run", "use", "spawn"] },
+        "effect": { "description": "'ask' raises an approval card; an unattended run treats it as deny.", "enum": ["allow", "ask"] },
+        "grantedAt": { "type": "string", "format": "date-time" },
+        "grantedBy": { "type": "string" },
+        "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+        "lastUsedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}
