@@ -4,6 +4,7 @@
 // A session runs on a frozen copy of its grants: the egress proxy decides against the
 // grants as they were at start, under the policy version recorded in session.start.
 
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,6 +24,13 @@ export class RunnerError extends Error {
 
 /** @param {string} p canonical @returns {string} */
 const win = (p) => p.replaceAll('/', '\\');
+
+/**
+ * The container name a session runs under: its id's 32 hex digits, the SDK's own format.
+ * A restarted Core finds a dead Core's containers by it.
+ * @param {string} sessionId
+ */
+export const containerName = (sessionId) => sessionId.replaceAll('-', '');
 
 /**
  * @typedef {import('./policy.js').Grant} Grant
@@ -171,11 +179,14 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
           }),
         });
       }
-      req = launchRequest({
-        command, workspace: ws, temp, home, globals,
-        readwrite: compiled.readwrite, readonly: [...compiled.readonly, ...(program.readonly ?? [])], denied: compiled.denied,
-        pathDirs: program.pathDirs, env: program.env, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
-      });
+      req = {
+        ...launchRequest({
+          command, workspace: ws, temp, home, globals,
+          readwrite: compiled.readwrite, readonly: [...compiled.readonly, ...(program.readonly ?? [])], denied: compiled.denied,
+          pathDirs: program.pathDirs, env: program.env, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
+        }),
+        containerName: containerName(id),
+      };
     } catch (e) {
       await cleanup();
       throw refuse(e instanceof LaunchError || e instanceof PathError ? e.message : `launch failed: ${/** @type {Error} */ (e).message}`);
@@ -183,7 +194,7 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
 
     const startedAt = now().toISOString();
     const launch = {
-      command,
+      command, container: req.containerName,
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
       network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)) } : { proxy: false },
       skipped: compiled.skipped,
@@ -240,23 +251,62 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
 }
 
 /**
- * Sessions still open in the database belong to a Core that died (AT-16): mark them
- * interrupted. This closes the records only. Their containers do NOT end with the Core: the
- * SDK's broker (wxc-exec.exe) and the contained process outlive a killed Core (H1 runner
- * check, 2026-11-12). Ending them is a roadmap item.
+ * The SDK's brokers running on this machine. On Windows a PTY session's container is run by
+ * one `wxc-exec.exe`, started with the request base64-encoded on its command line; ending
+ * that process ends the container (H1 check, 2026-11-12).
+ *
+ * @returns {{ pid: number, containerId: string | null }[]}
+ * @throws {Error} when the process list can't be read
+ */
+export function listBrokers() {
+  if (process.platform !== 'win32') return [];
+  const ps = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const query = "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Filter \"Name='wxc-exec.exe'\" | ForEach-Object { @{ pid = $_.ProcessId; cmd = $_.CommandLine } })";
+  const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-Command', query], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
+  if (r.error || r.status !== 0) throw new Error(`listing wxc-exec.exe failed: ${r.error?.message ?? r.stderr.trim()}`);
+  return /** @type {{ pid: number, cmd: string | null }[]} */ (JSON.parse(r.stdout)).map(({ pid, cmd }) => {
+    const b64 = /--config-base64\s+([A-Za-z0-9+/=]+)/.exec(cmd ?? '')?.[1];
+    let containerId = null;
+    try { if (b64) containerId = JSON.parse(Buffer.from(b64, 'base64').toString('utf8')).containerId ?? null; } catch { /* not ours to read */ }
+    return { pid, containerId };
+  });
+}
+
+/**
+ * Sessions still open in the database belong to a Core that died (AT-16). A dead Core's
+ * containers can outlive it: one that exits right after a spawn leaves the broker and the
+ * contained process running. So each one still running is ended, found by its container
+ * name, and then the session is marked interrupted. The session.end event says which.
  *
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {ReturnType<typeof import('./audit.js').openAudit>} audit
- * @param {() => Date} [now]
+ * @param {{ now?: () => Date, brokers?: typeof listBrokers, kill?: (pid: number) => void }} [opts]
  * @returns {string[]} the ids marked
  */
-export function markInterrupted(db, audit, now = () => new Date()) {
+export function markInterrupted(db, audit, { now = () => new Date(), brokers = listBrokers, kill = (pid) => process.kill(pid) } = {}) {
   const open = /** @type {any[]} */ (db.prepare('SELECT id, identity_id, policy_version FROM sessions WHERE ended_at IS NULL').all());
+  if (!open.length) return [];
+  /** @type {ReturnType<typeof listBrokers> | null} */
+  let running = null;
+  let listError = '';
+  try { running = brokers(); } catch (e) { listError = /** @type {Error} */ (e).message; }
+
   for (const s of open) {
+    let reason;
+    if (!running) reason = `could not check for its container: ${listError}`;
+    else {
+      const mine = running.filter((b) => b.containerId === containerName(s.id));
+      const failed = [];
+      for (const b of mine) {
+        try { kill(b.pid); } catch (e) { if (/** @type {any} */ (e).code !== 'ESRCH') failed.push(`pid ${b.pid}: ${/** @type {Error} */ (e).message}`); }
+      }
+      reason = !mine.length ? 'no container was running' : failed.length ? `could not end its container (${failed.join('; ')})` : 'ended its container';
+    }
     db.prepare("UPDATE sessions SET ended_at = ?, end_reason = 'interrupted' WHERE id = ?").run(now().toISOString(), s.id);
     audit.append({
       type: 'session.end', action: 'session.end', identity: { subject: s.identity_id, containment: 'container' }, session_id: s.id,
-      resource: { type: 'Session', id: s.id }, decision: { result: 'allow', policy_version: s.policy_version }, outcome: { status: 'error', error_code: 'interrupted' },
+      resource: { type: 'Session', id: s.id }, decision: { result: 'allow', policy_version: s.policy_version, reasons: [reason] },
+      outcome: { status: 'error', error_code: 'interrupted' },
     });
   }
   return open.map((s) => s.id);

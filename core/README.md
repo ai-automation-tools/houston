@@ -246,14 +246,27 @@ What `start` does, in order. Each refusal writes a `session.start` deny event an
 3. **Its grants are compiled** (`compileGrants`) to what a container can enforce: an `allow` `write` grant becomes a read-write folder (a container can't separate write from read), `read` a read-only one, a `deny` a denied folder. Only `dir/**` or an exact path compiles; any other wildcard skips an allow and **refuses the launch** for a deny, since the container would not enforce it. `ask` grants are skipped, because nobody can answer inside a container. `list` grants are skipped too. Tool, command, secret and session grants are left for the gateway.
 4. **Network.** If the identity holds any `net:` allow grant, an egress proxy starts for this session and decides on a **frozen copy** of the grants: one added after the start does not reach the session. Otherwise the container has no network.
 5. **The request** comes from `launchRequest`, with a temp folder at `<tempRoot>\<session id>\tmp`. `tempRoot` must be outside the user profile.
-6. **Records:** a `sessions` row, then a `session.start` event whose `launch` field lists the command, the read-write, read-only and denied folders, the network setting and the skipped grants. With no denial reports from the container ([why](../docs/product/harness-requirements.md)), this is what makes a failed read attributable.
+6. **Records:** a `sessions` row, then a `session.start` event whose `launch` field lists the command, the container's name, the read-write, read-only and denied folders, the network setting and the skipped grants. With no denial reports from the container ([why](../docs/product/harness-requirements.md)), this is what makes a failed read attributable.
 7. **`spawnWithPty`.** If the container doesn't start, the session ends at once as `failed to start`.
 
 When the session ends, by `stop()`, by exiting or by its 24-hour timeout, the row gets `ended_at` and an `end_reason` (`stopped`, `exit <code>`, `timeout`), a `session.end` event is written, the proxy closes and the temp folder is deleted. `runner.list()` and `runner.stopAll()` cover live sessions.
 
 The SDK hands out a terminal's streams only until `wait()` starts draining them, so the runner takes them first and exposes them as `session.input` and `session.output`.
 
-At start, the Core marks any session a dead Core left open as `interrupted` (`markInterrupted`). **That closes the record only:** a killed Core leaves the SDK's broker (`wxc-exec.exe`) and the contained process running. Found by the check below; ending them is a roadmap item.
+**A dead Core's containers.** A container can outlive the Core that started it: one killed mid-session takes its containers with it, but one that exits right after a spawn leaves the SDK's broker (`wxc-exec.exe`) and the contained process running. So every container is named after its session (`containerName`: the session id's 32 hex digits, recorded as `launch.container`). At start, if the database still has open sessions, the Core lists the running brokers (`listBrokers` reads the container id from each one's launch config), ends the broker of each open session, which ends its container, and marks the session `interrupted` (`markInterrupted`). The `session.end` event's reason says which happened: `ended its container`, `no container was running`, `could not end its container (...)` or `could not check for its container: ...`. The record closes either way. Brokers of other containers are left alone.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-dead-core.mjs`](../spikes/h1-dead-core.mjs), which starts a contained `cmd.exe` from a second Core, lets that Core die, and starts the Core again:
+
+```text
+--- kill: Core exit killed ---
+left running before restart: 0 broker(s), 0 contained process(es)
+restart: session.end interrupted: no container was running
+still running after restart: 0
+--- crash: Core exit 1 ---
+left running before restart: 1 broker(s), 1 contained process(es)
+restart: session.end interrupted: ended its container
+still running after restart: 0
+```
 
 Checked on this machine on 2026-11-12 with [`spikes/h1-runner.mjs`](../spikes/h1-runner.mjs): an identity with write on a workspace, read on Node, and `registry.npmjs.org:443` and `c.pki.goog:80`, running `cmd.exe` on a PTY:
 
@@ -278,7 +291,7 @@ Closing the terminal prints `Error: AttachConsole failed` from node-pty's consol
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): ending a dead Core's containers, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

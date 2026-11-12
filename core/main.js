@@ -41,7 +41,7 @@ export function start(dir = dataDir()) {
     // After the lock on purpose: the log has one writer because the database has one owner.
     const audit = openAudit(path.join(dir, 'audit'));
     audit.system('core.start');
-    // Sessions a dead Core left open ended with it (AT-16).
+    // Sessions a dead Core left open: end any container still running, close the record (AT-16).
     const interrupted = markInterrupted(db, audit);
     return { dir, db, schema, audit, interrupted, close: () => { audit.system('core.stop'); audit.close(); db.close(); } };
   } catch (e) {
