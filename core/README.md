@@ -1,7 +1,7 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log and answers policy checks.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks and builds container requests.</em>
 </p>
 
 <p align="center">
@@ -29,6 +29,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
+| [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
 
@@ -151,9 +152,42 @@ The permission must match the action exactly: `file.read` needs a `read` grant, 
 
 `resolvePath()` also follows the disk: junctions, symlinks, `subst` drives and 8.3 aliases are resolved for the part of the path that exists. Whoever hands the policy a path an agent supplied should pass it through `resolvePath` first. The container policy is still what stops a read through a junction; this keeps the gateway's answer the same as the container's.
 
+## 📦 Launch defaults
+
+[`launch.js`](launch.js) builds the container request every session starts from. `launchRequest(spec)` takes the command, workspace, temp folder, the operator's profile folder and the program folders, and returns a request for the Execution Containers SDK, or throws `LaunchError`. It starts nothing; the runner (next) does.
+
+Each default comes from a [spike result](../docs/decisions/spikes/2026-11-12-h0-spike-results.md#what-this-changes):
+
+| Default | Why |
+|:---|:---|
+| `ui: { disable: false }` | Without it Node, Git and Python's TLS die with `0xC0000142`. Clipboard and input injection stay denied |
+| Enumerate (names only) on the drive root of every granted folder | Node `lstat`s each parent from the root down |
+| Deny the users folder (every profile) and each global deny outside it | Enumerate is recursive and would otherwise list every file name on the drive |
+| Workspace and temp folder outside every denied folder | Node will not run under a denied folder. A program or a CLI's config folder under the profile may still be granted |
+| `PATH` is `System32`, the Windows folder, `Wbem`, then the program folders | The SDK shells out to `whoami`; nothing from the operator's own `PATH` |
+| `TEMP` and `TMP` in the session's temp folder; `PYTHONNOUSERSITE=1` | The profile's temp and per-user site-packages are denied |
+| No network; or, with `proxyPort`, the container proxy setting | Leaves that one host port reachable and nothing else on the machine or the network |
+
+It refuses a grant that overlaps a global deny (inside it or around it), a whole drive, a backend setting `PATH`, `TEMP`, `TMP` or `PYTHONNOUSERSITE`, and every path [`paths.js`](paths.js) refuses.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-launch-defaults.mjs`](../spikes/h1-launch-defaults.mjs), run from PowerShell with `H1_ROOT` set to a scratch folder outside the profile:
+
+```text
+node --version   exit 0   v24.22.1
+git --version    exit 0   git version 2.51.0.windows.1
+node --test      exit 0   pass 1
+PATH             C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;C:\Program Files\Git\cmd;C:\Program Files\nodejs
+list profile     exit 1   Access is denied.
+read .ssh        exit 1   Access is denied.
+write outside    exit 1   Access is denied.
+write workspace  exit 0
+internet         ENOTFOUND
+loopback 4273    EACCES
+```
+
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): launch policy defaults, the egress proxy, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): the egress proxy, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 
