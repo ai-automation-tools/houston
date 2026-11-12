@@ -51,7 +51,7 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 - Asked: 2026-11-12 with the H0 spike results
 - Context: `core/schemas/` holds draft identity, policy-request and audit-event schemas. Three choices to confirm: a third decision value `ask`, no tenant field, and identity ids shaped `local:<slug>`. Recommendation: accept all three.
 - Answer: Yes to all three: the `ask` decision value, no tenant field, ids shaped `local:<slug>`. (Mike, 2026-11-12)
-- Applied: 2026-11-12: the schemas' descriptions say accepted; roadmap S4 is ticked. Two additions in H1 the same day, each named in its PR: a grant `effect` of `deny` (the precedence rule needs explicit denies) and an `audit.break` event type with its `break` field
+- Applied: 2026-11-12: the schemas' descriptions say accepted; roadmap S4 is ticked. Three additions in H1 the same day, each named in its PR: a grant `effect` of `deny` (the precedence rule needs explicit denies), an `audit.break` event type with its `break` field, and a `control.denied` event type for a Control API request with a bad token
 
 ### Should Houston build the per-client MCP tool switch, and what is it for?
 
