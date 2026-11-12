@@ -151,9 +151,11 @@ test('the entry point exits 2 while another process holds the lock, and a killed
     first.once('exit', (code) => { clearTimeout(timer); reject(new Error(`the Core exited ${code}: ${err}`)); });
   });
   assert.equal(JSON.parse(line).event, 'core.start');
-  // It serves the Control API, named in control.json.
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'control.json'), 'utf8')).pipe, JSON.parse(line).pipe);
-  assert.deepEqual(await callControl(dir, 'session.list', {}, { timeoutMs: 5000 }), []);
+  // On Windows it serves the Control API, named in control.json.
+  if (process.platform === 'win32') {
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'control.json'), 'utf8')).pipe, JSON.parse(line).pipe);
+    assert.deepEqual(await callControl(dir, 'session.list', {}, { timeoutMs: 5000 }), []);
+  } else assert.equal(JSON.parse(line).pipe, null);
 
   const second = spawnSync(process.execPath, [MAIN], { env, encoding: 'utf8', timeout: 20_000 });
   assert.equal(second.status, 2, `second Core: ${second.error?.message ?? ''} ${second.stdout} ${second.stderr}`);

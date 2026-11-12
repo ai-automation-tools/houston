@@ -57,6 +57,8 @@ export function secureDir(dir) {
  */
 export function start(dir = dataDir()) {
   fs.mkdirSync(dir, { recursive: true });
+  // Its long, final spelling: the path rules refuse 8.3 names like C:\Users\RUNNER~1, which TEMP can hold.
+  dir = fs.realpathSync.native(dir);
   secureDir(dir);
   const db = openDb(path.join(dir, 'core.db'));
   try {
@@ -94,15 +96,18 @@ if (import.meta.main) {
   try {
     const core = start();
     for (const b of core.audit.newBreaks) console.error(`audit chain break: ${b.segment} line ${b.line}: ${b.reason}`);
-    const runner = createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() });
-    const control = await startControl({ dir: core.dir, runner, audit: core.audit });
-    console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control.pipe }));
+    // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
+    const win32 = process.platform === 'win32';
+    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() }) : null;
+    const control = runner ? await startControl({ dir: core.dir, runner, audit: core.audit }) : null;
+    if (!control) setInterval(() => {}, 2 ** 30);
+    console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null }));
     let stopping = false;
     const stop = async () => {
       if (stopping) return;
       stopping = true;
-      await runner.stopAll();
-      await control.close();
+      await runner?.stopAll();
+      await control?.close();
       core.close();
       process.exit(0);
     };
