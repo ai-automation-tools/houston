@@ -246,4 +246,4 @@ Answered by the owner on 2026-11-12, recorded in [OPEN-QUESTIONS.md](../../OPEN-
 - **The schemas are accepted**, with the `ask` decision value, no tenant field and `local:<slug>` ids.
 - **A test container may be granted the two CLIs' config folders.** Used for the signed-in runs above and nothing else.
 
-Still open: **telemetry consent** for Execution Containers. Nobody has answered it; every run here left telemetry off.
+**Telemetry consent** for Execution Containers was still open when these spikes ran, and every run left telemetry off. Answered later the same day: the owner declined the optional diagnostic data on 2026-11-12, answered on this machine with the SDK's `requestTelemetryConsent` (stored and effective state `denied`). The required diagnostic data that official builds send is not covered by that choice; Settings must still name it (ADR-004).
