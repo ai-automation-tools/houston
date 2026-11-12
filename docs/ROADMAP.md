@@ -12,12 +12,12 @@
 
 ---
 
-Ordered by what blocks what; [build-plan.md](product/build-plan.md) has the reasoning. The Houston roadmap routine (job `ai-command-center-roadmap`) works this file top to bottom, one item per run, as `roadmap/auto-` PRs, which the org PR sweep reviews and merges. **Every item above `## After public release` was a release gate;** all of them closed on 2026-10-18 and the repo went public. Ticking an item adds its line to the [changelog](CHANGELOG.md) and updates any doc it made stale, in the same commit.
+Ordered by what blocks what; [build-plan.md](product/build-plan.md) has the reasoning. The Houston roadmap routine (job `houston-roadmap`) works this file top to bottom, one item per run, as `roadmap/auto-` PRs, which the org PR sweep reviews and merges. **Every item above `## After public release` was a release gate;** all of them closed on 2026-10-18 and the repo went public. Ticking an item adds its line to the [changelog](CHANGELOG.md) and updates any doc it made stale, in the same commit.
 
 Markers: `- [ ]` open, `- [-]` claimed by a run in progress, `- [x]` done, `- [!]` blocked (the reason follows on the line). `🔒 Needs owner` marks an item only the owner can do; the routine skips it.
 
 > [!NOTE]
-> **Where we are, 2026-11-12.** The repo was re-created private on this date to grow Houston into an agent harness; the earlier public repo is archived as `houston-legacy` with the same history. The new work is the [Agent harness](#agent-harness) milestones H0 to H7, from [harness-requirements.md](product/harness-requirements.md) and [ADR-004](decisions/adr-004-core-companion-process.md). **Next:** the owner's 5-day check below and the H0 spikes; nothing in H1 starts until both report. Going public again is its own gate.
+> **Where we are, 2026-11-12.** The repo was re-created private on this date to grow Houston into an agent harness; the earlier public repo is archived as `houston-legacy` with the same history. The new work is the [Agent harness](#agent-harness) milestones H0 to H7, from [harness-requirements.md](product/harness-requirements.md) and [ADR-004](decisions/adr-004-core-companion-process.md). **Next:** the H0 spikes; nothing in H1 starts until they report. The owner's 5-day trial runs on the harness itself once H2 is in the window, not on the old workbench. Going public again is its own gate.
 
 > [!NOTE]
 > **Where we were, 2026-10-28.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is in (2026-10-27). LastPass works, the app is on Electron 45 and the chat on API version `2026-10-21`, all since 2026-10-27, so the upstream queue is empty. The Cron tab's Docs filter (2026-10-28) is the first of the Later items.
@@ -83,13 +83,13 @@ Nothing below blocks go-live.
 
 Added 2026-11-12. Every agent runs as a named identity inside an OS container, reaches tools and credentials only through a local gateway, and leaves an audit trail. Requirements, acceptance criteria and the abuse tests (AT-nn) are in [harness-requirements.md](product/harness-requirements.md); the shape is [ADR-004](decisions/adr-004-core-companion-process.md). Milestones are in dependency and risk order. H0 to H3 are the MVP. H4 depends only on H1 and may run ahead of H2 and H3.
 
-**Gate.** H1 does not start until the first item under "Mike's own checks" below (5 working days as the main window) and every H0 spike have a recorded result. If the 5-day check fails, build H0, H1 and H4 only.
+**Gate.** H1 does not start until every H0 spike has a recorded result. The owner's trial is run on the new tool (decided 2026-11-12): 5 working days with the harness as the main window once H2 lands, which is the last H2 item. If it fails, stop adding features, keep H4, and find out what kept the window closed.
 
 ### 🧪 Harness H0: spikes
 
 Throwaway code under `spikes/`, results written to `docs/decisions/spikes/`. Each result records the commands run and their output.
 
-- [ ] S1 containment: run `cmd /c echo`, then `git status`, `npm install`, `node --test` and `python -m pytest` inside a Microsoft Execution Containers process container, starting from deny-all reads and using learning mode to find the smallest read list. Pass: all run, the list is the workspace, toolchain folders, a temp folder and under 10 named extras, slowdown under 1.3x. Needs a new dependency installed by hand 🔒 Needs owner
+- [ ] S1 containment: run `cmd /c echo`, then `git status`, `npm install`, `node --test` and `python -m pytest` inside a Microsoft Execution Containers process container, starting from deny-all reads and using learning mode to find the smallest read list. Pass: all run, the list is the workspace, toolchain folders, a temp folder and under 10 named extras, slowdown under 1.3x. `@microsoft/mxc-sdk` is a dev dependency since 2026-11-12. First contact passed that day ([result](decisions/spikes/2026-11-12-s1-first-contact.md)): the SDK loads on Windows 11 Home and a contained `cmd /c echo` ran with no admin rights; the toolchain and read-list runs are what is left
 - [ ] S2 loopback: from inside a container, request ports 4273, 3010, 8765 and a test listener; then try a port-scoped loopback rule and a deny-loopback policy with the container proxy. Pass: one configuration blocks the three app ports while a gateway port stays reachable
 - [ ] S3 PTY: `spawnWithPty` from the Node SDK into xterm.js with resize, Ctrl+C, colour and a 10 MB output burst; then Codex and Claude Code inside the container against a stub MCP server. Pass: both usable for a 10-minute task
 - [ ] S4 contracts: write the identity, policy-request and audit-event fields as JSON Schema under `core/schemas/`, and check that a Cedar binding for Node exists. Pass: schemas reviewed by the owner 🔒 Needs owner
@@ -122,7 +122,7 @@ The first thing usable in daily work, and the earliest point to stop. Done when 
 - [ ] Session transcripts with redaction before write and a storage cap
 - [ ] Settings show the scope of each control (global, profile, workspace)
 - [ ] Send an access token to Project Hub when one is configured (the Hub side is a change in its own repo)
-- [ ] A week of the owner's own use recorded: sessions a day, share contained, approvals per session, `npm install` slowdown 🔒 Needs owner
+- [ ] The trial: 5 working days with the harness as the main window, logged in the table under "Mike's own checks", with sessions a day, share contained, approvals per session and `npm install` slowdown 🔒 Needs owner
 
 ### 🚪 Harness H3: MCP gateway and credential broker
 
@@ -202,7 +202,7 @@ Queued by the upstream check (2026-10-22). Each is bigger than a fix.
 
 They decide whether to keep going, per [build-plan.md](product/build-plan.md#when-wed-stop).
 
-- [ ] Use the app as the main window for 5 working days and fill in the log below 🔒 Needs owner
+- [ ] Use the app as the main window for 5 working days and fill in the log below. Run on the harness build once H2 lands (2026-11-12) 🔒 Needs owner
 - [ ] Terminal checked by hand: typing, resize, colors, copy/paste (keys and right-click), and `claude` running in it 🔒 Needs owner
 - [ ] Ad blocking checked by hand on a few ad-heavy sites, and no site you use daily broken by it 🔒 Needs owner
 - [ ] Milestone B and the 2026-10-21 work checked by hand in the real app: open a folder as a workspace, switch away and back (tabs, terminals and conversations follow), Ctrl+K over a page, a file and a terminal, the chat pane beside Files (resize, hide, Ctrl+Shift+L), two named conversations (search, rename, delete), Connections from the status dot, the Git tab on a real repo with a diff open, the Dev tab starting, restarting and stopping a real repo's dev server, the Cron tab's failed-task count, the MCP tab naming Claude Code when it connects and its Agent work rows, and a `terminal_run` from Claude Code that succeeds, one that fails, and one cancelled by closing its tab (`run_status` for each) 🔒 Needs owner
