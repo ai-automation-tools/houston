@@ -13,6 +13,8 @@
 
 Condensed from [requirements.md](../decisions/requirements.md), which has the reasoning for each ranking. This project didn't come through the pipeline's ideate stage, so there's no business plan behind it; the requirements are the source.
 
+This page covers the workbench. The agent harness added on 2026-11-12 has its own requirements, acceptance criteria and Won't list in [harness-requirements.md](harness-requirements.md).
+
 ## Musts
 
 | Story | Accepted when |

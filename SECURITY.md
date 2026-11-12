@@ -7,6 +7,8 @@ vulnerability" under the Security tab). Don't open a public issue for anything t
 could let a web page, an agent or another local process do more than the model below
 allows. Expect an acknowledgement within a week.
 
+The repository has been private since 2026-11-12. If you have access, the route above still applies.
+
 ## What the app promises
 
 The full model, with file references, is in the README's
@@ -33,6 +35,12 @@ security invariants, which every change has to keep. In short:
   terminals' and Cronsole's environment, and sent only to the model's API. The MCP
   token lives in `%APPDATA%\ai-command-center\mcp.json` with owner-only permissions
   and is deleted on quit.
+
+**Not yet promised.** The agent harness planned in
+[ADR-004](docs/decisions/adr-004-core-companion-process.md) (agents as identities in OS
+containers, an MCP gateway, a vault, an audit log) is not built. Nothing above changes
+until it ships, and its own threat model is in
+[harness-requirements.md](docs/product/harness-requirements.md).
 
 ## Secret scanning
 

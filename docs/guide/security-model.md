@@ -13,6 +13,8 @@
 
 The rules every change has to keep are in [AGENTS.md](../../AGENTS.md)'s security invariants. To report a problem, see [SECURITY.md](../../SECURITY.md).
 
+This page is the app as it runs today. The agent harness (identities, OS containers, a gateway, a vault, audit) is planned in [ADR-004](../decisions/adr-004-core-companion-process.md) and not built; what the spikes showed a container can and cannot do is in the [spike results](../decisions/spikes/2026-11-12-h0-spike-results.md).
+
 ## Web pages
 
 - Browser tabs are sandboxed. Their only preloads are the extension-API ones, which act only on `chrome-extension://` pages, and, with ad blocking on, Ghostery's cosmetic-filter preload, which asks the main process for the CSS that hides ad slots.
