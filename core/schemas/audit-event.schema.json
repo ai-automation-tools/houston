@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "houston-core/audit-event/v0.1",
+  "title": "Audit event",
+  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). One JSON line per allowed or denied action. Readers must ignore fields they do not know, so no object here is closed. Never holds a secret value or full arguments: only a clipped preview and a hash.",
+  "type": "object",
+  "required": ["schema", "event_id", "time", "type", "identity", "session_id", "action", "resource", "decision", "audit"],
+  "properties": {
+    "schema": { "const": "houston.audit/v0.1" },
+    "event_id": { "type": "string" },
+    "time": { "type": "string", "format": "date-time" },
+    "type": {
+      "enum": ["session.start", "session.end", "file.denied", "egress.connect", "mcp.list_tools", "mcp.tool_call", "command.run", "credential.inject", "approval.requested", "approval.decided", "grant.change", "identity.lifecycle", "policy.publish", "log.deleted", "core.start", "core.stop"]
+    },
+    "profile": { "type": "string" },
+    "identity": {
+      "type": "object",
+      "required": ["subject"],
+      "properties": {
+        "subject": { "description": "Identity id, e.g. 'local:dev-codex'.", "type": "string" },
+        "actor_chain": { "description": "Parent identities, outermost first, for a sub-agent.", "type": "array", "items": { "type": "string" } },
+        "containment": { "enum": ["container", "restricted-token", "unconfined"] }
+      }
+    },
+    "session_id": { "type": ["string", "null"] },
+    "parent_session_id": { "type": ["string", "null"] },
+    "action": { "type": "string" },
+    "resource": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" },
+        "args_hash": { "type": "string" },
+        "args_preview": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["result", "policy_version"],
+      "properties": {
+        "result": { "enum": ["allow", "ask", "deny"] },
+        "policy_version": { "type": "string" },
+        "policy_ids": { "type": "array", "items": { "type": "string" } },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "approved_by": { "description": "Set when an 'ask' was answered.", "type": ["string", "null"] }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["ok", "error", "blocked", "timeout"] },
+        "duration_ms": { "type": "number" },
+        "error_code": { "type": ["string", "null"] },
+        "result_bytes": { "type": "integer" },
+        "result_hash": { "type": "string" }
+      }
+    },
+    "audit": {
+      "description": "The hash chain. hash = SHA-256 over prev_hash and this event's canonical JSON without the 'audit.hash' field.",
+      "type": "object",
+      "required": ["seq", "prev_hash", "hash"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "prev_hash": { "type": "string" },
+        "hash": { "type": "string" }
+      }
+    }
+  }
+}

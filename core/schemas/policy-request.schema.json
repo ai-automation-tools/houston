@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "houston-core/policy-request/v0.1",
+  "title": "Policy request and decision",
+  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). The one question every enforcement point asks the Core, and its answer. The request is Cedar's (principal, action, resource, context) shape, so a Cedar engine can replace the grant table without touching callers. Validate a request against #/$defs/request and a decision against #/$defs/decision.",
+  "oneOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/decision" }],
+  "$defs": {
+    "entityRef": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": { "type": { "type": "string" }, "id": { "type": "string" } }
+    },
+    "request": {
+      "type": "object",
+      "required": ["principal", "action", "resource", "context"],
+      "additionalProperties": false,
+      "properties": {
+        "principal": { "description": "{ type: 'Identity', id: 'local:dev-codex' }", "$ref": "#/$defs/entityRef" },
+        "action": { "description": "'<area>.<verb>'.", "enum": ["file.read", "file.write", "file.list", "net.connect", "tool.list", "tool.call", "command.run", "secret.use", "session.start", "session.spawn"] },
+        "resource": { "description": "{ type: 'File' | 'Host' | 'Tool' | 'Command' | 'Secret' | 'Session', id }", "$ref": "#/$defs/entityRef" },
+        "context": {
+          "type": "object",
+          "required": ["session_id", "attended"],
+          "properties": {
+            "session_id": { "type": "string" },
+            "parent_session_id": { "type": ["string", "null"] },
+            "workspace": { "type": "string" },
+            "attended": { "description": "False for a scheduled run: every 'ask' becomes 'deny'.", "type": "boolean" },
+            "standing_grant_id": { "type": ["string", "null"] },
+            "args_preview": { "description": "Clipped and redacted; never a secret value.", "type": "string", "maxLength": 500 }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["decision", "policy_version", "determining_policies", "reasons"],
+      "additionalProperties": false,
+      "properties": {
+        "decision": { "enum": ["allow", "ask", "deny"] },
+        "policy_version": { "description": "Hash of the grant table the decision was made against.", "type": "string" },
+        "determining_policies": { "description": "Grant ids that produced the answer. Empty means the default deny.", "type": "array", "items": { "type": "string" } },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "approval_id": { "description": "Set when decision is 'ask'.", "type": ["string", "null"] }
+      }
+    }
+  }
+}

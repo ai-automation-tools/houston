@@ -1,6 +1,6 @@
 # Spike S1, first contact: Execution Containers load and run on Windows 11 Home
 
-**Date:** 2026-11-12 · **Status:** partial. S1 stays open on the [roadmap](../../ROADMAP.md#agent-harness) until the toolchain runs below are done.
+**Date:** 2026-11-12 · **Status:** superseded the same day by the [full results](2026-11-12-h0-spike-results.md), which cover the toolchain, file-policy and loopback runs this page left open.
 **Serves:** [ADR-004](../adr-004-core-companion-process.md), requirement SEC-04
 
 ## The question
