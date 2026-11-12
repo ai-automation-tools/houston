@@ -141,19 +141,28 @@ test('start creates the folder and the database, and a second Core on it is refu
 test('the entry point exits 2 while another process holds the lock, and a killed Core leaves none behind', async (t) => {
   const dir = tmp(t);
   const env = { ...process.env, HOUSTON_CORE_DATA: dir };
-  const first = spawn(process.execPath, [MAIN], { env, stdio: ['ignore', 'pipe', 'inherit'] });
+  const first = spawn(process.execPath, [MAIN], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => first.kill());
-  const line = await new Promise((resolve) => first.stdout.once('data', (d) => resolve(String(d))));
+  let err = '';
+  first.stderr.on('data', (d) => { err += d; });
+  const line = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no core.start in 20 s; stderr: ${err}`)), 20_000);
+    first.stdout.once('data', (d) => { clearTimeout(timer); resolve(String(d)); });
+    first.once('exit', (code) => { clearTimeout(timer); reject(new Error(`the Core exited ${code}: ${err}`)); });
+  });
   assert.equal(JSON.parse(line).event, 'core.start');
   // It serves the Control API, named in control.json.
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'control.json'), 'utf8')).pipe, JSON.parse(line).pipe);
   assert.deepEqual(await callControl(dir, 'session.list', {}, { timeoutMs: 5000 }), []);
 
-  const second = spawnSync(process.execPath, [MAIN], { env, encoding: 'utf8' });
-  assert.equal(second.status, 2);
+  const second = spawnSync(process.execPath, [MAIN], { env, encoding: 'utf8', timeout: 20_000 });
+  assert.equal(second.status, 2, `second Core: ${second.error?.message ?? ''} ${second.stdout} ${second.stderr}`);
   assert.match(second.stderr, /already running/);
 
   first.kill();
-  await new Promise((resolve) => first.once('exit', resolve));
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`the Core did not exit in 20 s; stderr: ${err}`)), 20_000);
+    first.once('exit', () => { clearTimeout(timer); resolve(undefined); });
+  });
   start(dir).close();
 });
