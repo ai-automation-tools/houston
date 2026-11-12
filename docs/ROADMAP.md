@@ -113,7 +113,7 @@ One identity, one contained shell, one audit line. Done when AT-01 to AT-04, AT-
 - [ ] Identity registry with one hand-created agent identity and its lifecycle states
 - [ ] `abuse/` suite harness with AT-01 to AT-04, AT-12, AT-14, AT-16
 - [ ] Start the Core at logon through a hidden Scheduled Task; a `docs/guide/` page for it
-- [ ] Require passing CI checks before a merge to `main` (branch protection): nothing on GitHub stopped #17 merging with its tests failing on 2026-11-12 🔒 Needs owner
+- [x] Require passing CI checks before a merge to `main` (branch protection): nothing on GitHub stopped #17 merging with its tests failing on 2026-11-12 — 2026-11-12; the owner added `test (ubuntu-latest)`, `test (windows-latest)` and `audit` as required checks to the repo's "Require a pull request" ruleset, no bypass. Renaming the CI job or its OS list changes those names, so update the ruleset in the same change
 
 ### 🪟 Harness H2: first slice in the window
 
