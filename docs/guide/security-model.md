@@ -13,7 +13,7 @@
 
 The rules every change has to keep are in [AGENTS.md](../../AGENTS.md)'s security invariants. To report a problem, see [SECURITY.md](../../SECURITY.md).
 
-This page is the app as it runs today. The agent harness (identities, OS containers, a gateway, a vault, audit) is planned in [ADR-004](../decisions/adr-004-core-companion-process.md) and partly built under [`core/`](../../core/README.md) (audit log, policy check, launch defaults, egress proxy), with nothing starting an agent yet; what the spikes showed a container can and cannot do is in the [spike results](../decisions/spikes/2026-11-12-h0-spike-results.md).
+This page is the app as it runs today. The agent harness (identities, OS containers, a gateway, a vault, audit) is planned in [ADR-004](../decisions/adr-004-core-companion-process.md) and partly built under [`core/`](../../core/README.md) (audit log, policy check, launch defaults, egress proxy, session runner, Control API), with the window starting no agent yet; what the spikes showed a container can and cannot do is in the [spike results](../decisions/spikes/2026-11-12-h0-spike-results.md).
 
 ## Web pages
 

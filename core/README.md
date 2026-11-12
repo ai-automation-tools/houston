@@ -1,7 +1,7 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, and starts contained sessions on a terminal behind an egress proxy.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, starts contained sessions on a terminal behind an egress proxy, and takes orders from the operator over a named pipe.</em>
 </p>
 
 <p align="center">
@@ -18,18 +18,19 @@ The Core is a plain Node 24 process, separate from the Electron app ([ADR-004](.
 npm run core        # or: node core/main.js
 ```
 
-It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between and the number of audit chain breaks) and then waits. Ctrl+C stops it. A second copy started on the same data folder exits with code 2 and says the Core is already running.
+It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between, the number of audit chain breaks and the Control API's pipe) and then serves the [Control API](#-control-api). Ctrl+C stops every session and then the Core. Session temp folders go under `HOUSTON_SESSION_TEMP`, or `%ProgramData%\houston-core\sessions`: they can't be in the user profile, which sessions are denied. A second copy started on the same data folder exits with code 2 and says the Core is already running.
 
 ## 📁 What's here
 
 | File | What it does |
 |:---|:---|
-| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log and writes `core.start`, then holds the process open. `start(dir)` is the same thing as a function, for tests. |
+| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log and writes `core.start`, then starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
+| [**control.js**](control.js) | The Control API on a named pipe: `session.start`, `session.stop`, `session.list`, `stop.all`, `audit.query`, each request with the token from `control.json`. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
@@ -49,7 +50,9 @@ Not here yet: the log has no size cap and no rotation. One file grows until a br
 
 It sits under the user profile on purpose. A session container is denied the profile, so an agent cannot read the database or, later, the vault. Abuse test AT-01 will check that. Don't point `HOUSTON_CORE_DATA` at a folder any identity is granted.
 
-The folder holds `core.db` (plus its `-wal` file while the Core runs) and the `audit\` folder.
+The folder holds `core.db` (plus its `-wal` file while the Core runs), the `audit\` folder and, while the Core runs, `control.json`.
+
+**Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on a folder you chose with `HOUSTON_CORE_DATA` are kept.
 
 ## 🔒 Single-instance lock
 
@@ -289,9 +292,64 @@ session row: {"end_reason":"stopped"}    temp folder left: false    leftover pro
 
 Closing the terminal prints `Error: AttachConsole failed` from node-pty's console-list helper on stderr. It is noise: the session still ends cleanly.
 
+## 🎛️ Control API
+
+[`control.js`](control.js) is how the operator's client drives the Core. Houston's client comes in H2; until then [`callControl`](control.js) is the client, for tests and scripts.
+
+```js
+import { callControl } from './core/control.js';
+const s = await callControl(dataDir, 'session.start', { identity: 'local:dev-shell', workspace: 'D:\\work\\app', command: 'cmd.exe /d /q /k' });
+await callControl(dataDir, 'stop.all');
+```
+
+A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start. One JSON object per line each way: a request `{ id, token, method, params }`, an answer `{ id, result }` or `{ id, error: { code, message } }`. Several requests can share a connection; each answer carries its request's id.
+
+| Method | Params | Result |
+|:---|:---|:---|
+| `session.start` | `identity`, `workspace`, `command`; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
+| `session.stop` | `id` | `{ reason, exitCode }` |
+| `session.list` | none | the running sessions |
+| `stop.all` | none | `{ stopped }`, the number stopped |
+| `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
+
+Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `refused` (the runner said no, with its reason), `internal`.
+
+Until the window can show a terminal (H2), nothing reads a session's output over the pipe, so the Core drains it; a session started this way is for commands whose result is their exit code, which `audit.query` returns in `session.end`.
+
+**Who can call it.** Three layers:
+
+1. **The pipe's ACL.** Node can't set one, so the pipe has Windows' default: full control for the operator, SYSTEM and administrators, and read-only for everyone else, which can't send a request. A contained process can't open a host pipe at all (spike S3).
+2. **The token.** Every request carries a 32-byte random token, new at every start, compared in constant time. A wrong or missing one gets `unauthorized`, a `control.denied` audit event, and a closed connection.
+3. **The data folder.** The pipe name and the token are in `control.json` in the data folder, which the Core restricts to the operator and SYSTEM at every start ([below](#-data-folder)). Every session is denied that folder too.
+
+Requests are capped at 1 MB. `control.json` is deleted when the Core stops; after a crash it is stale until the next start replaces it.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-control.mjs`](../spikes/h1-control.mjs), against the real `node core/main.js`:
+
+```text
+core.start: pipe \\.\pipe\houston-core-<random>
+session.list: 4 running
+wrong token: {"id":1,"error":{"code":"unauthorized","message":"bad or missing token"}}
+stop.all: {"stopped":2} in 155 ms; then session.list: 0
+contained shell writes to the Core pipe: exit 1
+contained shell reads control.json: exit 1
+audit: 1 control.denied (wrong token), 4 session.end
+--- pipe ACL ---
+Everyone: Allow Read, Synchronize
+NT AUTHORITY\ANONYMOUS LOGON: Allow Read, Synchronize
+NT AUTHORITY\SYSTEM: Allow 2032127
+BUILTIN\Administrators: Allow 2032127
+<machine>\<operator>: Allow 2032127
+--- data folder ACL ---
+NT AUTHORITY\SYSTEM:(OI)(CI)(F)
+<machine>\<operator>:(OI)(CI)(F)
+```
+
+`2032127` is full control. The first run found the data folder readable by a local `CodexSandboxUsers` group, inherited from `%LOCALAPPDATA%`; that is why the Core now sets the folder's ACL itself.
+
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

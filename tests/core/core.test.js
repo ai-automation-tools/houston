@@ -7,7 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CoreLockedError, migrate, openDb } from '../../core/db.js';
 import { MIGRATIONS } from '../../core/migrations.js';
-import { dataDir, start } from '../../core/main.js';
+import { callControl } from '../../core/control.js';
+import { dataDir, sessionTemp, start } from '../../core/main.js';
 
 const MAIN = fileURLToPath(new URL('../../core/main.js', import.meta.url));
 const NOW = '2026-01-01T00:00:00Z';
@@ -106,6 +107,25 @@ test('dataDir: the override wins and must be absolute, then LOCALAPPDATA, then t
   assert.equal(dataDir({ HOUSTON_CORE_DATA: '  ' }), path.join(os.homedir(), '.houston-core'));
 });
 
+test('sessionTemp: the override wins and must be absolute, then ProgramData', () => {
+  const abs = path.resolve('session-temp');
+  assert.equal(sessionTemp({ HOUSTON_SESSION_TEMP: ` ${abs} `, ProgramData: 'P' }), abs);
+  assert.throws(() => sessionTemp({ HOUSTON_SESSION_TEMP: 'rel' }), /absolute/);
+  assert.equal(sessionTemp({ ProgramData: 'P' }), path.join('P', 'houston-core', 'sessions'));
+});
+
+test('start makes the data folder the operator\'s alone', (t) => {
+  const dir = path.join(tmp(t), 'core');
+  start(dir).close();
+  if (process.platform !== 'win32') return assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+  const acl = spawnSync('icacls', [dir], { encoding: 'utf8' }).stdout.replace(dir, '');
+  // No inherited entries, and no group: only the operator and SYSTEM, each with full control.
+  assert.doesNotMatch(acl, /\(I\)/);
+  assert.doesNotMatch(acl, /Administrators|Users|Everyone|Authenticated/i);
+  assert.match(acl, /NT AUTHORITY\\SYSTEM:\(OI\)\(CI\)\(F\)/);
+  assert.equal(acl.split('\n').filter((l) => /:\(OI\)\(CI\)\(F\)/.test(l)).length, 2);
+});
+
 test('start creates the folder and the database, and a second Core on it is refused until the first closes', (t) => {
   const dir = path.join(tmp(t), 'nested', 'core');
   const core = start(dir);
@@ -125,6 +145,9 @@ test('the entry point exits 2 while another process holds the lock, and a killed
   t.after(() => first.kill());
   const line = await new Promise((resolve) => first.stdout.once('data', (d) => resolve(String(d))));
   assert.equal(JSON.parse(line).event, 'core.start');
+  // It serves the Control API, named in control.json.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'control.json'), 'utf8')).pipe, JSON.parse(line).pipe);
+  assert.deepEqual(await callControl(dir, 'session.list', {}, { timeoutMs: 5000 }), []);
 
   const second = spawnSync(process.execPath, [MAIN], { env, encoding: 'utf8' });
   assert.equal(second.status, 2);
