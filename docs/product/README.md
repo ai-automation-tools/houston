@@ -13,6 +13,7 @@
 | Document | What's inside |
 |:---|:---|
 | [**🎯 spec.md**](spec.md) | Six must stories with acceptance criteria, the shoulds, the Won't list, and the non-functional targets. |
+| [**🛡️ harness-requirements.md**](harness-requirements.md) | The agent harness: 54 requirements with stable IDs across identities, containment, the MCP gateway, secrets, audit, schedules and the feed, with acceptance criteria and 16 abuse tests. |
 | [**🧱 build-plan.md**](build-plan.md) | Six slices in risk order (all but the last done), and the two points where the build should stop. |
 
 ---
