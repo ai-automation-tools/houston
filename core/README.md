@@ -1,12 +1,12 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database and keeps a hash-chained audit log.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log and answers policy checks.</em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H1-8B5CF6?style=for-the-badge" alt="Milestone: Harness H1">
-  <img src="https://img.shields.io/badge/schema-v1-2ea44f?style=for-the-badge" alt="Schema v1">
+  <img src="https://img.shields.io/badge/schema-v2-2ea44f?style=for-the-badge" alt="Schema v2">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -28,6 +28,8 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
+| [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
+| [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
 
 Tests are in [`tests/core/`](../tests/core/) and run with `npm test`.
@@ -52,12 +54,12 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v1
+## 🧱 Schema v2
 
 | Table | Holds |
 |:---|:---|
 | `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner. A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
-| `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow` or `ask`. No row means deny. |
+| `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end. |
 
 The enums are `CHECK` constraints, so a bad row is refused by the database whatever code wrote it. Audit events are not in the database: they go to JSON-lines files, described below.
@@ -98,9 +100,60 @@ The claim is tamper-evident against an agent, not tamper-proof against the opera
 
 `log.events()` gives every good event oldest first, and `log.exportTo(file)` writes them to one JSON-lines file and returns the breaks, so a reader knows what the export is missing. Events the Core writes about itself (`core.start`, `core.stop`, `audit.break`) use the subject `local:core`.
 
+## ⚖️ Policy
+
+[`policy.js`](policy.js) answers one question: may this identity do this to that? A request has the shape in [`policy-request.schema.json`](schemas/policy-request.schema.json), and the answer is `allow`, `ask` or `deny` with the grant ids that decided it, the reasons, and the policy version.
+
+```js
+check(db, {
+  principal: { type: 'Identity', id: 'local:dev-codex' },
+  action: 'file.read',
+  resource: { type: 'File', id: 'D:\\work\\app\\.env' },
+  context: { session_id, attended: true },
+}, { globals });
+// { decision: 'deny', determining_policies: ['env'], reasons: ['explicit deny'], policy_version: '3f0c…', approval_id: null }
+```
+
+The order, from the [scope rules](../docs/product/harness-requirements.md#scope-rules):
+
+1. **The identity** must exist, be `active` and not have expired.
+2. **A global deny** wins over every grant. `globalDenies()` lists them: the Core's data folder, other profiles' folders, and credential stores under the profile (`.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, the GitHub CLI's folder, `.git-credentials`, `_netrc`, DPAPI keys, Credential Manager and the Windows vault).
+3. **An explicit deny grant** wins over any allow or ask, however narrow.
+4. **The narrowest allow or ask** decides: the pattern with the most literal characters. On a tie, `ask` beats `allow`.
+5. **Nothing matches:** deny.
+
+An unattended run (`attended: false`) turns every `ask` into `deny`. An expired grant is ignored, and so is an allow whose expiry date doesn't parse; a deny whose date doesn't parse keeps denying. A deny grant whose pattern can't be read denies the request rather than being skipped.
+
+| Resource | Pattern | Example |
+|:---|:---|:---|
+| `file:` | An absolute path. `*` is one name, `**` any depth; `dir/**` also covers `dir`. Case-insensitive | `file:D:/work/**`, `file:D:/work/**/.env` |
+| `net:` | `host:port`. `*` is any run of labels or any port; `*.example.com` is not `example.com` | `net:api.openai.com:443` |
+| `tool:`, `secret:`, `session:` | `*` is one `/` part, `**` anything. Case-sensitive | `tool:github/*` |
+| `command:` | `*` is anything. Case-sensitive. Only as strong as whatever runs the command | `command:git push*` |
+
+The permission must match the action exactly: `file.read` needs a `read` grant, and `write` does not imply `read`.
+
+`policy_version` is a hash of every grant row and the global denies, so any change gives a new version. An `ask` has no `approval_id` yet; the approval inbox (H2) adds it.
+
+### Paths
+
+[`paths.js`](paths.js) gives every Windows path one spelling before it is compared: drive letter upper case, forward slashes, `.` and `..` resolved, and compared case-folded. It **refuses** a path that could name a different file than it seems to, and the request is denied:
+
+| Refused | Why |
+|:---|:---|
+| `\\server\share`, `\\localhost\C$`, `\\?\UNC\…` | Network paths can reach a local drive by another name |
+| `\\?\Volume{…}`, `\\?\GLOBALROOT\…` | Device paths. `\\?\C:\…` and `\\.\C:\…` are accepted and stripped |
+| `file.txt:stream`, `::$DATA` | Alternate data streams |
+| A name ending in a dot or a space | Win32 strips them, so `.ssh.` is `.ssh` |
+| `NUL`, `CON`, `COM1.txt` and the rest | Device names, in any folder |
+| `PROGRA~1`, `SSHKEY~1.PUB` | 8.3 aliases. A real long name of exactly that shape is refused too |
+| Relative and drive-relative paths (`work`, `\\work`, `D:work`) | The answer would depend on the current folder |
+
+`resolvePath()` also follows the disk: junctions, symlinks, `subst` drives and 8.3 aliases are resolved for the part of the path that exists. Whoever hands the policy a path an agent supplied should pass it through `resolvePath` first. The container policy is still what stops a read through a junction; this keeps the gateway's answer the same as the container's.
+
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the policy check, launch policy defaults, the egress proxy, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): launch policy defaults, the egress proxy, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

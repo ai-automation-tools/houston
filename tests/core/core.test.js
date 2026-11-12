@@ -85,7 +85,17 @@ test('a grant needs a real identity, a typed resource and a known effect', () =>
   grant('g1', 'local:me', 'file:D:/work/app/**', 'allow');
   assert.throws(() => grant('g2', 'local:nobody', 'file:D:/work', 'allow'), /FOREIGN KEY/);
   assert.throws(() => grant('g3', 'local:me', 'D:/work', 'allow'), /CHECK/);
-  assert.throws(() => grant('g4', 'local:me', 'file:D:/work', 'deny'), /CHECK/);
+  assert.throws(() => grant('g4', 'local:me', 'file:D:/work', 'maybe'), /CHECK/);
+  grant('g5', 'local:me', 'file:D:/work/.env', 'deny');
+});
+
+test('schema v2 keeps the grants a v1 database already had', () => {
+  const db = openDb(':memory:');
+  migrate(db, MIGRATIONS.slice(0, 1));
+  db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at) VALUES ('local:me', 'operator', 'Me', 'unconfined', '${NOW}');
+    INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES ('g1', 'local:me', 'file:D:/w/**', 'read', 'ask', '${NOW}', 'local:me');`);
+  assert.deepEqual(migrate(db), { from: 1, to: MIGRATIONS.length });
+  assert.equal(db.prepare('SELECT effect FROM grants').get().effect, 'ask');
 });
 
 test('dataDir: the override wins and must be absolute, then LOCALAPPDATA, then the home folder', () => {
