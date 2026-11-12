@@ -29,7 +29,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
-| [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels to the hosts a session's policy allows, and only to public addresses. |
+| [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
@@ -200,33 +200,36 @@ launchRequest({ ...spec, proxyPort: proxy.port });
 ```
 
 - **One proxy per session.** A connection's identity is the port it arrived on, so there is no header, token or client name to trust. The gateway (H3) will serve its MCP endpoint on the same port: every origin-form request (`POST /mcp`) goes to `fallback`.
-- **HTTPS only, through `CONNECT`.** A plain-HTTP proxy request gets a 403.
+- **HTTPS through `CONNECT`; plain HTTP only as `GET` or `HEAD`.** A plain request goes to the checked address with hop-by-hop headers (`Proxy-Authorization` among them) dropped both ways, no body, and a 64 MB cap on the response. `POST`, `PUT` and the rest get a 405, so a listed plain-HTTP host can't be sent data.
 - **The list is by name; the address is checked too.** After the policy allows `host:port`, the proxy resolves the name and refuses the tunnel if any address is loopback, private, link-local, multicast, documentation, CGNAT or IPv4-mapped. The tunnel goes to the address it checked. Without this the proxy, which runs outside the container, would be the way round the container's loopback and LAN block.
-- **Only `allow` opens a tunnel.** `ask`, a thrown check or an odd answer is a 403: nobody can answer an approval card in the middle of a TLS handshake.
-- **One event per decision**, of type `egress.connect`, with the host, port, decision, reason and, when allowed, the address. Wiring it to the audit log comes with the runner.
+- **Only `allow` lets traffic through.** `ask`, a thrown check or an odd answer is a 403: nobody can answer an approval card in the middle of a TLS handshake.
+- **One event per decision**, of type `egress.connect`, with the host, port, scheme (`https` or `http`), method for plain HTTP, decision, reason and, when allowed, the address. Wiring it to the audit log comes with the runner.
 
 Listens on `127.0.0.1` only. `close()` ends open tunnels too.
 
-Checked on this machine on 2026-11-12 with [`spikes/h1-egress-proxy.mjs`](../spikes/h1-egress-proxy.mjs) (allow-list: `registry.npmjs.org:443`, plus `127.0.0.1:4273` and `localhost:4273` so the address rule has to stop those):
+**Revocation lists.** Windows' own TLS (schannel: `curl.exe`, PowerShell's web cmdlets) fetches certificate revocation lists over plain HTTP before it trusts a certificate, and fails without them. So a session's policy names those hosts as `net:<host>:80` grants (Google's are `c.pki.goog` and `o.pki.goog`), and the proxy forwards plain `GET` and `HEAD` to them. A first run showed `curl.exe` failing with `CRYPT_E_REVOCATION_OFFLINE` before this was added.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-egress-proxy.mjs`](../spikes/h1-egress-proxy.mjs) (list: `registry.npmjs.org:443`, `c.pki.goog:80`, `o.pki.goog:80`, plus `127.0.0.1:4273` and `localhost:4273` so the address rule has to stop those):
 
 ```text
-curl allowed host              proxy allow, then 3x deny c.pki.goog:80 (plain HTTP)   exit 35 CRYPT_E_REVOCATION_OFFLINE
-curl allowed host, --ssl-no-revoke   allow                                           HTTP 200
+curl allowed host              allow, then 3x allow c.pki.goog:80 (revocation list)   HTTP 200
 curl other host                deny example.com:443 (not on the allow-list)           CONNECT tunnel failed, response 403
 node fetch allowed host        allow                                                  HTTP 200
-curl plain http                deny example.com:80 (plain HTTP is not proxied)        HTTP 403
+curl plain http, not listed    deny example.com:80 (not on the allow-list)            HTTP 403
+curl POST to a listed http host  deny (plain HTTP POST is not proxied)                HTTP 405
+powershell -Proxy, allowed     allow                                                  200
 curl https://127.0.0.1:4273    deny (loopback address)                                CONNECT tunnel failed, response 403
 curl https://localhost:4273    deny (resolves to ::1,127.0.0.1)                       CONNECT tunnel failed, response 403
 curl --noproxy "*"             (never reaches the proxy)                              Failed to connect
 ```
 
-**Windows' own TLS needs plain HTTP for revocation.** `curl.exe`, PowerShell's web cmdlets and anything else on schannel fetch certificate revocation lists over plain HTTP before trusting a certificate, and fail when they can't. Node and the agent CLIs don't. Until that is decided (a roadmap item), schannel tools need `--ssl-no-revoke` or their equivalent inside a session.
+Windows PowerShell ignores `HTTPS_PROXY`; it needs `-Proxy $env:HTTPS_PROXY`. PowerShell 7 reads the variable.
 
 `launchRequest` sets `NODE_USE_ENV_PROXY=1` whenever there is a proxy port, so Node's own `fetch` uses the `HTTP_PROXY` and `HTTPS_PROXY` the container sets.
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): how schannel tools check revocation, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): denial capture, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

@@ -16,9 +16,10 @@ fs.rmSync(ROOT, { recursive: true, force: true });
 const WS = path.join(ROOT, 'ws'); const TMP = path.join(ROOT, 'tmp');
 fs.mkdirSync(WS, { recursive: true }); fs.mkdirSync(TMP, { recursive: true });
 
-// The list: one public host, plus a loopback address and a name that resolves to loopback, so
-// the address rule (not the list) has to stop those two.
-const ALLOW = ['registry.npmjs.org:443', '127.0.0.1:4273', 'localhost:4273'];
+// The list: one public host and its certificate issuer's revocation hosts (plain HTTP), plus a
+// loopback address and a name that resolves to loopback, so the address rule (not the list)
+// has to stop those two.
+const ALLOW = ['registry.npmjs.org:443', 'c.pki.goog:80', 'o.pki.goog:80', '127.0.0.1:4273', 'localhost:4273'];
 const proxy = await startEgressProxy({
   check: ({ host, port }) => ({ decision: ALLOW.includes(`${host}:${port}`) ? 'allow' : 'deny' }),
   onEvent: (e) => console.log(`  proxy: ${e.decision} ${e.host}:${e.port} (${e.reason}${e.address ? `, ${e.address}` : ''})`),
@@ -34,11 +35,12 @@ const curl = (url, flags = '') => `curl.exe -sS ${flags} -o NUL -w "HTTP %{http_
 const probes = [
   ['proxy variables', 'cmd /d /c set | findstr /i "_proxy"'],
   ['curl allowed host', curl('https://registry.npmjs.org/')],
-  // Windows' own TLS (schannel) checks revocation over plain HTTP, which the proxy refuses; without that check:
-  ['curl allowed host, no revocation check', curl('https://registry.npmjs.org/', '--ssl-no-revoke')],
   ['curl other host', curl('https://example.com/')],
   ['node fetch allowed host', `node -e "fetch('https://registry.npmjs.org/').then(r=>console.log('HTTP',r.status),e=>console.log('ERR',e.cause?.code??e.message))"`],
-  ['curl plain http', curl('http://example.com/')],
+  ['curl plain http, not listed', curl('http://example.com/')],
+  ['curl plain http POST, listed host', curl('http://c.pki.goog/', '-X POST -d x')],
+  // Windows PowerShell ignores HTTPS_PROXY; it takes the proxy only as -Proxy.
+  ['powershell allowed host', 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -Command "(Invoke-WebRequest -UseBasicParsing -Proxy $env:HTTPS_PROXY https://registry.npmjs.org/).StatusCode"'],
   ['curl loopback through proxy', curl('https://127.0.0.1:4273/', '-k')],
   ['curl localhost through proxy', curl('https://localhost:4273/', '-k')],
   ['curl around the proxy', curl('https://registry.npmjs.org/', '--noproxy "*"')],
