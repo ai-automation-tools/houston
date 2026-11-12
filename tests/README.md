@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-240%2B-2ea44f?style=for-the-badge" alt="240+ tests">
+  <img src="https://img.shields.io/badge/tests-290%2B-2ea44f?style=for-the-badge" alt="290+ tests">
   <img src="https://img.shields.io/badge/runner-node_--test-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="node --test">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>

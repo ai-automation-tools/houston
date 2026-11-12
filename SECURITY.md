@@ -38,8 +38,9 @@ security invariants, which every change has to keep. In short:
 
 **Not yet promised.** The agent harness planned in
 [ADR-004](docs/decisions/adr-004-core-companion-process.md) (agents as identities in OS
-containers, an MCP gateway, a vault, an audit log) is not built. Nothing above changes
-until it ships, and its own threat model is in
+containers, an MCP gateway, a vault, an audit log) is partly built under `core/`: the audit
+log, the policy check, the container launch defaults and the egress proxy exist and are
+tested, but nothing starts an agent with them yet. Nothing above changes until it ships, and its own threat model is in
 [harness-requirements.md](docs/product/harness-requirements.md).
 
 ## Secret scanning
