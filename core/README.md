@@ -18,13 +18,13 @@ The Core is a plain Node 24 process, separate from the Electron app ([ADR-004](.
 npm run core        # or: node core/main.js
 ```
 
-It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between, the number of audit chain breaks and the Control API's pipe) and then serves the [Control API](#-control-api). Ctrl+C stops every session and then the Core. Session temp folders go under `HOUSTON_SESSION_TEMP`, or `%ProgramData%\houston-core\sessions`: they can't be in the user profile, which sessions are denied. A second copy started on the same data folder exits with code 2 and says the Core is already running.
+It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between, the number of audit chain breaks and the Control API's pipe) and then, on Windows, serves the [Control API](#-control-api); elsewhere (CI on Linux) there are no containers, so it only holds its lock and prints `pipe: null`. Ctrl+C stops every session and then the Core. Session temp folders go under `HOUSTON_SESSION_TEMP`, or `%ProgramData%\houston-core\sessions`: they can't be in the user profile, which sessions are denied. A second copy started on the same data folder exits with code 2 and says the Core is already running.
 
 ## 📁 What's here
 
 | File | What it does |
 |:---|:---|
-| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log and writes `core.start`, then starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
+| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log and writes `core.start`, then, on Windows, starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
@@ -47,6 +47,8 @@ Not here yet: the log has no size cap and no rotation. One file grows until a br
 | 1 | `HOUSTON_CORE_DATA`, if set. It must be an absolute path. |
 | 2 | `%LOCALAPPDATA%\houston-core` |
 | 3 | `~/.houston-core`, when there is no `LOCALAPPDATA` (CI on Linux) |
+
+The Core uses the folder's long, final spelling (`realpathSync.native`): the path rules refuse 8.3 names, and a `TEMP` like `C:\Users\RUNNER~1\...` on CI has them.
 
 It sits under the user profile on purpose. A session container is denied the profile, so an agent cannot read the database or, later, the vault. Abuse test AT-01 will check that. Don't point `HOUSTON_CORE_DATA` at a folder any identity is granted.
 
