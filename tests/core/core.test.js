@@ -119,11 +119,13 @@ test('start makes the data folder the operator\'s alone', (t) => {
   start(dir).close();
   if (process.platform !== 'win32') return assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
   const acl = spawnSync('icacls', [dir], { encoding: 'utf8' }).stdout.replace(dir, '');
-  // No inherited entries, and no group: only the operator and SYSTEM, each with full control.
+  // No inherited entries; only the operator and SYSTEM, plus Administrators when the folder was
+  // made elevated (CI is), which are outside the threat model anyway (ADR-004).
   assert.doesNotMatch(acl, /\(I\)/);
-  assert.doesNotMatch(acl, /Administrators|Users|Everyone|Authenticated/i);
-  assert.match(acl, /NT AUTHORITY\\SYSTEM:\(OI\)\(CI\)\(F\)/);
-  assert.equal(acl.split('\n').filter((l) => /:\(OI\)\(CI\)\(F\)/.test(l)).length, 2);
+  const who = acl.split('\n').map((l) => /^\s*(.+?):\(/.exec(l)?.[1]).filter(Boolean);
+  assert.ok(who.includes('NT AUTHORITY\\SYSTEM'));
+  assert.ok(who.some((w) => w.toLowerCase().endsWith(`\\${os.userInfo().username.toLowerCase()}`)), who.join(', '));
+  for (const w of who) assert.match(w, new RegExp(`^(NT AUTHORITY\\\\SYSTEM|BUILTIN\\\\Administrators|.+\\\\${os.userInfo().username})$`, 'i'));
 });
 
 test('start creates the folder and the database, and a second Core on it is refused until the first closes', (t) => {

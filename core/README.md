@@ -52,7 +52,7 @@ It sits under the user profile on purpose. A session container is denied the pro
 
 The folder holds `core.db` (plus its `-wal` file while the Core runs), the `audit\` folder and, while the Core runs, `control.json`.
 
-**Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on a folder you chose with `HOUSTON_CORE_DATA` are kept.
+**Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on the folder are kept: one you chose with `HOUSTON_CORE_DATA` may have some on purpose, and a folder made by an elevated process carries one for Administrators, who are outside the threat model anyway ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)).
 
 ## 🔒 Single-instance lock
 
