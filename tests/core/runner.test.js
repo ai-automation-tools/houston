@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -8,7 +9,7 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
-import { RunnerError, compileGrants, createRunner, markInterrupted } from '../../core/runner.js';
+import { RunnerError, compileGrants, containerName, createRunner, listBrokers, markInterrupted } from '../../core/runner.js';
 
 const WIN = process.platform === 'win32';
 // Workspaces can't sit in the user profile (launch.js refuses them), and the system temp folder
@@ -101,6 +102,9 @@ test('start: a contained session on a PTY, recorded in the database and the audi
   assert.ok(request.filesystem.readonlyPaths.includes('C:\\Program Files\\nodejs'));
   assert.ok(request.filesystem.deniedPaths.includes('C:\\Users'));
   assert.deepEqual(request.network, { egress: { default: 'deny' } });
+  // Named after the session, so a restarted Core can find it (AT-16).
+  assert.match(request.containerName, /^[0-9a-f]{32}$/);
+  assert.equal(request.containerName, containerName(session.id));
   const temp = request.environment.TEMP;
   assert.ok(fs.existsSync(temp));
 
@@ -110,6 +114,7 @@ test('start: a contained session on a PTY, recorded in the database and the audi
   assert.equal(started.decision.result, 'allow');
   assert.deepEqual(started.decision.policy_ids, ['ws']);
   assert.deepEqual(started.launch.network, { proxy: false });
+  assert.equal(started.launch.container, request.containerName);
   assert.ok(started.launch.denied.includes('C:\\Users'));
   assert.deepEqual(s.runner.list().map((x) => x.id), [session.id]);
   // The session's streams are the terminal's, taken before wait() started.
@@ -206,19 +211,66 @@ test('stopAll stops every live session', { skip: !WIN && 'the Core is Windows on
   assert.deepEqual(s.runner.list(), []);
 });
 
-test('markInterrupted closes sessions a dead Core left open (AT-16)', (t) => {
+/** A database with sessions in it, and an audit log. @param {import('node:test').TestContext} t @param {[string, string | null][]} sessions [id, end_reason] */
+function deadCore(t, sessions) {
   const db = openDb(':memory:');
   migrate(db);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-int-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const audit = openAudit(dir);
   t.after(() => audit.close());
-  db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at) VALUES ('local:me', 'operator', 'Me', 'unconfined', 'x');
-    INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at) VALUES ('open', 'local:me', 'D:/w', 'container', 1, 'v', 'x');
-    INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, ended_at, end_reason) VALUES ('done', 'local:me', 'D:/w', 'container', 1, 'v', 'x', 'y', 'exit 0');`);
-  assert.deepEqual(markInterrupted(db, audit), ['open']);
-  assert.equal(db.prepare("SELECT end_reason FROM sessions WHERE id = 'open'").get().end_reason, 'interrupted');
-  assert.equal(db.prepare("SELECT end_reason FROM sessions WHERE id = 'done'").get().end_reason, 'exit 0');
-  assert.deepEqual([...audit.events()].map((e) => [e.type, e.session_id, e.outcome.error_code]), [['session.end', 'open', 'interrupted']]);
-  assert.deepEqual(markInterrupted(db, audit), []);
+  db.exec("INSERT INTO identities (id, kind, display_name, containment, created_at) VALUES ('local:me', 'operator', 'Me', 'unconfined', 'x')");
+  const add = db.prepare("INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, ended_at, end_reason) VALUES (?, 'local:me', 'D:/w', 'container', 1, 'v', 'x', ?, ?)");
+  for (const [id, reason] of sessions) add.run(id, reason && 'y', reason);
+  const ends = () => [...audit.events()].map((e) => [e.session_id, e.outcome.error_code, e.decision.reasons[0]]);
+  return { db, audit, ends };
+}
+
+test('markInterrupted ends a dead Core\'s containers and closes its sessions (AT-16)', (t) => {
+  const [running, gone, stuck, done] = Array.from({ length: 4 }, () => crypto.randomUUID());
+  const s = deadCore(t, [[running, null], [gone, null], [stuck, null], [done, 'exit 0']]);
+  const killed = [];
+  const brokers = () => [
+    { pid: 11, containerId: containerName(running) },
+    { pid: 12, containerId: containerName(stuck) },
+    { pid: 13, containerId: containerName(done) },   // a finished session's name: not touched
+    { pid: 14, containerId: 'someone-elses' },
+    { pid: 15, containerId: null },
+  ];
+  const kill = (pid) => {
+    if (pid === 12) throw Object.assign(new Error('Access is denied'), { code: 'EPERM' });
+    killed.push(pid);
+  };
+  assert.deepEqual(markInterrupted(s.db, s.audit, { brokers, kill }).sort(), [running, gone, stuck].sort());
+  assert.deepEqual(killed, [11]);
+  const reason = (id) => s.db.prepare('SELECT end_reason FROM sessions WHERE id = ?').get(id).end_reason;
+  assert.deepEqual([running, gone, stuck, done].map(reason), ['interrupted', 'interrupted', 'interrupted', 'exit 0']);
+  const ends = new Map(s.ends().map(([id, code, why]) => [id, [code, why]]));
+  assert.deepEqual(ends.get(running), ['interrupted', 'ended its container']);
+  assert.deepEqual(ends.get(gone), ['interrupted', 'no container was running']);
+  assert.deepEqual(ends.get(stuck), ['interrupted', 'could not end its container (pid 12: Access is denied)']);
+  assert.equal(ends.has(done), false);
+  // Already closed: nothing to do, and the process list isn't read.
+  assert.deepEqual(markInterrupted(s.db, s.audit, { brokers: () => assert.fail('listed') }), []);
+});
+
+test('markInterrupted still closes the sessions when the process list can\'t be read, and says so', (t) => {
+  const id = crypto.randomUUID();
+  const s = deadCore(t, [[id, null]]);
+  assert.deepEqual(markInterrupted(s.db, s.audit, { brokers: () => { throw new Error('no CIM'); } }), [id]);
+  assert.deepEqual(s.ends(), [[id, 'interrupted', 'could not check for its container: no CIM']]);
+});
+
+test('markInterrupted: a broker that exited between the listing and the kill counts as ended', (t) => {
+  const id = crypto.randomUUID();
+  const s = deadCore(t, [[id, null]]);
+  const kill = () => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); };
+  markInterrupted(s.db, s.audit, { brokers: () => [{ pid: 9, containerId: containerName(id) }], kill });
+  assert.deepEqual(s.ends(), [[id, 'interrupted', 'ended its container']]);
+});
+
+test('listBrokers reads the real process list', { skip: !WIN && 'the Core is Windows only' }, () => {
+  const all = listBrokers();
+  assert.ok(Array.isArray(all));
+  for (const b of all) assert.ok(Number.isInteger(b.pid));
 });
