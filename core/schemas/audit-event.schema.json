@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "houston-core/audit-event/v0.1",
   "title": "Audit event",
-  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). One JSON line per allowed or denied action. Readers must ignore fields they do not know, so no object here is closed. Never holds a secret value or full arguments: only a clipped preview and a hash.",
+  "description": "v0.1 (2026-11-12, spike S4; shape accepted by the owner the same day). Field names may still change before H1 freezes them. One JSON line per allowed or denied action. Readers must ignore fields they do not know, so no object here is closed. Never holds a secret value or full arguments: only a clipped preview and a hash.",
   "type": "object",
   "required": ["schema", "event_id", "time", "type", "identity", "session_id", "action", "resource", "decision", "audit"],
   "properties": {

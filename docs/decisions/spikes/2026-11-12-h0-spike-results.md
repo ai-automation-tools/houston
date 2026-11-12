@@ -1,6 +1,6 @@
 # Harness H0 spikes S1 to S5: results
 
-**Date:** 2026-11-12 · **Status:** S2 passed. S1 and S5 passed in part. S3 passed its scripted half. S4 is drafted and waits for the owner.
+**Date:** 2026-11-12 · **Status:** closed. S2, S3 and S4 passed; S1 and S5 passed in part. The owner accepted the slowdown and the schemas on 2026-11-12, and ADR-004's containment decision is confirmed.
 **Serves:** [ADR-004](../adr-004-core-companion-process.md), [harness requirements](../../product/harness-requirements.md) · **Earlier:** [S1 first contact](2026-11-12-s1-first-contact.md)
 
 Containment works on this machine and the plan holds. Six findings change how H1 to H3 must be built; they are listed under [What this changes](#what-this-changes).
@@ -9,8 +9,8 @@ Containment works on this machine and the plan holds. Six findings change how H1
 |:---|:---|:---|
 | S1 containment | All five commands run, short grant list, slowdown under 1.3x | Commands run on a list of 5 paths. **Slowdown bar missed**: 1.15x to 1.96x. Learning mode is unavailable |
 | S2 loopback | One configuration blocks the three app ports and leaves a gateway port open | **Pass**, with the container proxy setting. Port rules do not filter loopback |
-| S3 terminal | Terminal works; Codex and Claude Code usable for a 10-minute task | Terminal half passes. Both CLIs start in a container. The signed-in 10-minute task was not run |
-| S4 contracts | Schemas reviewed by the owner | Three draft schemas written; Cedar's Node binding works. Waiting for review |
+| S3 terminal | Terminal works; Codex and Claude Code usable for a 10-minute task | **Pass**, with a caveat. Terminal works; both CLIs, signed in, finished a coding task in a container. Each took about 1.4 minutes, not 10, and ran headless |
+| S4 contracts | Schemas reviewed by the owner | **Pass.** Three schemas written and accepted by the owner; Cedar's Node binding works |
 | S5 secrets | The Core reads the secret, the container cannot | The container cannot read the file. **It can decrypt the blob if it ever gets the bytes** |
 
 ## Machine and method
@@ -169,7 +169,26 @@ codex --version, its folder granted read-only                     exit 0: codex-
   WARNING: could not create PATH aliases: Access is denied. at "%USERPROFILE%\.codex\tmp\..."
 ```
 
-Both programs and their sign-in files live inside the user profile. **Not run:** a signed-in 10-minute task for each against a stub MCP server, and drawing in xterm.js. Running them means granting an agent's container access to its own credential folder, which is the owner's decision to make the first time.
+Both programs and their sign-in files live inside the user profile.
+
+**Signed in, doing real work.** `node spikes/s3c-cli-task.mjs claude` and `... codex`. The owner approved granting each CLI its own config folder for this test. The container gets the workspace, a temp folder, the toolchain, the CLI's program folder read-only and its config folder read and write; the rest of the user profile is denied. Network is internet only, with loopback and the LAN blocked. Each CLI runs headless with its own permission prompts off, because the container is the boundary under test. The task: write a markdown table formatter with at least 8 tests, make the tests pass, write a CLI and a README, commit, then call the stub MCP server's one tool and save what it returns.
+
+| | Claude Code 2.1.322 | Codex 0.167.2 |
+|:---|:---|:---|
+| Exit | 0 | 0 |
+| Time | 1.4 min | 1.3 min |
+| Tests, rerun on the host afterwards | 12 pass, 0 fail | 10 pass, 0 fail |
+| Commit | `tablefmt` | `tablefmt` |
+| Stub MCP call logged by the server | `stamp {"note":"finished"}` | `stamp {"note":"finished"}` |
+| `RESULT.md` | `RECEIPT-8-7Q` | `RECEIPT-8-7Q` |
+
+- Both finished every step. Git warned that it could not read its config under the denied profile and carried on.
+- **Codex must be started from its native program.** Through the Node wrapper it fails with `EPERM: lstat 'C:\Users'`, the same parent-folder walk as in S1.
+- **Claude Code needs `CLAUDE_CONFIG_DIR` set to its config folder.** Its main config file normally sits beside that folder, in the profile root, which the container cannot see. With the variable set it creates a fresh one inside the folder. User settings were skipped (`--setting-sources project`) so the owner's hooks did not run in the container.
+- Codex loaded the owner's own MCP server list and one of them, on `localhost`, failed to connect. That is the loopback block from S2 doing its job, and it means a backend's manifest must replace the MCP list, not add to it.
+- Codex ran PowerShell 7 from `C:\Program Files`, which was not on the grant list. Program folders that Windows already opens to app containers are readable without a grant.
+
+**Not shown:** ten minutes of use, and drawing in xterm.js. Both tasks were done in under two minutes and ran without a person at a terminal. The first contained session in the window (H2) is where that gets exercised.
 
 ## S4: contracts
 
@@ -217,10 +236,12 @@ Container (exit 0):
 
 Smaller notes: start containers with a clean `PATH` that puts `System32` first, since the SDK shells out to `whoami`; a same-container dev server is unreachable over loopback under the default policy.
 
-## Left for the owner
+## Owner decisions
 
-- **Accept or reject the slowdown** (1.15x to 1.96x against a 1.3x bar).
-- **Review the three schemas** and the three differences listed under S4.
-- **Run the signed-in 10-minute tasks** for Claude Code and Codex in a container, or say that their credential folders may be granted for that test.
-- **Telemetry consent** for Execution Containers is still unanswered.
-- **Mark ADR-004's containment decision confirmed**, or ask for a fallback, once the above are settled.
+Answered by the owner on 2026-11-12, recorded in [OPEN-QUESTIONS.md](../../OPEN-QUESTIONS.md):
+
+- **The slowdown is accepted** (1.15x to 1.96x against a 1.3x bar). ADR-004's containment decision is confirmed.
+- **The schemas are accepted**, with the `ask` decision value, no tenant field and `local:<slug>` ids.
+- **A test container may be granted the two CLIs' config folders.** Used for the signed-in runs above and nothing else.
+
+Still open: **telemetry consent** for Execution Containers. Nobody has answered it; every run here left telemetry off.

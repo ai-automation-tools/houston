@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "houston-core/identity/v0.1",
   "title": "Harness identity",
-  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). One principal the Core can launch or serve: the operator, an agent, a sub-agent, a service or an MCP server. Field names follow the org's agent-inventory v0.1 format where it has one (id, kind, displayName, owner, status, createdAt, lastUsedAt, grants). Secret values never appear here.",
+  "description": "v0.1 (2026-11-12, spike S4; shape accepted by the owner the same day). Field names may still change before H1 freezes them. One principal the Core can launch or serve: the operator, an agent, a sub-agent, a service or an MCP server. Field names follow the org's agent-inventory v0.1 format where it has one (id, kind, displayName, owner, status, createdAt, lastUsedAt, grants). Secret values never appear here.",
   "type": "object",
   "required": ["id", "kind", "displayName", "owner", "status", "containment", "createdAt", "grants"],
   "additionalProperties": false,

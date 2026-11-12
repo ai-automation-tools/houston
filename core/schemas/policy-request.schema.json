@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "houston-core/policy-request/v0.1",
   "title": "Policy request and decision",
-  "description": "DRAFT v0.1 (2026-11-12, spike S4, awaiting owner review). The one question every enforcement point asks the Core, and its answer. The request is Cedar's (principal, action, resource, context) shape, so a Cedar engine can replace the grant table without touching callers. Validate a request against #/$defs/request and a decision against #/$defs/decision.",
+  "description": "v0.1 (2026-11-12, spike S4; shape accepted by the owner the same day). Field names may still change before H1 freezes them. The one question every enforcement point asks the Core, and its answer. The request is Cedar's (principal, action, resource, context) shape, so a Cedar engine can replace the grant table without touching callers. Validate a request against #/$defs/request and a decision against #/$defs/decision.",
   "oneOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/decision" }],
   "$defs": {
     "entityRef": {
