@@ -14,9 +14,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { OPERATOR, RegistryError } from './identities.js';
 import { RunnerError } from './runner.js';
 
-export const METHODS = ['session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query'];
+export const METHODS = [
+  'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
+  'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
+  'grant.add', 'grant.remove',
+];
 const MAX_LINE = 1024 * 1024;
 
 export class ControlError extends Error {
@@ -75,10 +80,12 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
 /**
  * Start the Control API and write control.json (pipe name and token) into the data folder.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, audit: ReturnType<typeof import('./audit.js').openAudit> }} opts
+ * Every caller holds the operator's token, so every call acts as the operator.
+ *
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit> }} opts
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, audit }) {
+export async function startControl({ dir, runner, registry, audit }) {
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
   /** @type {Set<net.Socket>} */
@@ -107,7 +114,26 @@ export async function startControl({ dir, runner, audit }) {
     'session.list': () => runner.list(),
     'stop.all': async () => ({ stopped: (await runner.stopAll()).length }),
     'audit.query': (p) => queryAudit(audit, p),
+
+    'identity.list': (p) => registry.list({ status: p.status }),
+    'identity.get': (p) => registry.get(str(p.id, 'id')),
+    'identity.create': (p) => registry.create(p, OPERATOR),
+    'identity.activate': (p) => registry.setStatus(str(p.id, 'id'), 'active', OPERATOR, p.reason),
+    // Suspending or retiring also stops the identity's running sessions.
+    // ponytail: a session.start already past the runner's status check still starts; stop it with session.stop.
+    'identity.suspend': (p) => deactivate(str(p.id, 'id'), 'suspended', p.reason),
+    'identity.retire': (p) => deactivate(str(p.id, 'id'), 'retired', p.reason),
+    'grant.add': (p) => registry.addGrant(p, OPERATOR),
+    'grant.remove': (p) => registry.removeGrant(str(p.id, 'id'), OPERATOR),
   };
+
+  /** @param {string} id @param {'suspended' | 'retired'} to @param {string} [reason] */
+  async function deactivate(id, to, reason) {
+    const identity = registry.setStatus(id, to, OPERATOR, reason);
+    const mine = runner.list().filter((s) => s.identity === id);
+    await Promise.all(mine.map((s) => runner.get(s.id)?.stop()));
+    return { identity, stopped: mine.length };
+  }
 
   /** @param {net.Socket} sock @param {object} msg */
   const send = (sock, msg) => { if (!sock.destroyed) sock.write(`${JSON.stringify(msg)}\n`); };
@@ -139,7 +165,7 @@ export async function startControl({ dir, runner, audit }) {
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }

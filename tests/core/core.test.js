@@ -133,6 +133,7 @@ test('start creates the folder and the database, and a second Core on it is refu
   const core = start(dir);
   assert.deepEqual(core.schema, { from: 0, to: MIGRATIONS.length });
   assert.ok(fs.existsSync(path.join(dir, 'core.db')));
+  assert.deepEqual(core.db.prepare('SELECT id, kind, status FROM identities').all().map((r) => ({ ...r })), [{ id: 'local:operator', kind: 'operator', status: 'active' }]);
   assert.throws(() => start(dir), CoreLockedError);
   core.close();
   const again = start(dir);

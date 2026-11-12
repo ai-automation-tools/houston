@@ -1,13 +1,19 @@
 import test from 'node:test';
+import { execFile } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
 import { METHODS, callControl, queryAudit, startControl } from '../../core/control.js';
+import { migrate, openDb } from '../../core/db.js';
+import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
 import { RunnerError } from '../../core/runner.js';
+
+const CTL = fileURLToPath(new URL('../../core/ctl.js', import.meta.url));
 
 /** A fake runner that records what it was asked. */
 function fakeRunner() {
@@ -38,7 +44,11 @@ async function setup(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-ctl-'));
   const audit = openAudit(path.join(dir, 'audit'));
   const runner = fakeRunner();
-  const control = await startControl({ dir, runner, audit });
+  const db = openDb(':memory:');
+  migrate(db);
+  ensureOperator(db, audit);
+  const registry = createRegistry({ db, audit });
+  const control = await startControl({ dir, runner, registry, audit });
   t.after(async () => { await control.close(); audit.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
   return { dir, audit, runner, control, call };
@@ -149,4 +159,52 @@ test('audit.query filters, keeps the newest, and says when it cut', async (t) =>
     await assert.rejects(s.call('audit.query', bad), (e) => e.code === 'bad_request');
   }
   assert.equal(queryAudit(s.audit, {}).truncated, false);
+});
+
+test('identities and grants over the pipe; suspending or retiring stops that identity\'s sessions only', async (t) => {
+  const s = await setup(t);
+  const made = await s.call('identity.create', { id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell' });
+  assert.deepEqual([made.status, made.owner], ['draft', OPERATOR]);
+  await assert.rejects(s.call('identity.create', { id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Again' }), (e) => e.code === 'conflict');
+  await assert.rejects(s.call('identity.create', { id: 'nope', kind: 'ai-agent', displayName: 'X' }), (e) => e.code === 'bad_request');
+  await assert.rejects(s.call('identity.get', { id: 'local:nobody' }), (e) => e.code === 'not_found');
+
+  const g = await s.call('grant.add', { identity: 'local:dev-shell', resource: 'file:D:/work/**', permission: 'write' });
+  assert.equal((await s.call('identity.get', { id: 'local:dev-shell' })).grants[0].id, g.id);
+  assert.equal((await s.call('identity.activate', { id: 'local:dev-shell' })).status, 'active');
+  assert.deepEqual((await s.call('identity.list', { status: 'active' })).map((i) => i.id), ['local:dev-shell', OPERATOR]);
+
+  await s.call('session.start', { identity: 'local:dev-shell', workspace: 'D:\\work', command: 'c' });
+  await s.call('session.start', { identity: 'local:dev-shell', workspace: 'D:\\work', command: 'c' });
+  await s.call('session.start', { identity: 'local:other', workspace: 'D:\\work', command: 'c' });
+  const suspended = await s.call('identity.suspend', { id: 'local:dev-shell', reason: 'checking' });
+  assert.deepEqual([suspended.identity.status, suspended.stopped], ['suspended', 2]);
+  assert.deepEqual((await s.call('session.list')).map((x) => x.identity), ['local:other']);
+  await s.call('identity.activate', { id: 'local:dev-shell' });
+  const retired = await s.call('identity.retire', { id: 'local:dev-shell' });
+  assert.deepEqual([retired.identity.status, retired.stopped], ['retired', 0]);
+  await assert.rejects(s.call('identity.activate', { id: 'local:dev-shell' }), (e) => e.code === 'conflict');
+  await assert.rejects(s.call('grant.add', { identity: 'local:dev-shell', resource: 'file:D:/w/**', permission: 'read' }), (e) => e.code === 'conflict');
+  assert.equal((await s.call('grant.remove', { id: g.id })).id, g.id);
+  await assert.rejects(s.call('grant.remove', { id: g.id }), (e) => e.code === 'not_found');
+
+  const changes = (await s.call('audit.query', { type: 'identity.lifecycle' })).events.map((e) => `${e.resource.id} ${e.lifecycle.from}->${e.lifecycle.to}`);
+  assert.deepEqual(changes, [`${OPERATOR} null->active`, 'local:dev-shell null->draft', 'local:dev-shell draft->active', 'local:dev-shell active->suspended', 'local:dev-shell suspended->active', 'local:dev-shell active->retired']);
+  assert.deepEqual((await s.call('audit.query', { type: 'grant.change' })).events.map((e) => e.action), ['grant.add', 'grant.remove']);
+});
+
+test('ctl.js calls the API from the command line, with key=value or JSON params', async (t) => {
+  const s = await setup(t);
+  const ctl = (...args) => new Promise((resolve) => {
+    execFile(process.execPath, [CTL, ...args], { env: { ...process.env, HOUSTON_CORE_DATA: s.dir } }, (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout, stderr }));
+  });
+  const made = await ctl('identity.create', 'id=local:cli', 'kind=ai-agent', 'displayName=From the CLI', 'tags=["a","b"]');
+  assert.equal(made.code, 0, made.stderr);
+  assert.deepEqual(((x) => [x.id, x.displayName, x.tags])(JSON.parse(made.stdout)), ['local:cli', 'From the CLI', ['a', 'b']]);
+  const got = await ctl('identity.get', '{"id":"local:cli"}');
+  assert.equal(JSON.parse(got.stdout).status, 'draft');
+  const bad = await ctl('identity.get', 'local:cli');
+  assert.deepEqual([bad.code, bad.stderr.trim()], [1, "error: 'local:cli' is not key=value"]);
+  const missing = await ctl('identity.get', 'id=local:nobody');
+  assert.deepEqual([missing.code, missing.stderr.trim()], [1, 'not_found: no identity local:nobody']);
 });

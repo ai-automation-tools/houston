@@ -110,6 +110,7 @@ test('start: a contained session on a PTY, recorded in the database and the audi
 
   const row = s.db.prepare('SELECT * FROM sessions WHERE id = ?').get(session.id);
   assert.deepEqual([row.identity_id, row.attended, row.ended_at], ['local:dev', 1, null]);
+  assert.equal(s.db.prepare("SELECT last_used_at FROM identities WHERE id = 'local:dev'").get().last_used_at, session.startedAt);
   const started = s.events().find((e) => e.type === 'session.start');
   assert.equal(started.decision.result, 'allow');
   assert.deepEqual(started.decision.policy_ids, ['ws']);

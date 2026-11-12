@@ -81,4 +81,9 @@ export const MIGRATIONS = [
   ALTER TABLE grants_v2 RENAME TO grants;
   CREATE INDEX grants_by_identity ON grants (identity_id);
   `,
+
+  // v3: one operator per database (one operator, one machine).
+  `
+  CREATE UNIQUE INDEX one_operator ON identities (kind) WHERE kind = 'operator';
+  `,
 ];

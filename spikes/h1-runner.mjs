@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { OPERATOR, createRegistry } from '../core/identities.js';
 import { start } from '../core/main.js';
 import { createRunner } from '../core/runner.js';
 
@@ -19,16 +20,15 @@ fs.writeFileSync(path.join(ROOT, 'outside.txt'), 'not granted\n');
 const home = os.homedir();
 const anon = (s) => String(s).replaceAll(home, '%USERPROFILE%').replaceAll(ROOT, '<root>');
 const core = start(path.join(ROOT, 'core'));
-const at = new Date().toISOString();
-core.db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at, status) VALUES ('local:operator', 'operator', 'Operator', 'unconfined', '${at}', 'active');
-  INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status) VALUES ('local:dev-shell', 'ai-agent', 'Dev shell', 'local:operator', 'container', '${at}', 'active');`);
-const grant = core.db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES (?, 'local:dev-shell', ?, ?, 'allow', ?, 'local:operator')");
-for (const [id, resource, permission] of [
-  ['ws', `file:${WS.replaceAll('\\', '/')}/**`, 'write'],
-  ['node', 'file:C:/Program Files/nodejs/**', 'read'],
-  ['npm-registry', 'net:registry.npmjs.org:443', 'connect'],
-  ['revocation', 'net:c.pki.goog:80', 'connect'],
-]) grant.run(id, resource, permission, at);
+const reg = createRegistry({ db: core.db, audit: core.audit });
+reg.create({ id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell' }, OPERATOR);
+for (const [resource, permission] of [
+  [`file:${WS.replaceAll('\\', '/')}/**`, 'write'],
+  ['file:C:/Program Files/nodejs/**', 'read'],
+  ['net:registry.npmjs.org:443', 'connect'],
+  ['net:c.pki.goog:80', 'connect'],
+]) reg.addGrant({ identity: 'local:dev-shell', resource, permission }, OPERATOR);
+reg.setStatus('local:dev-shell', 'active', OPERATOR);
 
 const runner = createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: path.join(ROOT, 'sessions') });
 const session = await runner.start({
