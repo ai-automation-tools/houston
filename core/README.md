@@ -1,7 +1,7 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks and builds container requests.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, builds container requests and runs the egress proxy.</em>
 </p>
 
 <p align="center">
@@ -29,6 +29,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
+| [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels to the hosts a session's policy allows, and only to public addresses. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
@@ -166,9 +167,10 @@ Each default comes from a [spike result](../docs/decisions/spikes/2026-11-12-h0-
 | Workspace and temp folder outside every denied folder | Node will not run under a denied folder. A program or a CLI's config folder under the profile may still be granted |
 | `PATH` is `System32`, the Windows folder, `Wbem`, then the program folders | The SDK shells out to `whoami`; nothing from the operator's own `PATH` |
 | `TEMP` and `TMP` in the session's temp folder; `PYTHONNOUSERSITE=1` | The profile's temp and per-user site-packages are denied |
+| `NODE_USE_ENV_PROXY=1` when there is a proxy port | Node's own `fetch` ignores `HTTPS_PROXY` without it |
 | No network; or, with `proxyPort`, the container proxy setting | Leaves that one host port reachable and nothing else on the machine or the network |
 
-It refuses a grant that overlaps a global deny (inside it or around it), a whole drive, a backend setting `PATH`, `TEMP`, `TMP` or `PYTHONNOUSERSITE`, and every path [`paths.js`](paths.js) refuses.
+It refuses a grant that overlaps a global deny (inside it or around it), a whole drive, a backend setting `PATH`, `TEMP`, `TMP`, `PYTHONNOUSERSITE` or `NODE_USE_ENV_PROXY`, and every path [`paths.js`](paths.js) refuses.
 
 Checked on this machine on 2026-11-12 with [`spikes/h1-launch-defaults.mjs`](../spikes/h1-launch-defaults.mjs), run from PowerShell with `H1_ROOT` set to a scratch folder outside the profile:
 
@@ -185,9 +187,46 @@ internet         ENOTFOUND
 loopback 4273    EACCES
 ```
 
+## 🚪 Egress proxy
+
+[`egress.js`](egress.js) is a session's only way out. A container launched with `proxyPort` reaches that one host port and nothing else (spike S2), so whatever listens there decides what the session can reach.
+
+```js
+const proxy = await startEgressProxy({
+  check: ({ host, port }) => check(db, { principal, action: 'net.connect', resource: { type: 'Host', id: `${host}:${port}` }, context }),
+  onEvent: (e) => audit.append(/* an egress.connect event */),
+});
+launchRequest({ ...spec, proxyPort: proxy.port });
+```
+
+- **One proxy per session.** A connection's identity is the port it arrived on, so there is no header, token or client name to trust. The gateway (H3) will serve its MCP endpoint on the same port: every origin-form request (`POST /mcp`) goes to `fallback`.
+- **HTTPS only, through `CONNECT`.** A plain-HTTP proxy request gets a 403.
+- **The list is by name; the address is checked too.** After the policy allows `host:port`, the proxy resolves the name and refuses the tunnel if any address is loopback, private, link-local, multicast, documentation, CGNAT or IPv4-mapped. The tunnel goes to the address it checked. Without this the proxy, which runs outside the container, would be the way round the container's loopback and LAN block.
+- **Only `allow` opens a tunnel.** `ask`, a thrown check or an odd answer is a 403: nobody can answer an approval card in the middle of a TLS handshake.
+- **One event per decision**, of type `egress.connect`, with the host, port, decision, reason and, when allowed, the address. Wiring it to the audit log comes with the runner.
+
+Listens on `127.0.0.1` only. `close()` ends open tunnels too.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-egress-proxy.mjs`](../spikes/h1-egress-proxy.mjs) (allow-list: `registry.npmjs.org:443`, plus `127.0.0.1:4273` and `localhost:4273` so the address rule has to stop those):
+
+```text
+curl allowed host              proxy allow, then 3x deny c.pki.goog:80 (plain HTTP)   exit 35 CRYPT_E_REVOCATION_OFFLINE
+curl allowed host, --ssl-no-revoke   allow                                           HTTP 200
+curl other host                deny example.com:443 (not on the allow-list)           CONNECT tunnel failed, response 403
+node fetch allowed host        allow                                                  HTTP 200
+curl plain http                deny example.com:80 (plain HTTP is not proxied)        HTTP 403
+curl https://127.0.0.1:4273    deny (loopback address)                                CONNECT tunnel failed, response 403
+curl https://localhost:4273    deny (resolves to ::1,127.0.0.1)                       CONNECT tunnel failed, response 403
+curl --noproxy "*"             (never reaches the proxy)                              Failed to connect
+```
+
+**Windows' own TLS needs plain HTTP for revocation.** `curl.exe`, PowerShell's web cmdlets and anything else on schannel fetch certificate revocation lists over plain HTTP before trusting a certificate, and fail when they can't. Node and the agent CLIs don't. Until that is decided (a roadmap item), schannel tools need `--ssl-no-revoke` or their equivalent inside a session.
+
+`launchRequest` sets `NODE_USE_ENV_PROXY=1` whenever there is a proxy port, so Node's own `fetch` uses the `HTTP_PROXY` and `HTTPS_PROXY` the container sets.
+
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the egress proxy, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): how schannel tools check revocation, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

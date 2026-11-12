@@ -31,6 +31,8 @@ test('launchRequest: the spike defaults, in the shape the SDK takes', () => {
 });
 
 test('launchRequest: a proxy port gives the one combination that leaves only that port reachable (S2)', () => {
+  assert.equal(launchRequest({ ...BASE, proxyPort: 18080 }).environment.NODE_USE_ENV_PROXY, '1');
+  assert.equal(launchRequest(BASE).environment.NODE_USE_ENV_PROXY, undefined);
   assert.deepEqual(launchRequest({ ...BASE, proxyPort: 18080 }).network, {
     egress: { default: 'deny' }, ingress: { default: 'allow', hostLoopback: 'allow' }, runtimeConfig: { networkProxy: 'http://127.0.0.1:18080' },
   });
@@ -65,6 +67,7 @@ test('launchRequest refuses what would be unsafe or would not start', () => {
     [{ readonly: ['C:\\PROGRA~1\\nodejs'] }, /8.3/],
     [{ env: { PATH: 'C:\\evil' } }, /set by the launch defaults/],
     [{ env: { tmp: 'C:\\x' } }, /set by the launch defaults/],
+    [{ env: { NODE_USE_ENV_PROXY: '0' } }, /set by the launch defaults/],
     [{ env: { 'BAD NAME': 'x' } }, /bad environment name/],
     [{ env: { X: 'a\nb' } }, /one-line string/],
     [{ env: { X: 1 } }, /one-line string/],
