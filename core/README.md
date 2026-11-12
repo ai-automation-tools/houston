@@ -1,12 +1,12 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, starts contained sessions on a terminal behind an egress proxy, and takes orders from the operator over a named pipe.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, keeps a registry of identities and their grants, starts contained sessions on a terminal behind an egress proxy, and takes orders from the operator over a named pipe.</em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H1-8B5CF6?style=for-the-badge" alt="Milestone: Harness H1">
-  <img src="https://img.shields.io/badge/schema-v2-2ea44f?style=for-the-badge" alt="Schema v2">
+  <img src="https://img.shields.io/badge/schema-v3-2ea44f?style=for-the-badge" alt="Schema v3">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -24,13 +24,15 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 
 | File | What it does |
 |:---|:---|
-| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log and writes `core.start`, then, on Windows, starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
+| [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log, writes `core.start`, makes the operator on the first start, then, on Windows, starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
-| [**control.js**](control.js) | The Control API on a named pipe: `session.start`, `session.stop`, `session.list`, `stop.all`, `audit.query`, each request with the token from `control.json`. |
+| [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
+| [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
+| [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
@@ -62,11 +64,11 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v2
+## 🧱 Schema v3
 
 | Table | Holds |
 |:---|:---|
-| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner. A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
+| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end. |
 
@@ -294,6 +296,61 @@ session row: {"end_reason":"stopped"}    temp folder left: false    leftover pro
 
 Closing the terminal prints `Error: AttachConsole failed` from node-pty's console-list helper on stderr. It is noise: the session still ends cleanly.
 
+## 🪪 Identity registry
+
+[`identities.js`](identities.js) is who may act and what they may touch. Each change is an audit event with the policy version it produced: `identity.lifecycle` (with a `lifecycle` field, `{ from, to, reason? }`) or `grant.change` (with the `grant`).
+
+**The operator.** The Core makes `local:operator` at its first start: active, unconfined, owner of everything else. There is one per database (a unique index since schema v3), its status never changes, and it takes no grants.
+
+**The lifecycle**, from [`identity.schema.json`](schemas/identity.schema.json):
+
+| From | Can become |
+|:---|:---|
+| `draft` (every new identity) | `active`, `retired` |
+| `active` | `suspended`, `retired` |
+| `suspended` | `active`, `retired` |
+| `retired` | nothing: final, and the id is never reused |
+
+Only an `active` identity starts a session (the runner checks, and records `lastUsedAt`). Suspending or retiring one over the Control API also stops its running sessions.
+
+**What `create` checks:** an id of `local:` plus a lowercase name; a kind other than `operator`; a display name of 1 to 80 characters; an owner (default: the caller) and a parent that exist and aren't retired, and a parent for a sub-agent; a containment rung (default `container`); an expiry in the future.
+
+**What `addGrant` checks:** a resource of `<type>:<pattern>` whose pattern compiles; a permission that fits the type (`file`: read, write or list; `net`: connect; `tool`: call; `command`: run; `secret`: use; `session`: run or spawn); `allow`, `ask` or `deny`; an identity that isn't retired and isn't the operator. It does not check what a container can enforce: a grant on `C:/Users/**` is accepted, and the launch refuses it with the reason.
+
+**By hand:** [`ctl.js`](ctl.js) calls the running Core's Control API from a terminal, so an identity can be made without the window:
+
+```powershell
+npm run ctl -- identity.create id=local:dev-shell kind=ai-agent displayName="Dev shell"
+npm run ctl -- grant.add identity=local:dev-shell resource=file:D:/work/app/** permission=write
+npm run ctl -- identity.activate id=local:dev-shell
+npm run ctl -- session.start identity=local:dev-shell workspace=D:\work\app command="cmd.exe /d /q /k"
+```
+
+Each argument is `key=value`; a value that parses as JSON (`true`, `3`, `["a","b"]`) is taken as JSON. One JSON object works too.
+
+Checked on this machine on 2026-11-12 with [`spikes/h1-identity.mjs`](../spikes/h1-identity.mjs), which does exactly that against the real Core, with a real contained shell:
+
+```text
+identity.create local:dev-shell              draft, owner local:operator
+session.start while draft                    -> refused: the identity is draft
+grant.add write on the workspace             allow write
+grant.add on the user profile                allow read (the launch refuses it later)
+identity.activate                            active
+session.start while active                   -> refused: C:\Users overlaps a global deny, which no grant overrides
+grant.remove the profile grant               removed file:C:/Users/**
+session.start again                          started
+identity.suspend                             suspended, stopped 1
+session.start while suspended                -> refused: the identity is suspended
+identity.activate                            active
+identity.retire                              retired, stopped 0
+identity.activate after retire               -> conflict: local:dev-shell is retired; it can become nothing else
+identity.create the same id again            -> conflict: local:dev-shell exists (retired: ids are never reused)
+session.start while retired                  -> refused: the identity is retired
+identity.get                                 retired, lastUsedAt set, retiredAt set, 1 grant
+```
+
+Every step, refusals included, is in the audit log: 16 events.
+
 ## 🎛️ Control API
 
 [`control.js`](control.js) is how the operator's client drives the Core. Houston's client comes in H2; until then [`callControl`](control.js) is the client, for tests and scripts.
@@ -313,8 +370,15 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `session.list` | none | the running sessions |
 | `stop.all` | none | `{ stopped }`, the number stopped |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
+| `identity.list` | optional `status` | identities with their grants |
+| `identity.get` | `id` | one identity with its grants |
+| `identity.create` | `id`, `kind`, `displayName`; optional `owner`, `parent`, `purpose`, `backend`, `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
+| `identity.activate` | `id`; optional `reason` | the identity |
+| `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
+| `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
+| `grant.remove` | `id` | the grant removed |
 
-Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `refused` (the runner said no, with its reason), `internal`.
+Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `conflict` (the lifecycle doesn't allow it, or the id exists), `refused` (the runner said no, with its reason), `internal`. Every call acts as the operator: only the operator holds the token.
 
 Until the window can show a terminal (H2), nothing reads a session's output over the pipe, so the Core drains it; a session started this way is for commands whose result is their exit code, which `audit.query` returns in `session.end`.
 
@@ -351,7 +415,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

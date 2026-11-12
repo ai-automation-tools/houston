@@ -9,6 +9,8 @@ import path from 'node:path';
 import { openAudit } from './audit.js';
 import { CoreLockedError, migrate, openDb } from './db.js';
 import { startControl } from './control.js';
+import { createRegistry, ensureOperator } from './identities.js';
+import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 
 /**
@@ -67,6 +69,8 @@ export function start(dir = dataDir()) {
     const audit = openAudit(path.join(dir, 'audit'));
     audit.system('core.start');
     // Sessions a dead Core left open: end any container still running, close the record (AT-16).
+    // The operator owns every other identity, so it exists from the first start.
+    ensureOperator(db, audit);
     const interrupted = markInterrupted(db, audit);
     return { dir, db, schema, audit, interrupted, close: () => { audit.system('core.stop'); audit.close(); db.close(); } };
   } catch (e) {
@@ -99,7 +103,11 @@ if (import.meta.main) {
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() }) : null;
-    const control = runner ? await startControl({ dir: core.dir, runner, audit: core.audit }) : null;
+    const control = runner ? await startControl({
+      dir: core.dir, runner, audit: core.audit,
+      // The same globals the runner uses, so both record the same policy version.
+      registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
+    }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null }));
     let stopping = false;

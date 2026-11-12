@@ -201,6 +201,7 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
     };
     db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt);
+    db.prepare('UPDATE identities SET last_used_at = ? WHERE id = ?').run(startedAt, identity);
     event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch });
 
     /** @param {string} reason @param {number | null} exitCode */

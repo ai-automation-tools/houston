@@ -187,10 +187,11 @@ test('the Core writes core.start and core.stop, and reports a break it finds at 
   const dir = tmp(t);
   start(dir).close();
   const file = seg(path.join(dir, 'audit'));
-  assert.deepEqual(readLines(file).map((l) => JSON.parse(l).type), ['core.start', 'core.stop']);
+  // The first start also makes the operator.
+  assert.deepEqual(readLines(file).map((l) => JSON.parse(l).type), ['core.start', 'identity.lifecycle', 'core.stop']);
   writeLines(file, readLines(file).map((l) => l.replace('core.stop', 'core.nap')));
   const core = start(dir);
-  assert.deepEqual(core.audit.newBreaks.map((b) => b.line), [2]);
+  assert.deepEqual(core.audit.newBreaks.map((b) => b.line), [3]);
   core.close();
   assert.deepEqual(readLines(seg(path.join(dir, 'audit'), 2)).map((l) => JSON.parse(l).type), ['audit.break', 'core.start', 'core.stop']);
 });

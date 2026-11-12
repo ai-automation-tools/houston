@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { OPERATOR, createRegistry } from '../core/identities.js';
 import { start } from '../core/main.js';
 import { containerName, createRunner, listBrokers } from '../core/runner.js';
 
@@ -29,11 +30,10 @@ if (role === 'core') {
   fs.rmSync(ROOT, { recursive: true, force: true });
   fs.mkdirSync(path.join(ROOT, 'ws'), { recursive: true });
   const core = start(path.join(ROOT, 'core'));
-  const at = new Date().toISOString();
-  core.db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at, status) VALUES ('local:operator', 'operator', 'Operator', 'unconfined', '${at}', 'active');
-    INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status) VALUES ('local:dev-shell', 'ai-agent', 'Dev shell', 'local:operator', 'container', '${at}', 'active');`);
-  core.db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES ('ws', 'local:dev-shell', ?, 'write', 'allow', ?, 'local:operator')")
-    .run(`file:${path.join(ROOT, 'ws').replaceAll('\\', '/')}/**`, at);
+  const reg = createRegistry({ db: core.db, audit: core.audit });
+  reg.create({ id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell' }, OPERATOR);
+  reg.addGrant({ identity: 'local:dev-shell', resource: `file:${path.join(ROOT, 'ws').replaceAll('\\', '/')}/**`, permission: 'write' }, OPERATOR);
+  reg.setStatus('local:dev-shell', 'active', OPERATOR);
   core.close();
 
   const ps = (/** @type {string} */ cmd) => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], { encoding: 'utf8', windowsHide: true }).stdout.trim();

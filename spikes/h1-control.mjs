@@ -11,6 +11,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callControl } from '../core/control.js';
+import { OPERATOR, createRegistry } from '../core/identities.js';
 import { start } from '../core/main.js';
 
 if (!process.env.H1_ROOT || !process.env.LOCALAPPDATA) { console.error('Set H1_ROOT to a scratch folder outside your user profile.'); process.exit(1); }
@@ -24,11 +25,10 @@ const anon = (/** @type {string} */ s) => s.replaceAll(process.env.LOCALAPPDATA 
 
 // Seed one contained identity with a workspace, then let the real Core take the database.
 const seed = start(DATA);
-const at = new Date().toISOString();
-seed.db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at, status) VALUES ('local:operator', 'operator', 'Operator', 'unconfined', '${at}', 'active');
-  INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status) VALUES ('local:dev-shell', 'ai-agent', 'Dev shell', 'local:operator', 'container', '${at}', 'active');`);
-seed.db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES ('ws', 'local:dev-shell', ?, 'write', 'allow', ?, 'local:operator')")
-  .run(`file:${WS.replaceAll('\\', '/')}/**`, at);
+const reg = createRegistry({ db: seed.db, audit: seed.audit });
+reg.create({ id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell' }, OPERATOR);
+reg.addGrant({ identity: 'local:dev-shell', resource: `file:${WS.replaceAll('\\', '/')}/**`, permission: 'write' }, OPERATOR);
+reg.setStatus('local:dev-shell', 'active', OPERATOR);
 seed.close();
 
 const main = fileURLToPath(new URL('../core/main.js', import.meta.url));
