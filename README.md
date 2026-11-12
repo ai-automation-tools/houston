@@ -119,7 +119,7 @@ How to contribute: [contributing.md](docs/guide/contributing.md).
 | [**📖 docs/guide/**](docs/guide/README.md) | How to set up and use the app |
 | [**📚 docs/**](docs/README.md) | Roadmap, changelog, design decisions, architecture diagram |
 | [**🧩 src/**](src/README.md) | The app's code |
-| **🛡️ core/** | The harness's Core process. Only its data contracts so far: [`core/schemas/`](core/schemas/) |
+| [**🛡️ core/**](core/README.md) | The harness's Core process. So far it starts, takes a single-instance lock and migrates its SQLite database; the data contracts are in [`core/schemas/`](core/schemas/) |
 | **🧪 spikes/** | Throwaway scripts from the harness spikes. Nothing imports them |
 | [**🧪 tests/**](tests/README.md) | Unit tests and the scripted launch check |
 | **📜 scripts/** | Smoke run, lint, demo build, diagram build, launcher |
