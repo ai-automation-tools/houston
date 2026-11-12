@@ -59,4 +59,26 @@ export const MIGRATIONS = [
     end_reason         TEXT
   ) STRICT;
   `,
+
+  // v2: a grant can be an explicit deny (precedence: global deny, explicit deny, narrowest
+  // allow). SQLite can't change a CHECK in place, so the table is rebuilt.
+  `
+  CREATE TABLE grants_v2 (
+    id            TEXT PRIMARY KEY,
+    identity_id   TEXT NOT NULL REFERENCES identities(id),
+    resource      TEXT NOT NULL CHECK (
+                    resource GLOB 'file:?*' OR resource GLOB 'net:?*' OR resource GLOB 'tool:?*' OR
+                    resource GLOB 'command:?*' OR resource GLOB 'secret:?*' OR resource GLOB 'session:?*'),
+    permission    TEXT NOT NULL CHECK (permission IN ('read', 'write', 'list', 'connect', 'call', 'run', 'use', 'spawn')),
+    effect        TEXT NOT NULL CHECK (effect IN ('allow', 'ask', 'deny')),
+    granted_at    TEXT NOT NULL,
+    granted_by    TEXT NOT NULL,
+    expires_at    TEXT,
+    last_used_at  TEXT
+  ) STRICT;
+  INSERT INTO grants_v2 SELECT * FROM grants;
+  DROP TABLE grants;
+  ALTER TABLE grants_v2 RENAME TO grants;
+  CREATE INDEX grants_by_identity ON grants (identity_id);
+  `,
 ];
