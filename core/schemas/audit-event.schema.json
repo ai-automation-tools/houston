@@ -10,7 +10,7 @@
     "event_id": { "type": "string" },
     "time": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.start", "session.end", "file.denied", "egress.connect", "mcp.list_tools", "mcp.tool_call", "command.run", "credential.inject", "approval.requested", "approval.decided", "grant.change", "identity.lifecycle", "policy.publish", "log.deleted", "core.start", "core.stop"]
+      "enum": ["session.start", "session.end", "file.denied", "egress.connect", "mcp.list_tools", "mcp.tool_call", "command.run", "credential.inject", "approval.requested", "approval.decided", "grant.change", "identity.lifecycle", "policy.publish", "log.deleted", "core.start", "core.stop", "audit.break"]
     },
     "profile": { "type": "string" },
     "identity": {
@@ -56,8 +56,14 @@
         "result_hash": { "type": "string" }
       }
     },
+    "break": {
+      "description": "On an 'audit.break' event: where the chain failed to verify. line is 1-based; 0 means the whole file.",
+      "type": "object",
+      "required": ["segment", "line", "reason"],
+      "properties": { "segment": { "type": "string" }, "line": { "type": "integer", "minimum": 0 }, "reason": { "type": "string" } }
+    },
     "audit": {
-      "description": "The hash chain. hash = SHA-256 over prev_hash and this event's canonical JSON without the 'audit.hash' field.",
+      "description": "The hash chain. hash = SHA-256 over prev_hash and this event's canonical JSON (keys sorted at every level) without the 'audit.hash' field.",
       "type": "object",
       "required": ["seq", "prev_hash", "hash"],
       "properties": {
