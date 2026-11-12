@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/now-Milestone_C-F59E0B?style=for-the-badge" alt="Now: Milestone C">
-  <img src="https://img.shields.io/badge/stage-public_since_2026--10--18-2ea44f?style=for-the-badge" alt="Stage: public since 2026-10-18">
+  <img src="https://img.shields.io/badge/now-Harness_H0-F59E0B?style=for-the-badge" alt="Now: Harness H0">
+  <img src="https://img.shields.io/badge/stage-private_·_harness_build-8B5CF6?style=for-the-badge" alt="Stage: private, harness build">
   <a href="README.md"><img src="https://img.shields.io/badge/↩-docs_home-6B7280?style=for-the-badge" alt="Back to docs"></a>
 </p>
 
@@ -17,7 +17,10 @@ Ordered by what blocks what; [build-plan.md](product/build-plan.md) has the reas
 Markers: `- [ ]` open, `- [-]` claimed by a run in progress, `- [x]` done, `- [!]` blocked (the reason follows on the line). `🔒 Needs owner` marks an item only the owner can do; the routine skips it.
 
 > [!NOTE]
-> **Where we are, 2026-10-28.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is in (2026-10-27). LastPass works, the app is on Electron 45 and the chat on API version `2026-10-21`, all since 2026-10-27, so the upstream queue is empty. The Cron tab's Docs filter (2026-10-28) is the first of the Later items.
+> **Where we are, 2026-11-12.** The repo was re-created private on this date to grow Houston into an agent harness; the earlier public repo is archived as `houston-legacy` with the same history. The new work is the [Agent harness](#agent-harness) milestones H0 to H7, from [harness-requirements.md](product/harness-requirements.md) and [ADR-004](decisions/adr-004-core-companion-process.md). **Next:** the owner's 5-day check below and the H0 spikes; nothing in H1 starts until both report. Going public again is its own gate.
+
+> [!NOTE]
+> **Where we were, 2026-10-28.** Public since 2026-10-18. A project audit on 2026-10-20 added Milestones A to D: A (a trustworthy foundation) and B (a project-centered shell: workspaces, the command palette, the context tray, connections, named conversations, the chat pane) are done. Milestone C has started: the Git changes view (read-only) and dev servers are in. **Next:** its editor ADR is Mike's call and the side-by-side editor waits on it, and the Integrations are all done. Milestone D is under way: managed runs, the activity list, MCP clients by name and browser actions on an attached tab are in; the per-client tool switch was dropped, provider adapters wait on an open question, and run history is in (2026-10-27). LastPass works, the app is on Electron 45 and the chat on API version `2026-10-21`, all since 2026-10-27, so the upstream queue is empty. The Cron tab's Docs filter (2026-10-28) is the first of the Later items.
 
 ## 🧭 Phase 0: decide (done 2026-09-29)
 
@@ -75,6 +78,113 @@ Found using the app on 2026-10-04 and made release gates the same day.
 ## After public release
 
 Nothing below blocks go-live.
+
+### Agent harness
+
+Added 2026-11-12. Every agent runs as a named identity inside an OS container, reaches tools and credentials only through a local gateway, and leaves an audit trail. Requirements, acceptance criteria and the abuse tests (AT-nn) are in [harness-requirements.md](product/harness-requirements.md); the shape is [ADR-004](decisions/adr-004-core-companion-process.md). Milestones are in dependency and risk order. H0 to H3 are the MVP. H4 depends only on H1 and may run ahead of H2 and H3.
+
+**Gate.** H1 does not start until the first item under "Mike's own checks" below (5 working days as the main window) and every H0 spike have a recorded result. If the 5-day check fails, build H0, H1 and H4 only.
+
+### 🧪 Harness H0: spikes
+
+Throwaway code under `spikes/`, results written to `docs/decisions/spikes/`. Each result records the commands run and their output.
+
+- [ ] S1 containment: run `cmd /c echo`, then `git status`, `npm install`, `node --test` and `python -m pytest` inside a Microsoft Execution Containers process container, starting from deny-all reads and using learning mode to find the smallest read list. Pass: all run, the list is the workspace, toolchain folders, a temp folder and under 10 named extras, slowdown under 1.3x. Needs a new dependency installed by hand 🔒 Needs owner
+- [ ] S2 loopback: from inside a container, request ports 4273, 3010, 8765 and a test listener; then try a port-scoped loopback rule and a deny-loopback policy with the container proxy. Pass: one configuration blocks the three app ports while a gateway port stays reachable
+- [ ] S3 PTY: `spawnWithPty` from the Node SDK into xterm.js with resize, Ctrl+C, colour and a 10 MB output burst; then Codex and Claude Code inside the container against a stub MCP server. Pass: both usable for a 10-minute task
+- [ ] S4 contracts: write the identity, policy-request and audit-event fields as JSON Schema under `core/schemas/`, and check that a Cedar binding for Node exists. Pass: schemas reviewed by the owner 🔒 Needs owner
+- [ ] S5 secrets: store and read a secret with DPAPI from Node; from inside a container try to read the blob and to call DPAPI for it. Pass: the Core reads it, the container cannot
+- [ ] Record all five results; mark ADR-004's containment decision confirmed, or open ADR-005 with the fallback
+
+### 🧱 Harness H1: Core skeleton
+
+One identity, one contained shell, one audit line. Done when AT-01 to AT-04, AT-12, AT-14 and AT-16 pass on a real machine and the output is saved.
+
+- [ ] `core/` scaffold: entry point, single-instance lock, SQLite schema v1 with a migrations runner, `core/README.md`, tests wired into `npm test`
+- [ ] Audit module: append, hash chain, verify on start, export; a chain break is reported and logging continues on a new segment
+- [ ] Policy module: grant rows, precedence (global deny, explicit deny, narrowest allow), canonical Windows paths; table-driven tests
+- [ ] Runner: compile a session's grants to a container policy; start with a PTY; stop by closing the container
+- [ ] Control API on a named pipe with an operator-only ACL: `session.start`, `session.stop`, `session.list`, `stop.all`, `audit.query`
+- [ ] Identity registry with one hand-created agent identity and its lifecycle states
+- [ ] `abuse/` suite harness with AT-01 to AT-04, AT-12, AT-14, AT-16
+- [ ] Start the Core at logon through a hidden Scheduled Task; a `docs/guide/` page for it
+
+### 🪟 Harness H2: first slice in the window
+
+The first thing usable in daily work, and the earliest point to stop. Done when the MVP acceptance criteria for launch, approval and logging pass, AT-05, AT-13 and AT-15 pass, and real work has run through a contained Codex and a contained Claude Code session.
+
+- [ ] Core client in the main process; a Connections row for the Core and the containment rung in use
+- [ ] Backend adapter manifests for Codex and Claude Code
+- [ ] Agents panel: identities and running sessions; "start as identity" opens a contained terminal
+- [ ] Approval inbox: allow once, allow for this session, deny; a card shows the exact action, identity and workspace; unanswered cards deny at their timeout
+- [ ] Stop All button and hotkey, always visible
+- [ ] Logs screen over audit events, filtered by identity, session and decision
+- [ ] Session transcripts with redaction before write and a storage cap
+- [ ] Settings show the scope of each control (global, profile, workspace)
+- [ ] Send an access token to Project Hub when one is configured (the Hub side is a change in its own repo)
+- [ ] A week of the owner's own use recorded: sessions a day, share contained, approvals per session, `npm install` slowdown 🔒 Needs owner
+
+### 🚪 Harness H3: MCP gateway and credential broker
+
+The schedule risk. Done when the gateway acceptance criteria pass, AT-06 to AT-08 pass, and the abuse suite shows zero successes in at least 50 attempts across the MVP set.
+
+- [ ] Gateway on loopback: per-session bearer tokens, Host and Origin checks, MCP `2026-07-28` plus the 2025 handshake
+- [ ] MCP server registrations with states discovered, installed, pinned, disabled; the full launch command shown before first run
+- [ ] Start stdio servers in their own containers, each with its own file and network policy
+- [ ] Tool-list pinning by hash; a changed list sets the server to "needs review"
+- [ ] Per-identity tool filtering and one policy check per call: allow, ask, deny; approvals bound to one request id
+- [ ] Vault: secrets stored with DPAPI, injected into server environments at launch, never returned by the Control API
+- [ ] Result handling: redact known secret values, mark results as untrusted content, cap size
+- [ ] Move this app's own MCP server and the Cronsole MCP child behind the gateway
+- [ ] Integrations screen for MCP servers and backends
+
+### ⏰ Harness H4: standing grants and unattended runs
+
+Depends on H1 only. Done when AT-11 passes and one real scheduled job has run contained for 5 nights with correct audit attribution.
+
+- [ ] Standing grants: identity, grant-set hash, budget, expiry; created and edited by the operator only
+- [ ] `harness run --grant <id>` CLI; "ask" means deny; one live session per grant; distinct exit codes for denied, expired and overlapping
+- [ ] Cron tab shows the identity and standing grant each Cronsole task runs under
+- [ ] Move one real nightly job onto it 🔒 Needs owner
+
+### 🪪 Harness H5: profiles and the Identity Center
+
+Done when AT-10 passes, a cross-profile read fails, and suspending an identity ends its session within 5 seconds.
+
+- [ ] Profiles: separate data folders, browser partitions, identities, grants, secrets, MCP registrations, bookmarks and Hub roots; a profile switcher
+- [ ] Identity Center screen: type, owner, attributes, grants, sessions, lifecycle actions, review dates, "what can this identity reach"
+- [ ] Brokered sub-agents through a `delegate` gateway tool: child scope is the intersection, child expiry no later than the parent, depth capped
+- [ ] A quarantine profile preset for trying an untrusted MCP server
+- [ ] Broad-access identities: unconfined, marked wherever they appear, no standing grants unless switched on per identity
+
+### 🔌 Harness H6: integrations and feed
+
+Done when two identities finish a Roundtable conversation with correct attribution, a Promptbook skill is installed and used in a contained session, AT-09 passes, and an advisory for an installed tool shows on the start page.
+
+- [ ] Roundtable seats bound to identities: the gateway sets each server's agent id from the session
+- [ ] Promptbook as the read-only discovery catalogue; discover, install and attach as separate steps
+- [ ] Per-profile skills folder mounted read-only into sessions
+- [ ] Profile memory with provenance and a review queue; unreviewed items are never served
+- [ ] Local model runtime discovery, passed to backends that take a base URL
+- [ ] Feed screen over a local `index.json`: categories with their stated definitions, bookmarks, "add as discovered"
+- [ ] Start-page cards: overnight runs, approvals waiting, feed highlights, advisories for installed tools
+
+### 🧰 Harness H7: hardening and release readiness
+
+- [ ] The full abuse suite as a release gate, run on a real machine with the output saved
+- [ ] The fallback containment rung, labelled "limited containment" wherever a session uses it
+- [ ] Installer and uninstaller; the uninstaller removes every ACL entry and task the app added
+- [ ] Signed updates that refuse unsigned or older packages and never apply while a session runs; one-release rollback
+- [ ] Schema migrations tested from every earlier version; backup before each
+- [ ] Profile export and restore without secrets
+- [ ] Health screen and a local diagnostics bundle
+- [ ] Log retention, deletion and export
+- [ ] Clean install and uninstall checked on a second Windows account 🔒 Needs owner
+- [ ] Decide whether the repo goes public again, after the release checklist 🔒 Needs owner
+
+### Harness, later
+
+Recipes and loops (CORE-12, CORE-13), third-party plugin packages (CORE-21), themes and toolbar customisation (SET-03, SET-05), per-agent Windows accounts, OAuth for remote MCP servers, a placeholder-and-proxy scheme for model credentials, runs while logged off, multi-user and remote access.
 
 ### Extensions
 

@@ -1,7 +1,7 @@
 # AGENTS.md — Houston
 
 Instructions for any agent working in this repo (Codex, opencode, Antigravity and Claude Code, which imports this file from `CLAUDE.md`), including the roadmap routine that runs twice a week.
-Read `docs/ROADMAP.md`, `docs/product/spec.md` and `docs/decisions/` before changing code.
+Read `docs/ROADMAP.md`, `docs/product/spec.md`, `docs/product/harness-requirements.md` and `docs/decisions/` before changing code.
 
 ## What this is
 
@@ -11,8 +11,9 @@ the app exposes, plus a chat pane on the right with named conversations. Workspa
 folder to its tabs, terminals and conversations, Ctrl+K opens a command palette over all of
 it, Connections shows what's working, a read-only Git tab shows the workspace repo's
 changes, a Dev tab starts and stops the workspace's dev servers, and a News tab lists headlines from the feeds `settings.json` names. The sidebar reads Project Hub's
-HTTP API rather than scanning disk. It's a public `ai-automation-tools` project
-(graduated 2026-10-18); the weekly roadmap routine works the items under `## After public release`.
+HTTP API rather than scanning disk. It was a public `ai-automation-tools` project from 2026-10-18; on 2026-11-12 the repo was re-created private to grow it into an agent harness (the old one is archived as `houston-legacy`), and going public again is its own gate. The roadmap routine works the items under `## After public release`, where the `Harness H0` to `H7` milestones now come first.
+
+**The harness.** [ADR-004](docs/decisions/adr-004-core-companion-process.md) adds a companion process, the Core, under `core/`. The Core launches agent CLIs as identities inside OS containers, decides policy, runs the MCP gateway, holds secrets and writes audit. Houston is its client: it shows and asks, and never enforces. `core/` follows the same conventions as `src/` (ES modules, JSDoc types, `node:test`, no bundler). Inside `core/`: `policy` and `audit` import nothing from `runner` or `gateway`, only `vault` touches secret values, and nothing binds beyond `127.0.0.1`.
 
 ## Stack
 
@@ -66,7 +67,7 @@ before anything goes public.
 - **Docs move with code.** Update `docs/guide/`, `README.md`, `src/README.md`, the rest of `docs/` and this file when a change makes them untrue. Keep the root README short: one-line descriptions, commands and tables; detail goes in `docs/guide/`. Every ticked roadmap item gets a `docs/CHANGELOG.md` line in the same commit, tagged with its phase in italics.
 - **Commits:** plain imperative sentences, no Conventional Commit prefixes.
 - **Licence:** GPL-3.0-or-later. A new runtime dependency must have a GPL-3.0-compatible licence (MIT, BSD, Apache-2.0, LGPL, GPL); say which in the PR body.
-- **Never commit** `.env*`, `node_modules/`, `.smoke/`, or any absolute local path (a user profile or workspace drive path). The repo is public, so anything committed is published.
+- **Never commit** `.env*`, `node_modules/`, `.smoke/`, or any absolute local path (a user profile or workspace drive path). The repo was public and is meant to be again, so treat anything committed as published.
 
 ## Won't
 
@@ -78,6 +79,11 @@ These stay out unless a new ADR in `docs/decisions/` says otherwise:
 - Rebuilding what Project Hub or Cronsole already do. Integrate over their APIs or MCP servers.
 - Writing an editor. The IDE pane embeds code-server or OpenVSCode Server.
 - Workarounds that patch or monkey-patch Chrome extensions to make them run.
+- A built-in agent loop, model router or prompt framework. Agent CLIs are governed backends (ADR-004).
+- A home-made sandbox. Containment is the operating system's.
+- Chat-channel gateways (Telegram, Discord, Slack).
+- Installing or running anything straight from a feed or catalogue item. Discover, install, attach and run are separate steps.
+- A prompt or a UI toggle as a security control. Every control names what enforces it.
 - Bumping Electron's major version without rerunning `npm run spike:extensions` and recording the result in ADR-001.
 
 ## Dependencies

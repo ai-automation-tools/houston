@@ -36,8 +36,8 @@ Start with the roadmap if you want to know what's next, or the decisions folder 
 
 | Folder | What's inside |
 |:---|:---|
-| [**🎯 product/**](product/README.md) | The spec (must stories with acceptance criteria, the Won't list) and the build plan with its stop points. |
-| [**⚖️ decisions/**](decisions/README.md) | Requirements, three architecture options, and three ADRs: the Electron shell (with the extension spike), Project Hub over HTTP, and the terminal. |
+| [**🎯 product/**](product/README.md) | The spec (must stories with acceptance criteria, the Won't list), the agent-harness requirements, and the build plan with its stop points. |
+| [**⚖️ decisions/**](decisions/README.md) | Requirements, three architecture options, and four ADRs: the Electron shell (with the extension spike), Project Hub over HTTP, the terminal, and the Core companion process for the agent harness. |
 | [**🧭 diagrams/**](diagrams/README.md) | The architecture diagram the [homepage](https://houston.ai-automation-tools.dev/#architecture) shows, with every component linked to its code, and how to rebuild it when the code moves. |
 
 <p align="right">(<a href="#docs-top">back to top</a>)</p>
