@@ -11,7 +11,8 @@
 // - A clean PATH with System32 first (the SDK shells out to `whoami`), TEMP inside the session's
 //   temp folder, and PYTHONNOUSERSITE because per-user site-packages is under the denied profile.
 // - Network: everything off, or, with a proxy port, the container proxy setting that leaves
-//   that one host port reachable and nothing else (S2).
+//   that one host port reachable and nothing else (S2). The container sets HTTP(S)_PROXY;
+//   NODE_USE_ENV_PROXY makes Node's own fetch use them (H1 egress check).
 //
 // Pure: builds the request and refuses a bad one; the runner hands it to the SDK.
 
@@ -33,7 +34,7 @@ const win = (p) => p.replaceAll('/', '\\');
 const within = (key, parentKey) => key === parentKey || key.startsWith(parentKey.endsWith('/') ? parentKey : `${parentKey}/`);
 
 /** Environment names the defaults own; a backend can't set them. */
-const OWNED = new Set(['path', 'temp', 'tmp', 'pythonnousersite']);
+const OWNED = new Set(['path', 'temp', 'tmp', 'pythonnousersite', 'node_use_env_proxy']);
 
 /**
  * @typedef {object} LaunchSpec
@@ -113,7 +114,7 @@ export function launchRequest(spec) {
   return {
     command,
     workingDirectory: win(ws),
-    environment: { ...env, PATH, TEMP: win(tmp), TMP: win(tmp), PYTHONNOUSERSITE: '1' },
+    environment: { ...env, PATH, TEMP: win(tmp), TMP: win(tmp), PYTHONNOUSERSITE: '1', ...(proxyPort === undefined ? {} : { NODE_USE_ENV_PROXY: '1' }) },
     inheritDefaultEnvironment: true,
     timeoutMs,
     filesystem: { readwritePaths: rw.map(win), readonlyPaths: ro.map(win), deniedPaths: deny.map(win) },
