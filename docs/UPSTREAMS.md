@@ -48,7 +48,7 @@ current by hand too: a new outbound call or a new runtime dependency is a new ro
 | Upstream | What the code assumes | Where | Check at | Last checked |
 |:---|:---|:---|:---|:---|
 | **GitHub Actions** | `actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-pages-artifact@v3`, `actions/deploy-pages@v4`; Dependabot raises the grouped bumps | `.github/workflows/ci.yml`, `.github/workflows/pages.yml` | github.com/actions/setup-node/releases; github.com/actions/deploy-pages/releases | 2026-10-22 |
-| **GitHub Pages** | The demo (`npm run demo` into `_site/`) is deployed by `pages.yml` to `https://houston-demo.ai-automation-tools.dev/` on every push to `main` | `.github/workflows/pages.yml`, `scripts/demo.js` | docs.github.com/en/pages; github.blog/changelog | — |
+| **GitHub Pages** | The demo is offline since 2026-11-12: `pages.yml` publishes the one-page notice in `scripts/demo-offline/` to `https://houston-demo.ai-automation-tools.dev/`, and runs only when that folder or the workflow changes. The address stays published so nobody else can claim it. `npm run demo` still builds the demo into `_site/` locally | `.github/workflows/pages.yml`, `scripts/demo-offline/`, `scripts/demo.js` | docs.github.com/en/pages; github.blog/changelog | — |
 | **npm audit** | The CI `audit` job runs `npm audit --omit=dev` and must stay green | `.github/workflows/ci.yml` | docs.npmjs.com/cli/commands/npm-audit | 2026-10-22 |
 
 Flag breaking majors, EOL runtimes, protocol revisions and security advisories only. Routine bumps
