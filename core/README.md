@@ -229,7 +229,7 @@ Windows PowerShell ignores `HTTPS_PROXY`; it needs `-Proxy $env:HTTPS_PROXY`. Po
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): denial capture, the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): the runner, the Control API on a named pipe, the identity registry, the abuse suite, and starting at logon.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

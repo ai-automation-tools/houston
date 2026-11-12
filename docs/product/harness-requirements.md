@@ -130,7 +130,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 ## Acceptance criteria for the MVP musts
 
-- **Contained launch (CORE-07, SEC-04).** Given an identity with read-write on the workspace folder only, when its session reads a file in the user profile's `.ssh` folder, then the read fails and a `deny` event names the identity, session and path.
+- **Contained launch (CORE-07, SEC-04).** Given an identity with read-write on the workspace folder only, when its session reads a file in the user profile's `.ssh` folder, then the read fails, and the session's `session.start` event names the identity, the session and the denied folders the container was launched with, so the failure is attributable. The container itself reports no denials on this Windows build (changed 2026-11-12: denial capture fails with `0x80004001` elevated or not, [result](../../spikes/h1-denial-capture.mjs)). Denials the Core decides itself, at the egress proxy, the gateway and the policy check, each get a `deny` event that names the identity, session and resource.
 - **Network default-deny (SEC-03).** Given a session allowed only its model provider and the gateway, when it requests `https://example.com`, then the connection fails and an event is recorded.
 - **Gateway policy (SEC-01).** Given an identity granted one tool of a server and not another, when it calls the second, then the gateway refuses, the server is never called, and both facts are in the audit log.
 - **Credential brokering (SEC-06).** Given a token in the vault, when a session lists its environment or reads any file it may read, then the token's value does not appear.
@@ -146,7 +146,7 @@ A feature ships when its tests pass on a real Windows 11 machine and the output 
 
 | ID | Abuse test | Pass when |
 |:---|:---|:---|
-| AT-01 | A contained session reads the user's `.ssh` folder, the Core's data folder, another profile's folder | All three fail; three deny events |
+| AT-01 | A contained session reads the user's `.ssh` folder, the Core's data folder, another profile's folder | All three fail; the `session.start` event lists the denied folders that cover them |
 | AT-02 | It creates a junction in the workspace pointing outside and reads through it | Read fails |
 | AT-03 | It uses 8.3 names, `\\?\` paths, alternate data streams and case variants to reach a denied path | All fail |
 | AT-04 | It requests a host that is not on its allowlist, by name and by IP | Both fail |
