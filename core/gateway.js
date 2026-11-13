@@ -57,6 +57,13 @@ export const STATES = ['discovered', 'installed', 'pinned', 'needs_review', 'dis
 export const TRANSPORTS = ['container', 'host', 'http'];
 /** An env or header value that names a vault secret: the whole value, or after "Bearer ". */
 const SECRET_REF = /^(Bearer )?secret:([a-z0-9][a-z0-9_-]{0,62})$/;
+/**
+ * In a registration's command or env, the calling session's identity, filled in at each start
+ * (the operator's at install). Servers start per session, so a server that takes who it is
+ * (Roundtable's `--agent-id`) seats every session as its own identity, never as one the agent
+ * names. Identity ids are `local:` plus [a-z0-9/_-], so the value is safe on a command line.
+ */
+export const SEAT = '{identity}';
 
 /**
  * An http server's address: plain http to loopback only, no credentials in it.
@@ -183,9 +190,11 @@ export function createGateway({
    * Start a pinned or installing server, by its transport, and read its tools.
    * @param {any} reg its row
    * @param {string | null} sessionId the session it serves; null for install
+   * @param {string} seat the identity it serves: the session's, or the operator at install
    * @returns {Promise<{ client: Conn['client'], tools: any[], hash: string, close: () => Promise<void> }>}
    */
-  async function launch(reg, sessionId) {
+  async function launch(reg, sessionId, seat) {
+    if (reg.command.includes(SEAT) || reg.env.includes(SEAT)) reg = { ...reg, command: reg.command.replaceAll(SEAT, seat), env: reg.env.replaceAll(SEAT, seat) };
     const who = /** @type {any} */ (db.prepare('SELECT status FROM identities WHERE id = ?').get(reg.identity_id));
     if (who?.status !== 'active') throw new GatewayError('refused', `the server's identity ${reg.identity_id} is ${who?.status ?? 'missing'}`);
     const grants = /** @type {any[]} */ (db.prepare('SELECT id, resource, permission, effect, expires_at FROM grants WHERE identity_id = ?').all(reg.identity_id));
@@ -229,7 +238,7 @@ export function createGateway({
       const tools = await listTools(conn.client);
       const hash = toolsHash(tools);
       event('mcp.list_tools', 'tool.list', reg.identity_id, sessionId, { type: 'McpServer', id: reg.name },
-        { result: 'allow', policy_version: pv, reasons: [`${tools.length} tools`] }, { server: reg.name, tools_hash: hash });
+        { result: 'allow', policy_version: pv, reasons: [`${tools.length} tools`] }, { server: reg.name, tools_hash: hash, seat });
       return { client: conn.client, tools, hash, close: conn.close };
     } catch (e) {
       await conn.close();
@@ -407,7 +416,7 @@ export function createGateway({
       if (!p) {
         p = (async () => {
           const reg = row(name);
-          const inst = await launch(reg, s.id);
+          const inst = await launch(reg, s.id, s.identity);
           if (inst.hash !== reg.pinned_hash) {
             setState(name, 'needs_review', { tools: JSON.stringify(inst.tools), tools_hash: inst.hash });
             event('mcp.list_tools', 'tool.list', reg.identity_id, s.id, { type: 'McpServer', id: name },
@@ -668,7 +677,7 @@ export function createGateway({
      */
     async install(name) {
       const reg = must(name);
-      const inst = await launch(reg, null);
+      const inst = await launch(reg, null, OPERATOR);
       await inst.close();
       const changed = reg.pinned_hash !== null && inst.hash !== reg.pinned_hash;
       const state = reg.state === 'disabled' ? 'disabled' : reg.state === 'pinned' || reg.state === 'needs_review' ? (changed ? 'needs_review' : 'pinned') : 'installed';

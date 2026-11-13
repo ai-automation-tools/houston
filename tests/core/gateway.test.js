@@ -329,6 +329,21 @@ test('a host server starts unconfined, outside any container, with its secret an
   assert.match(await env('USERPROFILE'), /agents[\\/]mcp\+stub$/);
 });
 
+test('{identity} in a registration seats each session as its own identity, and the operator at install (Roundtable\'s --agent-id)', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { gateway, agent, session, events } = await setup(t);
+  gateway.add({ name: 'stub', transport: 'host', command: `"${process.execPath}" "${STUB}" --agent-id {identity}`, env: { AGENT_ID: '{identity}' }, pathDirs: [path.dirname(process.execPath)] });
+  gateway.pin('stub', (await gateway.install('stub')).toolsHash);
+  assert.equal(events().filter((e) => e.type === 'mcp.list_tools').at(-1).seat, OPERATOR);
+  assert.equal(gateway.get('stub').env.AGENT_ID, '{identity}', 'the registration keeps the placeholder');
+  for (const id of ['local:alice', 'local:bob']) {
+    agent(id, [['tool:stub/env', 'call']]);
+    const s = await session(id);
+    const r = await s.rpc('tools/call', { name: 'stub.env', arguments: { name: 'AGENT_ID' } });
+    assert.equal(r.body.result.content[1].text, id, 'the session\'s own identity, not one it chose');
+    assert.equal(events().filter((e) => e.type === 'mcp.list_tools').at(-1).seat, id);
+  }
+});
+
 test('an http server on loopback is reached with its header from the vault; its address can move; others are refused', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
   const { gateway, vault, registry, agent, session, events } = await setup(t);
   const { createMcpServer } = await import('../../src/shared/mcp.js');

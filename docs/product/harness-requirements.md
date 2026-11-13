@@ -56,7 +56,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-06 | Separate workspaces and profiles | Must | Workspaces done; profiles built (H5) | Profiles in H5 |
 | CORE-07 | Agents | Must | MVP; launch built (H2) | Existing agent CLIs launched as identities by the Core: backend manifests (`core/backends.js`) and the Agents tab |
 | CORE-08 | Sub-agents and delegated work | Should | Built (H5) | Brokered child sessions with an attenuated token |
-| CORE-09 | Agent collaboration | Should | Next | Roundtable, with seats bound to identities by the gateway |
+| CORE-09 | Agent collaboration | Should | Built (H6) | Roundtable, with seats bound to identities by the gateway |
 | CORE-10 | Skills | Should | Next | A per-profile skills folder mounted read-only into sessions |
 | CORE-11 | Commands | Could | Next | Backend-native commands; palette entries |
 | CORE-12 | Reusable workflows | Could | Later | Saved recipes: identity, prompt, workspace, grant set |
@@ -76,7 +76,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
 | INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; MCP server behind the gateway (H3); `harness run --grant` built (H4) | Its MCP server behind the gateway; `harness run --grant` as the task action |
-| INT-02 | Roundtable for collaboration | Should | Next | Its stdio MCP server, one per identity, started by the gateway |
+| INT-02 | Roundtable for collaboration | Should | Built (H6): a host server, since asyncio can't run contained | Its stdio MCP server, one per identity, started by the gateway |
 | INT-03 | Promptbook for prompts, skills, agents and MCP-server cards | Should | Next | Its stdio MCP server, read-only, as the discovery catalogue |
 | INT-04 | Project Hub for files, bookmarks and recent items | Must | Done; access token built (H2) | The HTTP adapter in `src/main/hub.js` |
 | INT-05 | Link lists | Could | Next | Local Markdown link streams; a deep link to the web tool |
