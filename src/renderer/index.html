@@ -24,6 +24,7 @@
         <button role="tab" data-panel="bookmarks" aria-selected="false">Bookmarks</button>
         <button role="tab" data-panel="recent" aria-selected="false">Recent</button>
         <button role="tab" data-panel="news" aria-selected="false" title="Headlines from the feeds and Markdown sources in settings.json">News</button>
+        <button role="tab" data-panel="feed" aria-selected="false" title="The feed index: categories with what belongs in each, bookmarks, MCP servers to add as discovered">Feed</button>
         <button role="tab" data-panel="mcp" aria-selected="false" title="Calls agents made to the app's MCP server">MCP</button>
         <button role="tab" data-panel="cron" aria-selected="false" title="Cronsole's scheduled tasks">Cron</button>
         <button role="tab" data-panel="git" aria-selected="false" title="The workspace repo's branch and changes">Git</button>
@@ -46,6 +47,14 @@
           <button id="news-refresh" title="Fetch every source again">Refresh</button>
         </div>
         <div id="news-list"></div>
+      </section>
+      <section id="panel-feed" class="panel" role="tabpanel" hidden>
+        <div class="panel-tools git-tools">
+          <span id="feed-when" class="git-branch"></span>
+          <button id="feed-start" title="Open the start page: advisories, approvals, overnight runs, highlights">Start page</button>
+          <button id="feed-refresh" title="Read the feed index again">Refresh</button>
+        </div>
+        <div id="feed-list"></div>
       </section>
       <section id="panel-mcp" class="panel" role="tabpanel" hidden>
         <div class="panel-tools">

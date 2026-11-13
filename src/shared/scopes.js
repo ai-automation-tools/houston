@@ -19,7 +19,7 @@ export const SCOPES = {
  * What main knows when the page is asked for. Every field is plain data; a missing Core is
  * `core: { error }`, and off Windows `core: null`.
  * @typedef {{
- *   hubUrl: string, hubToken: 'none' | 'sent' | 'withheld', quickLinks: number, newsSources: number, bookmarkSource: string,
+ *   hubUrl: string, hubToken: 'none' | 'sent' | 'withheld', quickLinks: number, newsSources: number, feedIndex?: string | null, bookmarkSource: string,
  *   adBlock: boolean, closeToTray: boolean,
  *   chat: { model: string, missing: string[] },
  *   cronsole: { configured: boolean, ui: string },
@@ -74,6 +74,7 @@ export function controls(s) {
     { label: 'Bookmarks source', scope: 'profile', value: s.bookmarkSource || 'the first browser found', where: 'The picker at the top of the Bookmarks tab' },
     { label: 'Quick links', scope: 'profile', value: count(s.quickLinks, 'link'), where: 'settings.json quickLinks' },
     { label: 'News sources', scope: 'profile', value: count(s.newsSources, 'source'), where: 'settings.json newsSources' },
+    { label: 'Feed index', scope: 'profile', value: s.feedIndex || 'none', where: 'settings.json feedIndex: the index.json a scheduled job writes (Feed tab, start page)' },
     { label: 'Ad blocking', scope: 'profile', value: s.adBlock ? 'on' : 'off', where: 'Extensions menu' },
     { label: 'Chat', scope: 'profile', value: s.chat.missing.length ? `off: ${s.chat.missing.join(', ')} not set` : `on, model ${s.chat.model}`, where: '.env: ACC_CHAT_API_KEY (or ANTHROPIC_API_KEY) and ACC_CHAT_MODEL; the key never leaves the main process' },
     { label: 'Cronsole', scope: 'profile', value: s.cronsole.configured ? `connected${s.cronsole.ui ? `, UI at ${s.cronsole.ui}` : ''}` : 'not set', where: '.env: ACC_CRONSOLE_MCP and ACC_CRONSOLE_UI' },

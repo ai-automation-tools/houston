@@ -40,7 +40,18 @@ if (profile) {
   // The News tab reads one local Markdown source, so the run needs no network for it.
   const news = path.join(profile, 'smoke-news.md');
   fs.writeFileSync(news, '## 2026-10-30\n- [Smoke headline](https://example.com/smoke-news)\n');
-  fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ ...copied, newsSources: [{ label: 'Smoke digest', url: news }] }));
+  // The Feed's index (H6): one advisory for the MCP server the run registers (smoke-stub), one for a tool that isn't installed.
+  const feedIndex = path.join(profile, 'smoke-feed.json');
+  fs.writeFileSync(feedIndex, JSON.stringify({
+    generated: new Date().toISOString(),
+    categories: [{ id: 'adv', name: 'Advisories', definition: 'Security advisories for tools people install.' }, { id: 'mcp', name: 'MCP servers', definition: 'New MCP servers worth a look.' }],
+    items: [
+      { id: 'adv-stub', category: 'adv', title: 'Smoke advisory for smoke-stub', url: 'https://example.com/adv-stub', advisory: { tool: 'smoke-stub', severity: 'high', summary: 'Pin it again.' } },
+      { id: 'adv-other', category: 'adv', title: 'Smoke advisory for a tool not installed', url: 'https://example.com/adv-other', advisory: { tool: 'not-installed-tool', severity: 'critical' } },
+      { id: 'mcp-new', category: 'mcp', title: 'Smoke MCP server', url: 'https://example.com/mcp-new', highlight: true, mcp: { name: 'smoke-feed-mcp', command: 'cmd.exe /d /c exit 0' } },
+    ],
+  }));
+  fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ ...copied, newsSources: [{ label: 'Smoke digest', url: news }], feedIndex }));
   // An old single-conversation chat.json, so the run checks it moves into the conversation list.
   fs.writeFileSync(path.join(profile, 'chat.json'), JSON.stringify([
     { role: 'user', content: 'Smoke: how do I ship acme-api?' },

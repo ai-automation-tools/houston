@@ -55,7 +55,8 @@ Per-machine settings live in `%APPDATA%\ai-command-center\settings.json` (anothe
   "newsSources": [
     { "label": "Some AI blog", "url": "https://blog.example.com/feed.xml" },
     { "label": "Weekly digest", "url": "D:/notes/ai-digest.md" }
-  ]
+  ],
+  "feedIndex": "D:/feeds/index.json"
 }
 ```
 
@@ -63,6 +64,7 @@ Per-machine settings live in `%APPDATA%\ai-command-center\settings.json` (anothe
 |:---|:---|
 | `hubUrl` | Where Project Hub answers. `ACC_HUB_URL` in the environment overrides it. It must be on this machine unless `ACC_HUB_REMOTE=1` is set. If Hub runs with an access token (`HUB_TOKEN`), put the same value in `ACC_HUB_TOKEN` in `.env`: it's sent only to a Hub on this machine or over https. |
 | `quickLinks` | The buttons on the empty tab page. http(s) only, twelve at most. |
+| `feedIndex` | The Feed tab's and start page's `index.json`, an absolute path; none by default. Its shape: `categories` (each an `id`, `name` and `definition`) and `items` (each an `id`, `category`, `title`, http(s) `url`, and optionally `summary`, `date`, `highlight: true`, `mcp: { name, command, transport }` and `advisory: { tool, severity, summary }`); the full shape is at the top of [`src/shared/feed.js`](../../src/shared/feed.js). |
 | `newsSources` | The News tab's sources, none by default: each a label and an RSS or Atom feed, a Markdown page (http or https), or an absolute path to a local `.md` file. Twelve at most. |
 
 Broken values fall back to the defaults. The chat key, the model and Cronsole's path go in the clone's `.env` instead (see [chat.md](chat.md) and [cronsole.md](cronsole.md)).

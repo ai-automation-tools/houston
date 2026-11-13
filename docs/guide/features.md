@@ -77,6 +77,12 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 
 The **News** tab lists headlines from the sources in `settings.json`'s `newsSources` ([setup.md](setup.md#settings)), newest first, each link once. A source can be an RSS or Atom feed, a Markdown page on the web, or a local `.md` file such as a weekly AI digest or a bookmarks note: every `[title](https://…)` link in it becomes a headline, and a `## 2026-10-30` heading dates the links under it. Click a headline to open it in a tab (Ctrl+click or middle-click for a background tab). The sources are fetched when you first open the tab and again on **Refresh**; one that fails says why at the top while the rest still show.
 
+## 🗞️ Feed and the start page
+
+The **Feed** tab reads one local `index.json`, the file settings.json's `feedIndex` names ([setup.md](setup.md#settings)), which a scheduled job writes. It shows what you bookmarked first, then each category with its definition (what belongs in it) and its items, newest first. Click an item to open it; ☆ bookmarks it for this profile. An item that names an MCP server has **Add as discovered**: the Core registers it from the command in the file, and nothing runs until you install and pin it in Integrations.
+
+The **start page** opens when Houston starts with no tabs to bring back, or from **Start page** in the Feed tab. Its four cards: advisories in the feed for tools installed here (this profile's MCP servers and skills, Claude Code and Codex, local model runtimes), worst first; approval cards waiting for you; the scheduled runs since 6 pm the day before, and how each ended; and the feed's highlights.
+
 ## 🌿 Git
 
 - The **Git** tab in the sidebar shows the active workspace's repo: its branch, the upstream it tracks and how far ahead or behind it is, then the changed files grouped as Conflicts, Staged, Changes and Untracked.

@@ -8,6 +8,7 @@ import { docIdFromUrl, isDocUrl } from '../shared/docs.js';
 import { pushRecent } from '../shared/recent.js';
 import { toggleFavorite } from '../shared/favorites.js';
 import { mergeNews, parseNews } from '../shared/news.js';
+import { feedView, parseFeed, toggleBookmark } from '../shared/feed.js';
 import { trayItem } from '../shared/chat.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { demoHarness } from './harness.js';
@@ -352,6 +353,29 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     },
 
     // Made-up headlines from a made-up feed and a Markdown digest; nothing is fetched.
+    feed: (() => {
+      const f = parseFeed(JSON.stringify({
+        generated: new Date(Date.now() - 2 * HOUR).toISOString(),
+        categories: [
+          { id: 'mcp', name: 'MCP servers', definition: 'New or newly popular MCP servers, with the command to run one.' },
+          { id: 'advisories', name: 'Advisories', definition: 'Security advisories for agent CLIs, MCP servers and model runtimes.' },
+        ],
+        items: [
+          { id: 'mcp-fetch', category: 'mcp', title: 'A fetch server with an allowlist', url: 'https://example.com/mcp-fetch', date: new Date(Date.now() - 5 * HOUR).toISOString(), highlight: true,
+            mcp: { name: 'fetch-allow', command: 'npx -y @example/mcp-fetch', transport: 'container' } },
+          { id: 'adv-codex', category: 'advisories', title: 'Codex: a sandbox escape fixed in the next release', url: 'https://example.com/codex-advisory',
+            date: new Date(Date.now() - 9 * HOUR).toISOString(), advisory: { tool: 'codex', severity: 'high', summary: 'Update the CLI.' } },
+        ],
+      }));
+      /** @type {string[]} */
+      let marks = [];
+      return {
+        list: async () => ({ generated: f.generated, dropped: 0, ...feedView(f, marks) }),
+        bookmark: async (/** @type {string} */ id) => { marks = toggleBookmark(marks, id); return true; },
+        discover: async (/** @type {string} */ id) => f.items.find((i) => i.id === id)?.mcp?.name ?? '',
+      };
+    })(),
+
     news: {
       list: async () => ({
         sources: [{ label: 'Example AI feed', count: 2 }, { label: 'Weekly digest', count: 2 }],

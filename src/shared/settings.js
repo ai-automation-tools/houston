@@ -7,7 +7,7 @@ export const PROJECT_HUB_REPO = 'https://github.com/ai-automation-tools/project-
 const MAX_LINKS = 12;
 const MAX_LABEL = 40;
 
-/** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[], newsSources: { label: string, url: string }[] }} Settings */
+/** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[], newsSources: { label: string, url: string }[], feedIndex: string | null }} Settings */
 
 /**
  * A News source: an http(s) feed or Markdown address, or an absolute path to a local
@@ -99,9 +99,13 @@ export function settingsFrom(raw, env = {}) {
     if (url && label) newsSources.push({ label, url });
     if (newsSources.length === MAX_LINKS) break;
   }
+  // The Feed's index.json (H6): a local file a scheduled job writes; an absolute path to a .json, no ..
+  const f = typeof d.feedIndex === 'string' ? d.feedIndex.trim() : '';
+  const feedIndex = /^[a-z]:[\\/][^\0]*\.json$/i.test(f) && !/(^|[\\/])\.\.([\\/]|$)/.test(f) ? f : null;
   return {
     hubUrl,
     newsSources,
+    feedIndex,
     quickLinks: quickLinks.length ? quickLinks : [
       { label: 'Project Hub', url: hubUrl },
       { label: 'Chrome Web Store', url: 'https://chromewebstore.google.com' },
