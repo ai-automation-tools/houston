@@ -809,6 +809,7 @@ async function createWindow() {
   handle('integrations:disable', (name) => integrations.disable(name));
   handle('integrations:pauseGrant', (id) => integrations.pauseGrant(id));
   handle('integrations:resumeGrant', (id) => integrations.resumeGrant(id));
+  handle('integrations:reviewMemory', (id, decision) => integrations.reviewMemory(id, decision));
   // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
   const approvals = watchApprovals(send);
   handle('approvals:list', () => approvals.list());

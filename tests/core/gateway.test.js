@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createApprovals } from '../../core/approvals.js';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
+import { createMemory } from '../../core/memory.js';
 import { createProfiles } from '../../core/profiles.js';
 import { GatewayError, MAX_RESULT, createGateway, shapeResult, toolsHash } from '../../core/gateway.js';
 import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
@@ -426,4 +427,38 @@ test('the gateway\'s own harness.delegate tools: listed and callable only with a
   assert.match(no.body.result.content[0].text, /needs a session:delegate spawn grant/);
   assert.equal(asked.length, 1);
   assert.throws(() => gateway.add({ name: 'harness', command: 'x' }), /gateway's own tools/);
+});
+
+test('harness.remember and harness.recall: a proposal waits for review, only approved items are served, and only in the session\'s profile', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { db, audit, vault, gateway, session, agent, registry } = await setup(t);
+  const memory = createMemory({ db, audit, redact: vault.redact });
+  gateway.useMemory(memory);
+  vault.set('tok', 'sekrit-value-123');
+  agent('local:writer', [['memory:default', 'write'], ['memory:default', 'read']]);
+  agent('local:nobody', []);
+  const w = await session('local:writer');
+  assert.deepEqual((await w.rpc('tools/list')).body.result.tools.map((/** @type {any} */ x) => x.name), ['harness.remember', 'harness.recall']);
+  const text = async (/** @type {any} */ r) => r.body.result.content.map((/** @type {any} */ c) => c.text).join('');
+  const put = JSON.parse(await text(await w.rpc('tools/call', { name: 'harness.remember', arguments: { text: 'The build uses pnpm, token sekrit-value-123' } })));
+  assert.equal(put.state, 'pending');
+  const recall = async () => JSON.parse(await text(await w.rpc('tools/call', { name: 'harness.recall', arguments: {} }))).items.map((/** @type {any} */ i) => i.text);
+  assert.deepEqual(await recall(), [], 'a pending item is never served');
+  const item = memory.list({ state: 'pending' })[0];
+  assert.deepEqual([item.source.identity, item.source.session], ['local:writer', w.id]);
+  assert.match(item.text, /\[REDACTED:secret:tok\]/);
+  memory.review(item.id, 'approve');
+  assert.deepEqual(await recall(), ['The build uses pnpm, token [REDACTED:secret:tok]']);
+  memory.review(memory.add('Never push to main', 'default').id, 'reject');
+  assert.equal((await recall()).length, 1, 'a rejected item is not served');
+
+  const n = await session('local:nobody');
+  assert.deepEqual((await n.rpc('tools/list')).body.result.tools, []);
+  assert.match(await text(await n.rpc('tools/call', { name: 'harness.recall', arguments: {} })), /needs an allow grant on memory:default \(read\)/);
+  // Another profile's agent, granted its own profile's memory, sees none of default's.
+  createProfiles({ db, audit }).create({ id: 'lab', displayName: 'Lab' });
+  registry.create({ id: 'local:lab-dev', kind: 'ai-agent', displayName: 'Lab dev', profile: 'lab' }, OPERATOR);
+  registry.setStatus('local:lab-dev', 'active', OPERATOR);
+  registry.addGrant({ identity: 'local:lab-dev', resource: 'memory:lab', permission: 'read' }, OPERATOR);
+  const lab = await session('local:lab-dev', { profile: 'lab' });
+  assert.deepEqual(JSON.parse(await text(await lab.rpc('tools/call', { name: 'harness.recall', arguments: {} }))).items, []);
 });

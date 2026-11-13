@@ -4,7 +4,7 @@
 // approvals.js) on fabricated state, in the browser tab. Nothing runs, nothing is fetched.
 
 import { agentRows } from '../shared/agents.js';
-import { backendRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
+import { backendRows, memoryRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
@@ -246,6 +246,11 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
   /** A made-up standing grant: the Cron tab's nightly backup runs under it. */
   const standing = [{ id: 'nightly-backup', identity: 'local:build-shell', workspace: WS.replaceAll('/', '\\'), command: 'cmd.exe /d /c backup.cmd', pathDirs: [], maxMinutes: 30,
     expiresAt: iso(now() + 60 * 24 * 60 * MIN), status: 'active', grantsChanged: false, lastRunAt: iso(now() - 18 * 60 * MIN), running: null, createdAt: iso(now() - 3 * 24 * 60 * MIN), updatedAt: iso(now() - 3 * 24 * 60 * MIN) }];
+  // Profile memory (H6): one an agent proposed, waiting for review, and one already approved.
+  const memory = [
+    { id: '7d1c2e54-0b7a-4f0e-9a51-3c2d8e6f1a20', text: 'The API project builds with pnpm; npm install breaks its lockfile.', state: 'pending', source: { identity: 'local:dev-claude', session: 'a3f19c' }, createdAt: iso(now() - 40 * MIN) },
+    { id: '0e9b6a31-5c4d-4e2f-8b17-6a5d4c3b2a10', text: 'Release notes go in docs/CHANGELOG.md, newest first.', state: 'approved', source: { identity: 'local:operator', session: null }, createdAt: iso(now() - 3 * 24 * 60 * MIN) },
+  ];
   /** @param {unknown} id */
   const grantFor = (id) => {
     const g = standing.find((x) => x.id === standingId(id));
@@ -302,7 +307,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     },
 
     integrations: {
-      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS), standing: standingRows(standing, now()) }),
+      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS), standing: standingRows(standing, now()), memory: memoryRows(memory) }),
       install: async (/** @type {unknown} */ name) => {
         const s = server(name);
         s.state = s.state === 'discovered' ? 'installed' : s.state;
@@ -312,6 +317,11 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
       disable: async (/** @type {unknown} */ name) => { server(name).state = 'disabled'; return true; },
       pauseGrant: async (/** @type {unknown} */ id) => { grantFor(id).status = 'paused'; return true; },
       resumeGrant: async (/** @type {unknown} */ id) => { grantFor(id).status = 'active'; return true; },
+      reviewMemory: async (/** @type {unknown} */ id, /** @type {unknown} */ decision) => {
+        const m = memory.find((x) => x.id === id);
+        if (m) m.state = decision === 'approve' ? 'approved' : 'rejected';
+        return true;
+      },
     },
 
     /** The Cron tab's view of a standing grant, as the Core's standing.get. @param {string} id */

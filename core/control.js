@@ -22,11 +22,13 @@ import { CONTAINMENT, RunnerError } from './runner.js';
 import { StandingError } from './standing.js';
 import { ProfileError } from './profiles.js';
 import { SkillError } from './skills.js';
+import { MemoryError } from './memory.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'profile.list', 'profile.create', 'skill.list', 'skill.install', 'skill.remove',
+  'memory.list', 'memory.add', 'memory.review', 'memory.remove',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
@@ -94,11 +96,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>>, standing?: ReturnType<typeof import('./standing.js').createStanding>, profiles?: ReturnType<typeof import('./profiles.js').createProfiles>, skills?: ReturnType<typeof import('./skills.js').createSkills> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>>, standing?: ReturnType<typeof import('./standing.js').createStanding>, profiles?: ReturnType<typeof import('./profiles.js').createProfiles>, skills?: ReturnType<typeof import('./skills.js').createSkills>, memory?: ReturnType<typeof import('./memory.js').createMemory> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault, standing, profiles, skills }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault, standing, profiles, skills, memory }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -220,6 +222,10 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'skill.list': (p) => need(skills, 'skills').list(p.profile),
     'skill.install': (p) => need(skills, 'skills').install(p),
     'skill.remove': (p) => need(skills, 'skills').remove(p.name, p.profile),
+    'memory.list': (p) => need(memory, 'memory').list({ profile: p.profile, state: p.state }),
+    'memory.add': (p) => need(memory, 'memory').add(p.text, p.profile),
+    'memory.review': (p) => need(memory, 'memory').review(p.id, p.decision, p.note),
+    'memory.remove': (p) => need(memory, 'memory').remove(p.id),
     'identity.list': (p) => registry.list({ status: p.status, profile: p.profile }),
     'identity.get': (p) => registry.get(str(p.id, 'id')),
     'identity.create': (p) => registry.create(p, OPERATOR),
@@ -318,7 +324,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError || e instanceof StandingError || e instanceof ProfileError || e instanceof SkillError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError || e instanceof StandingError || e instanceof ProfileError || e instanceof SkillError || e instanceof MemoryError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }

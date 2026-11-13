@@ -10,7 +10,7 @@
     "event_id": { "type": "string" },
     "time": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.start", "session.end", "file.denied", "egress.connect", "mcp.list_tools", "mcp.tool_call", "command.run", "credential.inject", "approval.requested", "approval.decided", "grant.change", "identity.lifecycle", "policy.publish", "log.deleted", "core.start", "core.stop", "stop.all", "audit.break", "control.denied", "secret.change", "mcp.change", "gateway.denied", "standing.change", "standing.run", "profile.change", "skill.change"]
+      "enum": ["session.start", "session.end", "file.denied", "egress.connect", "mcp.list_tools", "mcp.tool_call", "command.run", "credential.inject", "approval.requested", "approval.decided", "grant.change", "identity.lifecycle", "policy.publish", "log.deleted", "core.start", "core.stop", "stop.all", "audit.break", "control.denied", "secret.change", "mcp.change", "gateway.denied", "standing.change", "standing.run", "profile.change", "skill.change", "memory.change"]
     },
     "profile": { "type": "string" },
     "identity": {

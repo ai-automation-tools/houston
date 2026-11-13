@@ -18,6 +18,7 @@ import { createRunner, markInterrupted } from './runner.js';
 import { createStanding } from './standing.js';
 import { createProfiles, profilesRoot } from './profiles.js';
 import { createSkills, skillsRoot } from './skills.js';
+import { createMemory } from './memory.js';
 import { createDelegation } from './delegate.js';
 import { createTranscripts } from './transcripts.js';
 import { openVault } from './vault.js';
@@ -144,8 +145,10 @@ if (import.meta.main) {
     // Its children are tapped like any session (their output read, their transcript kept) by the Control API, made below.
     /** @type {Awaited<ReturnType<typeof startControl>> | null} */
     let control = null;
+    const memory = createMemory({ db: core.db, audit: core.audit, redact: vault?.redact });
+    gateway?.useMemory(memory);
     if (gateway && runner && registry) gateway.useDelegation(createDelegation({ db: core.db, registry, runner, transcripts, tap: (s) => control?.tap(s) }));
-    control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles, skills }) : null;
+    control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles, skills, memory }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));
