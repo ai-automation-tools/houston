@@ -17,6 +17,7 @@ import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 import { createStanding } from './standing.js';
 import { createProfiles, profilesRoot } from './profiles.js';
+import { createDelegation } from './delegate.js';
 import { createTranscripts } from './transcripts.js';
 import { openVault } from './vault.js';
 
@@ -137,7 +138,12 @@ if (import.meta.main) {
     const standing = runner ? createStanding({ db: core.db, audit: core.audit, runner }) : undefined;
     const profiles = createProfiles({ db: core.db, audit: core.audit, root: win32 ? profilesRoot(core.dir) : undefined });
     const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
-    const control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles }) : null;
+    // Sub-agents (H5): the gateway's harness.delegate tool, which needs the runner, made after it.
+    // Its children are tapped like any session (their output read, their transcript kept) by the Control API, made below.
+    /** @type {Awaited<ReturnType<typeof startControl>> | null} */
+    let control = null;
+    if (gateway && runner && registry) gateway.useDelegation(createDelegation({ db: core.db, registry, runner, transcripts, tap: (s) => control?.tap(s) }));
+    control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));

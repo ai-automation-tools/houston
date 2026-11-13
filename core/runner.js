@@ -111,7 +111,12 @@ export function compileGrants(grants, now = new Date()) {
  * @property {number} [timeoutMs]  the container is ended after this long (a standing grant's budget); a day by default
  * @property {string} [standingGrant]  the standing grant it runs under (standing.js), recorded on the session
  * @property {string} [prompt]  for a backend identity: run this prompt unattended (the manifest's headless start) instead of the CLI
+ * @property {string} [parentSession]  a sub-agent's parent (delegate.js): it must be running; the child gets the parent's program
+ *   folders and its CLI home, ends no later than the parent, and is stopped when the parent ends. Depth is capped at MAX_DEPTH
  */
+
+/** How deep sub-agents nest: a child (1) and a grandchild (2), no further (H5). */
+export const MAX_DEPTH = 2;
 
 /** The containment rung this runner starts sessions on; the fallback rung is H7. */
 export const CONTAINMENT = 'container';
@@ -127,7 +132,7 @@ export function createRunner({
   const root = canonicalPath(tempRoot);
 
   /**
-   * @typedef {{ id: string, identity: string, workspace: string, startedAt: string, standingGrant: string | null, input: import('node:stream').Writable, output: import('node:stream').Readable, resize: (size: { rows: number, columns: number }) => void, stop: () => Promise<{ reason: string }>, done: Promise<{ reason: string, exitCode: number | null }> }} Session
+   * @typedef {{ id: string, identity: string, workspace: string, startedAt: string, standingGrant: string | null, parent: string | null, depth: number, endsAt: number, homeIdentity: string, program: { readonly?: string[], pathDirs?: string[], env?: Record<string, string> }, input: import('node:stream').Writable, output: import('node:stream').Readable, resize: (size: { rows: number, columns: number }) => void, stop: () => Promise<{ reason: string }>, done: Promise<{ reason: string, exitCode: number | null }> }} Session
    */
 
   /** @param {string} type @param {string} identity @param {string} sessionId @param {object} decision @param {object} [extra] */
@@ -142,7 +147,7 @@ export function createRunner({
    * @returns {Promise<Session>}
    * @throws {RunnerError} with a session.start deny event written first
    */
-  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant, prompt }) {
+  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant, prompt, parentSession }) {
     if (typeof identity !== 'string' || !identity) throw new RunnerError('identity is an id like local:dev-codex');
     const id = crypto.randomUUID();
     const version = policyVersion(db, globals);
@@ -150,6 +155,16 @@ export function createRunner({
       event('session.start', String(identity), id, { result: 'deny', policy_version: version, reasons: [reason] });
       return new RunnerError(reason);
     };
+    // A sub-agent: under a running parent, no deeper than MAX_DEPTH, ending no later than it, with its toolchain and CLI home.
+    const up = parentSession === undefined ? null : live.get(parentSession);
+    if (parentSession !== undefined) {
+      if (!up) throw refuse('the parent session is not running');
+      if (up.depth + 1 > MAX_DEPTH) throw refuse(`sub-agents nest at most ${MAX_DEPTH} deep`);
+      timeoutMs = Math.min(timeoutMs, up.endsAt - now().getTime());
+      if (timeoutMs < 1000) throw refuse('the parent session ends too soon to start a sub-agent');
+      program = up.program;
+    }
+    const homeIdentity = up ? up.homeIdentity : identity;
 
     const who = /** @type {any} */ (db.prepare('SELECT status, containment, expires_at, backend, profile_id FROM identities WHERE id = ?').get(identity));
     if (!who) throw refuse('unknown identity');
@@ -162,7 +177,8 @@ export function createRunner({
     if (who.backend != null) {
       if (command !== undefined) throw refuse(`the ${who.backend} backend's manifest sets the command`);
       if (!agentsRoot) throw refuse('this runner has no agents folder for backend homes');
-      try { backend = resolveBackend(who.backend, { identity, agentsRoot, where, isFile, prompt }); } catch (e) {
+      // A sub-agent uses its root agent's CLI home: the sign-in is there, and the child is that agent's delegate.
+      try { backend = resolveBackend(who.backend, { identity: homeIdentity, agentsRoot, where, isFile, prompt }); } catch (e) {
         if (e instanceof BackendError) throw refuse(e.message);
         throw e;
       }
@@ -256,10 +272,10 @@ export function createRunner({
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
     };
-    db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, standing_grant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt, standingGrant ?? null);
+    db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, standing_grant_id, parent_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt, standingGrant ?? null, parentSession ?? null);
     db.prepare('UPDATE identities SET last_used_at = ? WHERE id = ?').run(startedAt, identity);
-    event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch, ...(standingGrant ? { standing_grant: standingGrant } : {}) });
+    event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch, ...(standingGrant ? { standing_grant: standingGrant } : {}), ...(parentSession ? { parent_session: parentSession } : {}) });
 
     /** @param {string} reason @param {number | null} exitCode */
     const finish = async (reason, exitCode) => {
@@ -267,6 +283,8 @@ export function createRunner({
       event('session.end', identity, id, { result: 'allow', policy_version: version }, { outcome: { status: exitCode === 0 ? 'ok' : 'error', error_code: exitCode == null ? reason : String(exitCode) } });
       live.delete(id);
       approvals?.endSession(id);
+      // Its sub-agents end with it.
+      await Promise.all([...live.values()].filter((c) => c.parent === id).map((c) => c.stop()));
       await cleanup();
       return { reason, exitCode };
     };
@@ -298,6 +316,7 @@ export function createRunner({
     /** @type {Session} */
     const session = {
       id, identity, workspace: ws, startedAt, standingGrant: standingGrant ?? null, input, output, done,
+      parent: parentSession ?? null, depth: up ? up.depth + 1 : 0, endsAt: Date.parse(startedAt) + timeoutMs, homeIdentity, program,
       resize: (size) => term.resize(size),
       // Closing the container ends every process in it.
       stop: async () => { stopping = true; try { term.kill(); } catch { /* already exited */ } return done; },
@@ -310,7 +329,7 @@ export function createRunner({
     start,
     /** @param {string} id */
     get: (id) => live.get(id),
-    list: () => [...live.values()].map(({ id, identity, workspace, startedAt, standingGrant }) => ({ id, identity, workspace, startedAt, standingGrant })),
+    list: () => [...live.values()].map(({ id, identity, workspace, startedAt, standingGrant, parent }) => ({ id, identity, workspace, startedAt, standingGrant, parent })),
     stopAll: () => Promise.all([...live.values()].map((s) => s.stop())),
     /** The backend manifests, and whether each program is installed on this machine. */
     backends: () => listBackends(where, isFile),

@@ -30,6 +30,10 @@ import { canonical } from './audit.js';
 import { startEgressProxy } from './egress.js';
 import { OPERATOR } from './identities.js';
 import { DEFAULT_PROFILE, profileOf } from './profiles.js';
+import { DELEGATE_RESOURCE, DelegationError, TOOLS as HARNESS_TOOLS } from './delegate.js';
+
+/** The gateway's own tools' server name (delegate.js); no registration may take it. */
+export const BUILTIN = 'harness';
 import { LaunchError, launchRequest, systemEnv } from './launch.js';
 import { LEGACY_VERSIONS, META, PROTOCOL_VERSIONS, bearerMatches, checkRequest, isLoopbackHost, isLoopbackOrigin, isObject, rpcError } from './mcp-protocol.js';
 import { PathError, canonicalPath, pathKey } from './paths.js';
@@ -145,6 +149,8 @@ export function createGateway({
 
   /** @param {string} name */
   const row = (name) => /** @type {any} */ (db.prepare('SELECT * FROM mcp_servers WHERE name = ?').get(name));
+  /** Sub-agents (delegate.js), set once the runner exists: the runner needs the gateway first. @type {ReturnType<typeof import('./delegate.js').createDelegation> | null} */
+  let delegation = null;
   /** A server's profile is its identity's (H5). @param {{ identity_id: string }} reg */
   const profileOfServer = (reg) => /** @type {any} */ (db.prepare('SELECT profile_id FROM identities WHERE id = ?').get(reg.identity_id))?.profile_id ?? DEFAULT_PROFILE;
   /** @param {unknown} name */
@@ -374,13 +380,17 @@ export function createGateway({
     const running = new Map();
     let closed = false;
 
+    /** Whether this session may start a sub-agent: its `session:delegate` spawn grant. */
+    const spawn = () => decide({ principal: { type: 'Identity', id: s.identity }, action: 'session.spawn', resource: { type: 'Session', id: DELEGATE_RESOURCE }, context: { session_id: s.id, attended: s.attended } },
+      { ...s.policy, now: now() });
+
     /** @param {string} action @param {string} id */
     const check = (action, id) => decide({ principal: { type: 'Identity', id: s.identity }, action, resource: { type: 'Tool', id }, context: { session_id: s.id, attended: s.attended } },
       { ...s.policy, now: now() });
 
     /** Pinned servers' tools this identity isn't denied. */
     function visibleTools() {
-      const out = [];
+      const out = delegation && spawn().decision !== 'deny' ? HARNESS_TOOLS.map((t) => ({ ...t, name: `${BUILTIN}.${t.name}` })) : [];
       for (const r of /** @type {any[]} */ (db.prepare("SELECT name, tools, identity_id FROM mcp_servers WHERE state = 'pinned' ORDER BY name").all())) {
         if (profileOfServer(r) !== profile) continue;
         for (const t of JSON.parse(r.tools ?? '[]')) {
@@ -443,6 +453,28 @@ export function createGateway({
       };
 
       if (!isObject(args)) return refuse('arguments must be an object');
+      if (server === BUILTIN && delegation) {
+        const d = spawn();
+        if (d.decision === 'deny') return refuse(`not granted: starting a sub-agent needs a session:${DELEGATE_RESOURCE} spawn grant (${d.reasons.join('; ')})`, { policy_ids: d.determining_policies });
+        if (tool === 'delegate' && d.decision === 'ask') {
+          if (!approvals) return refuse('ask is deny without an approval inbox', { policy_ids: d.determining_policies });
+          const o = await approvals.ask({
+            identity: s.identity, session_id: s.id, workspace: s.workspace.replaceAll('/', '\\'), action: 'session.spawn', resource: { ...resource, type: 'Session', id: DELEGATE_RESOURCE },
+            policy_version: s.policy.policyVersion, policy_ids: d.determining_policies,
+          });
+          if (o.result !== 'allow') return refuse(o.reason, { policy_ids: d.determining_policies });
+        }
+        try {
+          const out = tool === 'delegate' ? await delegation.delegate(s, args) : tool === 'delegate_status' ? delegation.status(s, args) : null;
+          if (!out) return refuse(`${BUILTIN} has no tool '${tool.slice(0, 80)}'`);
+          record('allow', tool === 'delegate' ? `started sub-agent ${/** @type {any} */ (out).identity}: ${/** @type {any} */ (out).granted.length} grants kept, ${/** @type {any} */ (out).dropped.length} dropped` : 'allowed', { policy_ids: d.determining_policies });
+          return { content: [{ type: 'text', text: vault.redact(JSON.stringify(out, null, 2)) }] };
+        } catch (e) {
+          if (!(e instanceof DelegationError)) throw e;
+          record('allow', 'allowed', { policy_ids: d.determining_policies, status: 'error', error_code: 'delegation' });
+          return { content: [{ type: 'text', text: e.message }], isError: true };
+        }
+      }
       const found = server ? row(server) : null;
       // Another profile's server is as good as missing: the refusal doesn't say it exists.
       const reg = found && profileOfServer(found) === profile ? found : null;
@@ -563,6 +595,8 @@ export function createGateway({
 
   return {
     forSession,
+    /** Turn on the built-in harness.delegate tools (main.js, once the runner exists). @param {ReturnType<typeof import('./delegate.js').createDelegation>} d */
+    useDelegation(d) { delegation = d; },
 
     /** @param {unknown} [profile] only that profile's servers */
     list(profile = undefined) {
@@ -585,6 +619,7 @@ export function createGateway({
       const { name, transport = 'container', env = {}, pathDirs = [] } = spec;
       if (typeof name !== 'string' || !SERVER_NAME.test(name)) throw new GatewayError('bad_request', 'name is lower-case letters, digits, - and _, up to 40, e.g. github');
       if (row(name)) throw new GatewayError('conflict', `${name} is registered`);
+      if (name === BUILTIN) throw new GatewayError('bad_request', `${BUILTIN} is the gateway's own tools' name`);
       if (!TRANSPORTS.includes(transport)) throw new GatewayError('bad_request', `transport is one of ${TRANSPORTS.join(', ')}`);
       const http = transport === 'http';
       const command = http ? loopbackUrl(spec.url) : spec.command;

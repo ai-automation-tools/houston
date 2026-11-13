@@ -31,6 +31,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
+| [**delegate.js**](delegate.js) | Sub-agents: the gateway's `harness.delegate` tool, the intersection of what a child asks for with what its parent holds, and the child's identity from start to retirement. |
 | [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
@@ -512,6 +513,19 @@ Checked on 2026-11-13 by [`spikes/h3-host-servers.mjs`](../spikes/h3-host-server
 
 AT-01 checks it: a file planted in a second profile's folder can't be read from a session, and a read grant on that folder is refused at `session.start`.
 
+## 🧬 Sub-agents
+
+[`delegate.js`](delegate.js) lets a running session start a child for part of its work (CORE-08, H5). Only the Core makes the child; a session can't mint its own token.
+
+- **Who may.** A session whose identity holds `session:delegate` with permission `spawn` sees two more tools on its gateway: `harness.delegate` and `harness.delegate_status` (`harness` is reserved, so no MCP server can take the name). An `ask` on that grant puts a card in front of the operator for each delegation, with the task and the grants asked for.
+- **What the child holds: the intersection.** It names the grants it wants (all of the parent's allow grants when it names none). The Core keeps one only when the parent holds the identical allow grant; or it names one thing and the parent's policy allows exactly that; or it's a folder (`dir/**`) inside a folder the parent holds the same way (write covers read). Everything else is dropped with a reason: wider folders, other wildcards, hosts the parent may not reach, anything the parent would be asked about (the child runs unattended, so `ask` is deny), expired grants. The child also gets every deny the parent has, and the global denies apply as always.
+- **Who the child is.** A `sub-agent` identity, `<parent>/sub-<n>`, owned by the parent, in its profile, with the parent's backend; ids are never reused. It runs `task` (the prompt for a CLI identity's headless start, otherwise one command line) in the parent's workspace or one it names, which it needs a write grant on. It's retired when its session ends.
+- **How long.** Its budget is `minutes` (30 by default), never past the parent session's own end, and its identity expires no later than the parent identity. When the parent session ends, for any reason, its children are stopped, and theirs.
+- **How deep.** A child and a grandchild; a third level is refused (`MAX_DEPTH` in runner.js). A child uses its root agent's CLI home and the parent's program folders.
+- **What's recorded.** The child's `session.start` names `parent_session`, `sessions.parent_session_id` holds it, and the parent's tool call is an `mcp.tool_call` event saying how many grants were kept and dropped. The child's transcript is kept like any session's, and `harness.delegate_status` returns its state, end and the end of its transcript, for the parent's own descendants only.
+
+AT-10 checks it in real containers: a parent asks for its folder plus the whole workspace, `C:`, pastebin and any command; the child gets the folder and the parent's hosts only, writes inside its folder, reaches the parent's host, and is refused the wider folder and pastebin.
+
 ## ⏰ Standing grants
 
 [`standing.js`](standing.js) is the operator's leave for one identity to run one command in one folder with nobody watching (CORE-15, H4). Cronsole owns the schedule (ADR-004): a scheduled task runs [`harness.js`](harness.js), `node core/harness.js run --grant <id>`, and the Core checks the standing grant at every run.
@@ -646,7 +660,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Next on the [roadmap](../docs/ROADMAP.md): brokered sub-agents through a `delegate` gateway tool (AT-10). AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). Next on the [roadmap](../docs/ROADMAP.md): the quarantine profile preset and broad-access identities. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

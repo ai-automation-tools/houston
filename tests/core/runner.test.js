@@ -339,3 +339,27 @@ test('listBrokers reads the real process list', { skip: !WIN && 'the Core is Win
   assert.ok(Array.isArray(all));
   for (const b of all) assert.ok(Number.isInteger(b.pid));
 });
+
+test('a sub-agent runs under a running parent: its toolchain, no later end, at most two deep, and stopped with it', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t);
+  const at = '2026-01-01T00:00:00Z';
+  for (const [id, parent] of [['local:dev/sub-1', 'local:dev'], ['local:dev/sub-1/sub-1', 'local:dev/sub-1'], ['local:dev/sub-1/sub-1/sub-1', 'local:dev/sub-1/sub-1']]) {
+    s.db.prepare("INSERT INTO identities (id, kind, display_name, owner, parent, containment, created_at, status) VALUES (?, 'sub-agent', 'Sub', 'local:dev', ?, 'container', ?, 'active')").run(id, parent, at);
+    s.db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES (?, ?, ?, 'write', 'allow', ?, 'local:dev')").run(`w-${id}`, id, `file:${s.ws.replaceAll('\\', '/')}/**`, at);
+  }
+  const parent = await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe', timeoutMs: 60_000, program: { pathDirs: ['C:\\Program Files\\nodejs'] } });
+  const child = await s.runner.start({ identity: 'local:dev/sub-1', workspace: s.ws, command: 'cmd.exe', parentSession: parent.id });
+  assert.deepEqual([child.parent, child.depth], [parent.id, 1]);
+  assert.ok(child.endsAt <= parent.endsAt + 5, 'ends no later than its parent');
+  assert.match(s.sdk.calls[1].request.environment.PATH ?? s.sdk.calls[1].request.environment.Path, /nodejs/i, 'the parent\'s toolchain');
+  assert.equal(/** @type {any} */ (s.db.prepare('SELECT parent_session_id FROM sessions WHERE id = ?').get(child.id)).parent_session_id, parent.id);
+  assert.equal(s.events().find((e) => e.type === 'session.start' && e.session_id === child.id).parent_session, parent.id);
+  const grandchild = await s.runner.start({ identity: 'local:dev/sub-1/sub-1', workspace: s.ws, command: 'cmd.exe', parentSession: child.id });
+  assert.equal(grandchild.depth, 2);
+  await assert.rejects(s.runner.start({ identity: 'local:dev/sub-1/sub-1/sub-1', workspace: s.ws, command: 'cmd.exe', parentSession: grandchild.id }), /nest at most 2 deep/);
+  await assert.rejects(s.runner.start({ identity: 'local:dev/sub-1', workspace: s.ws, command: 'cmd.exe', parentSession: 'nope' }), /parent session is not running/);
+  assert.deepEqual(s.runner.list().map((x) => x.parent), [null, parent.id, child.id]);
+  await parent.stop();
+  await Promise.all([child.done, grandchild.done]);
+  assert.deepEqual(s.runner.list(), [], 'its children and theirs ended with it');
+});
