@@ -370,7 +370,7 @@ async function createWindow() {
   const profileInfo = async () => {
     const id = activeProfile();
     const list = process.platform === 'win32' ? await core.call('profile.list', {}, 3000).catch(() => null) : null;
-    const all = /** @type {{ id: string, displayName: string }[]} */ (list ?? [{ id, displayName: id }]).map((p) => ({ id: p.id, displayName: p.displayName }));
+    const all = /** @type {{ id: string, displayName: string, preset?: string | null }[]} */ (list ?? [{ id, displayName: id }]).map((p) => ({ id: p.id, displayName: p.displayName, preset: p.preset ?? null }));
     return { active: id, name: all.find((p) => p.id === id)?.displayName ?? id, list: all };
   };
   /** The acc://settings/ page: every control, its value now, its scope and where it's changed. */

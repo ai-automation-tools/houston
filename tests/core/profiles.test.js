@@ -19,7 +19,7 @@ test('profiles: default always there, new ones made with a folder and an audit e
   assert.deepEqual(p.list().map((x) => x.id), ['default']);
   assert.ok(fs.existsSync(path.join(root, 'default')));
   const lab = p.create({ id: 'lab', displayName: 'Lab' });
-  assert.deepEqual(lab, { id: 'lab', displayName: 'Lab', createdAt: '2026-11-13T12:00:00.000Z', folder: path.join(root, 'lab') });
+  assert.deepEqual(lab, { id: 'lab', displayName: 'Lab', createdAt: '2026-11-13T12:00:00.000Z', folder: path.join(root, 'lab'), preset: null });
   assert.ok(fs.existsSync(lab.folder));
   assert.deepEqual(p.list().map((x) => x.id), ['default', 'lab']);
   const e = [...audit.events()].at(-1);
@@ -29,7 +29,7 @@ test('profiles: default always there, new ones made with a folder and an audit e
   for (const id of ['', 'Lab', 'a b', '../x', 'x'.repeat(41)]) assert.throws(() => p.create({ id, displayName: 'X' }), fails('bad_request'), id);
   assert.throws(() => p.create({ id: 'ok', displayName: '' }), fails('bad_request'));
   assert.throws(() => p.get('nope'), fails('not_found'));
-  assert.throws(() => db.prepare("INSERT INTO profiles VALUES ('Bad Id', 'x', 'now')").run(), /CHECK/);
+  assert.throws(() => db.prepare("INSERT INTO profiles (id, display_name, created_at) VALUES ('Bad Id', 'x', 'now')").run(), /CHECK/);
 });
 
 test('every profile\'s folder is a global deny, beside the data folder; the CLI homes are not', () => {

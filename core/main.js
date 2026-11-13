@@ -17,6 +17,7 @@ import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 import { createStanding } from './standing.js';
 import { createProfiles, profilesRoot } from './profiles.js';
+import { quarantineRoot } from './quarantine.js';
 import { createSkills, skillsRoot } from './skills.js';
 import { createMemory } from './memory.js';
 import { createDelegation } from './delegate.js';
@@ -132,14 +133,14 @@ if (import.meta.main) {
     const win32 = process.platform === 'win32';
     const approvals = createApprovals({ audit: core.audit });
     // The same globals the runner uses, so both record the same policy version. Windows paths, so Windows only.
-    const registry = win32 ? createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }) : undefined;
+    const registry = win32 ? createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }), quarantineRoot: quarantineRoot(sessionTemp()) }) : undefined;
     const vault = win32 ? await openVault({ db: core.db, dir: core.dir, audit: core.audit }) : undefined;
     const where = { coreDir: core.dir, tempRoot: win32 ? sessionTemp() : '', agentsRoot: win32 ? agentsRoot(core.dir) : '' };
     const gateway = vault && registry ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
     const skills = win32 ? createSkills({ db: core.db, audit: core.audit, root: skillsRoot(core.dir) }) : undefined;
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway, skills }) : null;
     const standing = runner ? createStanding({ db: core.db, audit: core.audit, runner }) : undefined;
-    const profiles = createProfiles({ db: core.db, audit: core.audit, root: win32 ? profilesRoot(core.dir) : undefined });
+    const profiles = createProfiles({ db: core.db, audit: core.audit, root: win32 ? profilesRoot(core.dir) : undefined, quarantine: win32 ? quarantineRoot(sessionTemp()) : undefined });
     const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
     // Sub-agents (H5): the gateway's harness.delegate tool, which needs the runner, made after it.
     // Its children are tapped like any session (their output read, their transcript kept) by the Control API, made below.

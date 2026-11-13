@@ -231,4 +231,9 @@ export const MIGRATIONS = [
   `
   ALTER TABLE identities ADD COLUMN standing_allowed INTEGER NOT NULL DEFAULT 0 CHECK (standing_allowed IN (0, 1));
   `,
+
+  // v13 (H5): a profile's preset (quarantine.js): 'quarantine' holds everything in it to a tighter set of rules.
+  `
+  ALTER TABLE profiles ADD COLUMN preset TEXT CHECK (preset IS NULL OR preset IN ('quarantine'));
+  `,
 ];

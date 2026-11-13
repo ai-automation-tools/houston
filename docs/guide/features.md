@@ -52,6 +52,7 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 - The 🧭 button shows the profile's name when it isn't **Default**.
 - The Agents, Integrations, Logs and Identity Center views show only this profile's identities, servers, secrets, standing grants and events; **Start** refuses another profile's identity. **Stop All** still stops every session, whatever its profile.
 - Make one with `npm run ctl -- profile.create id=lab displayName=Lab`, then pick it in the menu. Make its agents with `identity.create ... profile=lab` ([core/README.md](../../core/README.md#-profiles)).
+- **Quarantine.** To try an MCP server you don't trust, make a profile with `npm run ctl -- profile.create id=try displayName="Try a server" preset=quarantine`. It gets a work folder of its own (`C:\ProgramData\houston-core\quarantine\try`); put the server there. In that profile the server runs contained, can't be given a secret, and can be granted only that folder and hosts one at a time; nothing in it runs unconfined or on a schedule. The 🧭 menu marks it 🧪 ([how](../../core/README.md#-the-quarantine-preset)).
 - **Default** keeps its files where they always were, in `%APPDATA%\ai-command-center\`; another profile's are in `profiles\<id>\` under it, and `profile.json` there says which one the next start runs as. Houston's own MCP server is registered in Default, so only Default's agents see its tools.
 
 ## ⚡ Command palette

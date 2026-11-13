@@ -37,7 +37,7 @@ export const browsePartition = (id) => (id === DEFAULT_PROFILE ? 'persist:browse
 export function profileMenu(list, active) {
   const all = list.some((p) => p.id === active) ? list : [{ id: active, displayName: active }, ...list];
   return [
-    ...all.map((p) => ({ id: `profile:${p.id}`, label: `${p.id === active ? '✓ ' : '    '}Profile: ${p.displayName}${p.id === active ? '' : ' (restarts Houston)'}` })),
-    { id: 'profile-new', label: 'New profile: npm run ctl -- profile.create id=… displayName=…' },
+    ...all.map((p) => ({ id: `profile:${p.id}`, label: `${p.id === active ? '✓ ' : '    '}Profile: ${p.displayName}${/** @type {any} */ (p).preset === 'quarantine' ? ' 🧪 quarantine' : ''}${p.id === active ? '' : ' (restarts Houston)'}` })),
+    { id: 'profile-new', label: 'New profile: npm run ctl -- profile.create id=… displayName=… (preset=quarantine to try an untrusted MCP server)' },
   ];
 }

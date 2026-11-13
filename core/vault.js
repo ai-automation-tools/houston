@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { OPERATOR } from './identities.js';
 import { DEFAULT_PROFILE, profileOf } from './profiles.js';
+import { QUARANTINE, presetOf } from './quarantine.js';
 
 export class VaultError extends Error {
   /** @param {string} code @param {string} message */
@@ -141,6 +142,7 @@ export async function openVault({ db, dir, audit, sealer, now = () => new Date()
     set(name, value, by = OPERATOR, profile = undefined) {
       const n = checkName(name);
       const p = profileOf(db, profile, (c, m) => new VaultError(c, m));
+      if (presetOf(db, p) === QUARANTINE) throw new VaultError('bad_request', `${p} is a quarantine profile: it holds no secrets, so an untrusted server gets no credential`);
       const had = /** @type {any} */ (db.prepare('SELECT profile_id FROM secrets WHERE name = ?').get(n));
       if (had && had.profile_id !== p) throw new VaultError('conflict', `${n} is a secret in profile ${had.profile_id}; names are unique across profiles`);
       if (typeof value !== 'string' || !value || value.length > MAX_VALUE || /[\0\r\n]/.test(value)) {

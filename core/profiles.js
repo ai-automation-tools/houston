@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { OPERATOR } from './identities.js';
+import { PRESETS, QUARANTINE } from './quarantine.js';
 
 export const DEFAULT_PROFILE = 'default';
 export const PROFILE_ID = /^[a-z0-9][a-z0-9_-]{0,39}$/;
@@ -28,12 +29,16 @@ export class ProfileError extends Error {
 export const profilesRoot = (dir) => path.join(path.dirname(dir), 'houston-profiles');
 
 /**
- * @param {{ db: import('node:sqlite').DatabaseSync, audit: ReturnType<typeof import('./audit.js').openAudit>, root?: string, now?: () => Date }} opts
- *   root: where profile folders go (profilesRoot); without it, none are made (tests, Linux)
+ * @param {{ db: import('node:sqlite').DatabaseSync, audit: ReturnType<typeof import('./audit.js').openAudit>, root?: string, quarantine?: string, now?: () => Date }} opts
+ *   root: where profile folders go (profilesRoot); without it, none are made (tests, Linux). quarantine: where a quarantine
+ *   profile's work folder goes (quarantine.js quarantineRoot)
  */
-export function createProfiles({ db, audit, root, now = () => new Date() }) {
+export function createProfiles({ db, audit, root, quarantine, now = () => new Date() }) {
   /** @param {any} r */
-  const shape = (r) => ({ id: r.id, displayName: r.display_name, createdAt: r.created_at, folder: root ? path.join(root, r.id) : null });
+  const shape = (r) => ({
+    id: r.id, displayName: r.display_name, createdAt: r.created_at, folder: root ? path.join(root, r.id) : null, preset: r.preset ?? null,
+    ...(r.preset === QUARANTINE ? { workFolder: quarantine ? path.join(quarantine, r.id) : null } : {}),
+  });
   const row = (/** @type {string} */ id) => /** @type {any} */ (db.prepare('SELECT * FROM profiles WHERE id = ?').get(id));
   // Only the default's at start: another profile's folder is made with it, and one removed by hand stays removed.
   if (root) fs.mkdirSync(path.join(root, DEFAULT_PROFILE), { recursive: true });
@@ -48,14 +53,16 @@ export function createProfiles({ db, audit, root, now = () => new Date() }) {
       return shape(r);
     },
 
-    /** @param {any} spec id, displayName */
+    /** @param {any} spec id, displayName; optional preset ('quarantine') */
     create(spec) {
-      const { id, displayName } = spec && typeof spec === 'object' ? spec : /** @type {any} */ ({});
+      const { id, displayName, preset = null } = spec && typeof spec === 'object' ? spec : /** @type {any} */ ({});
+      if (preset !== null && !PRESETS.includes(preset)) throw new ProfileError('bad_request', `preset is one of ${PRESETS.join(', ')}`);
       if (typeof id !== 'string' || !PROFILE_ID.test(id)) throw new ProfileError('bad_request', 'id is lower-case letters, digits, - and _, up to 40, e.g. lab');
       if (typeof displayName !== 'string' || !displayName.trim() || displayName.length > 80) throw new ProfileError('bad_request', 'displayName is text of 1 to 80 characters');
       if (row(id)) throw new ProfileError('conflict', `${id} exists`);
-      db.prepare('INSERT INTO profiles (id, display_name, created_at) VALUES (?, ?, ?)').run(id, displayName, now().toISOString());
+      db.prepare('INSERT INTO profiles (id, display_name, created_at, preset) VALUES (?, ?, ?, ?)').run(id, displayName, now().toISOString(), preset);
       if (root) fs.mkdirSync(path.join(root, id), { recursive: true });
+      if (preset === QUARANTINE && quarantine) fs.mkdirSync(path.join(quarantine, id), { recursive: true });
       audit.append({
         type: 'profile.change', action: 'profile.create', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'Profile', id },
         decision: { result: 'allow', policy_version: 'none', reasons: ['made by the operator'] },

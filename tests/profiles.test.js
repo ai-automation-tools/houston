@@ -38,3 +38,10 @@ test('Settings names the active profile on its table and counts the profiles', (
   assert.equal(controls(s).find((r) => r.label === 'Profiles')?.value, '2 profiles; this window runs as Lab');
   assert.ok(settingsBody(s, escapeHtml).includes('<h2>Profile: Lab</h2>'));
 });
+
+test('profileMenu marks a quarantine profile', () => {
+  const m = profileMenu([{ id: 'default', displayName: 'Default' }, { id: 'try', displayName: 'Try', preset: 'quarantine' }], 'default');
+  assert.match(m[1].label, /Profile: Try 🧪 quarantine \(restarts Houston\)/);
+  assert.doesNotMatch(m[0].label, /quarantine/);
+  assert.match(m.at(-1).label, /preset=quarantine/);
+});
