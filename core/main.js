@@ -7,28 +7,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openAudit } from './audit.js';
+import { dataDir } from './client.js';
 import { CoreLockedError, migrate, openDb } from './db.js';
 import { startControl } from './control.js';
 import { createRegistry, ensureOperator } from './identities.js';
 import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 
-/**
- * Where the Core keeps its state. Under the user profile on purpose: a session
- * container is denied the profile, so it cannot read this folder (abuse test AT-01).
- *
- * @param {Record<string, string | undefined>} [env]
- * @returns {string}
- */
-export function dataDir(env = process.env) {
-  const set = env.HOUSTON_CORE_DATA?.trim();
-  if (set) {
-    if (!path.isAbsolute(set)) throw new Error('HOUSTON_CORE_DATA must be an absolute path');
-    return path.resolve(set);
-  }
-  if (env.LOCALAPPDATA) return path.join(env.LOCALAPPDATA, 'houston-core');
-  return path.join(os.homedir(), '.houston-core');
-}
+export { dataDir };
 
 /**
  * Make the data folder the operator's alone: inherited entries removed, full control for the
@@ -120,7 +106,7 @@ if (import.meta.main) {
     const win32 = process.platform === 'win32';
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() }) : null;
     const control = runner ? await startControl({
-      dir: core.dir, runner, audit: core.audit,
+      dir: core.dir, runner, audit: core.audit, schema: core.schema.to,
       // The same globals the runner uses, so both record the same policy version.
       registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
     }) : null;

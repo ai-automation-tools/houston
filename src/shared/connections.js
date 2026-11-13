@@ -67,6 +67,29 @@ export function chatRow(config) {
 }
 
 /**
+ * The harness's Core and the containment rung its sessions run on.
+ * @param {{ pid: number, containment: string, sessions: number } | { error: string, code?: string } | null} status null off Windows
+ * @returns {Connection}
+ */
+export function coreRow(status) {
+  const base = { id: 'core', name: 'Houston Core' };
+  if (!status) return { ...base, state: 'off', detail: 'Windows only: its sessions run in Windows containers' };
+  if ('error' in status) {
+    // No control.json, or one a crashed Core left naming a pipe that's gone.
+    if (status.code === 'ENOENT' || status.code === 'ECONNREFUSED') {
+      return { ...base, state: 'off', detail: 'Not running', fix: 'Run the Houston Core task in Task Scheduler, or npm run core. To start it at every logon: scripts\\Register-HoustonCore.ps1 -StartNow.' };
+    }
+    // The task runs the checkout's code from when it started, so after a pull it can be behind the app.
+    if (status.code === 'unknown_method') {
+      return { ...base, state: 'bad', detail: 'Running older code than the app', fix: 'End and Run the Houston Core task in Task Scheduler (or restart npm run core), then Retry.' };
+    }
+    return { ...base, state: 'bad', detail: status.code ? `${status.code}: ${status.error}` : status.error, fix: 'Retry. If it still fails, read core.log in the Core\'s data folder (%LOCALAPPDATA%\\houston-core).' };
+  }
+  const n = status.sessions;
+  return { ...base, state: 'ok', detail: `Running · containment: ${status.containment} · ${n} session${n === 1 ? '' : 's'} · pid ${status.pid}` };
+}
+
+/**
  * @param {{ url: string } | null} server
  * @returns {Connection}
  */

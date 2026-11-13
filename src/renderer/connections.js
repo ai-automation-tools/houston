@@ -1,4 +1,4 @@
-// The Connections view: Hub, Cronsole, each shell, the chat model and the MCP server,
+// The Connections view: the Core, Hub, Cronsole, each shell, the chat model and the MCP server,
 // each with its state, a Retry, and what to set when it's missing. A native <dialog>
 // like the command palette; the rows come from the main process (shared/connections.js
 // words them), and everything is shown as text.
@@ -6,7 +6,7 @@
 /** @typedef {import('./shared/connections.js').Connection} Connection */
 
 /** The groups in the order they're shown. Each is checked on its own, so a slow one (Cronsole starting up) doesn't hold up the rest. */
-const GROUPS = /** @type {const} */ ([['hub', 'Project Hub'], ['cronsole', 'Cronsole'], ['shells', 'Shells'], ['chat', 'Chat model'], ['mcp', 'MCP server']]);
+const GROUPS = /** @type {const} */ ([['core', 'Houston Core'], ['hub', 'Project Hub'], ['cronsole', 'Cronsole'], ['shells', 'Shells'], ['chat', 'Chat model'], ['mcp', 'MCP server']]);
 
 /** @param {string} id */
 const groupOf = (id) => (id.startsWith('shell:') ? 'shells' : id);

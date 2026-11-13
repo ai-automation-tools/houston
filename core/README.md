@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
+| [**client.js**](client.js) | The client side: `dataDir()` and `callControl()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
@@ -353,10 +354,10 @@ Every step, refusals included, is in the audit log: 16 events.
 
 ## 🎛️ Control API
 
-[`control.js`](control.js) is how the operator's client drives the Core. Houston's client comes in H2; until then [`callControl`](control.js) is the client, for tests and scripts.
+[`control.js`](control.js) is how the operator's client drives the Core. The client side is [`client.js`](client.js): Houston's main process uses it through [`src/main/core.js`](../src/main/core.js), and tests, scripts and `ctl.js` call it directly.
 
 ```js
-import { callControl } from './core/control.js';
+import { callControl, dataDir } from './core/client.js';
 const s = await callControl(dataDir, 'session.start', { identity: 'local:dev-shell', workspace: 'D:\\work\\app', command: 'cmd.exe /d /q /k' });
 await callControl(dataDir, 'stop.all');
 ```
@@ -365,6 +366,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 
 | Method | Params | Result |
 |:---|:---|:---|
+| `core.status` | none | `{ pid, startedAt, schema, containment, sessions }`: `containment` is the rung sessions run on (`container`) and `sessions` how many run. Houston's Connections row shows it |
 | `session.start` | `identity`, `workspace`, `command`; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
 | `session.stop` | `id` | `{ reason, exitCode }` |
 | `session.list` | none | the running sessions |

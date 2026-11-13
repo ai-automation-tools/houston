@@ -584,8 +584,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
     })()`);
     console.log(`[smoke] connections=${JSON.stringify(conn)}`);
     const ids = conn.rows.map((/** @type {string} */ r) => r.split(':').slice(0, -1).join(':'));
-    check('the status dot opens Connections: Hub, Cronsole, each shell, chat and MCP, and Retry rechecks a row',
-      conn.open && conn.closed && ['hub', 'cronsole', 'shell:pwsh', 'chat', 'mcp'].every((id) => ids.includes(id))
+    check('the status dot opens Connections: the Core, Hub, Cronsole, each shell, chat and MCP, and Retry rechecks a row',
+      conn.open && conn.closed && ['core', 'hub', 'cronsole', 'shell:pwsh', 'chat', 'mcp'].every((id) => ids.includes(id))
       && conn.rows.includes('mcp:ok') && conn.mcpAfter === 'conn-row ok', conn);
     // A workspace round trip: its own tabs and terminal, and everything back on return.
     const spaceRun = await wc.executeJavaScript(`(async () => {
