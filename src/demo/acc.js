@@ -9,7 +9,8 @@ import { pushRecent } from '../shared/recent.js';
 import { toggleFavorite } from '../shared/favorites.js';
 import { mergeNews, parseNews } from '../shared/news.js';
 import { trayItem } from '../shared/chat.js';
-import { chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
+import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
+import { demoHarness } from './harness.js';
 import { searchConversations } from '../shared/conversations.js';
 import { Activity, activityRows } from '../shared/activity.js';
 import { Runs, runRows } from '../shared/runs.js';
@@ -141,9 +142,11 @@ export function commandOutput(line) {
  *   onTab?: (tab: { url: string, title: string } | null) => void,
  *   notify?: (text: string) => void,
  *   askAfterMs?: number | null,
- * }} [opts] askAfterMs: when to show the terminal_run confirm bar once; null never does
+ *   approvalAfterMs?: number | null,
+ * }} [opts] askAfterMs: when to show the terminal_run confirm bar once; approvalAfterMs: when the
+ *   running agent's approval card shows; null never does
  */
-export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, askAfterMs = null } = {}) {
+export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, askAfterMs = null, approvalAfterMs = null } = {}) {
   /** @type {Map<string, Set<(...args: any[]) => void>>} */
   const listeners = new Map();
   let trayId = 0;
@@ -195,6 +198,8 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     if (isDocUrl(url)) return docIdFromUrl(url).split('/').pop() || url;
     if (url.startsWith('acc://run/')) return 'Cronsole run';
     if (url.startsWith('acc://runlog/')) return 'Run';
+    if (url.startsWith('acc://settings/')) return 'Settings';
+    if (url.startsWith('acc://transcript/')) return 'Transcript';
     try { return new URL(url).hostname || url; } catch { return url; }
   };
   const show = () => {
@@ -241,7 +246,8 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
   };
 
   // ---- terminals: a prompt that echoes what's typed and answers a few commands ----
-  /** @type {Map<number, { line: string, prompt: string }>} */
+  // A contained session's tab has its own handler (harness.js), which may wait on an approval card.
+  /** @type {Map<number, { line: string, prompt: string, handle?: (line: string) => string | Promise<string>, onClose?: () => void }>} */
   const terms = new Map();
   let nextTerm = 1;
   /** @param {number} id @param {string} data */
@@ -253,7 +259,9 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     if (!s) return;
     for (const ch of data) {
       if (ch === '\r') {
-        out(id, `\r\n${commandOutput(s.line)}${s.prompt}`);
+        const r = s.handle ? s.handle(s.line) : commandOutput(s.line);
+        if (typeof r === 'string') out(id, `\r\n${r}${s.prompt}`);
+        else { out(id, '\r\n'); r.then((text) => { if (terms.has(id)) out(id, `${text}${s.prompt}`); }); }
         s.line = '';
       } else if (ch === '\x7f') {
         if (s.line) { s.line = s.line.slice(0, -1); out(id, '\b \b'); }
@@ -294,6 +302,24 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
   pastRun('npm run lint', 0, '> acme-api@1.0.0 lint\r\n0 problems', ['src/server.js'], 2 * HOUR);
   let askWork = 0;
   const workChanged = () => emit('activity', activityRows(work.list));
+
+  // ---- the harness: identities, contained sessions, approvals, the audit log ----
+  const harness = demoHarness({
+    now, emit, fallback: commandOutput, approvalAfterMs,
+    openTerminal({ label, session, cwd, handle, onClose }) {
+      const id = nextTerm++;
+      const win = cwd.replaceAll('/', '\\');
+      const prompt = `${win}>`;
+      terms.set(id, { line: '', prompt, handle, onClose });
+      emit('term:opened', { id, cwd: win, shell: label, profile: 'agent', powershell: false, ws: 'default', run: false, agent: label, session });
+      later(() => out(id, prompt), 60);
+      return {
+        id,
+        print: (text) => out(id, text),
+        end: (reason) => { terms.delete(id); later(() => emit('term:exit', id, null, reason), 60); },
+      };
+    },
+  });
 
   const api = {
     info: async () => ({
@@ -385,7 +411,8 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
         addRecent({ type: 'terminal', target: cwd, label: cwd });
         return { id, cwd, shell: shell.label, powershell: shell.powershell, ws: 'default' };
       },
-      kill: async (/** @type {number} */ id) => { terms.delete(id); },
+      // Closing a contained session's tab stops the session, as in the app.
+      kill: async (/** @type {number} */ id) => { const t = terms.get(id); terms.delete(id); t?.onClose?.(); },
       write: (/** @type {number} */ id, /** @type {string} */ data) => type(id, data),
       setActive: () => {},
       resize: () => {},
@@ -520,32 +547,23 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       restart: async () => { throw new Error('This is the demo, so no dev server starts.'); },
       onChanged: listen('dev'),
     },
+    // The harness (harness.js): made-up identities, one session already running, contained tabs.
     agents: {
-      info: async () => ({
-        folder: 'D:\\work\\acme-api',
-        rows: [
-          { id: 'local:dev-claude', name: 'Dev Claude', status: 'active', what: 'Claude Code', canStart: true, why: '', signIn: 'Run /login in the session.', sessions: [] },
-          { id: 'local:review-codex', name: 'Review Codex', status: 'suspended', what: 'Codex', canStart: false, why: 'suspended: activate it to start a session', signIn: '', sessions: [] },
-        ],
-      }),
-      start: async () => { throw new Error('This is the demo, so no agent starts. In the app, the Core starts it in a container.'); },
-      open: async () => { throw new Error('This is the demo, so there is no session to show.'); },
-      stop: async () => { throw new Error('This is the demo, so there is no session to stop.'); },
-      stopAll: async () => { throw new Error('This is the demo, so no agent session is running.'); },
+      ...harness.agents,
       onChanged: listen('agents'),
       onStopped: listen('agents-stopped'),
     },
-    logs: { query: async () => ({ error: 'This is the demo, so there is no Core and no audit log.' }) },
+    logs: harness.logs,
     approvals: {
-      list: async () => [],
-      decide: async () => { throw new Error('This is the demo, so nothing waits for an answer.'); },
+      ...harness.approvals,
       onChanged: listen('approvals'),
     },
 
     // Made-up states: what a machine with Hub up, Git Bash missing and no chat key would show.
     connections: {
       check: async (/** @type {string | undefined} */ id) => [
-        hubRow('http://127.0.0.1:4273', { ok: true, state: 'ready' }),
+        coreRow(harness.status()),
+        hubRow('http://127.0.0.1:4273', { ok: true, state: 'ready' }, 'sent'),
         cronsoleRow({ configured: true, ui: CRONSOLE_UI }, { count: tasks(now()).length }),
         ...shellRows([{ id: 'pwsh' }, { id: 'powershell' }, { id: 'cmd' }]),
         chatRow({ model: '', missing: ['ACC_CHAT_API_KEY', 'ACC_CHAT_MODEL'] }),
@@ -555,6 +573,8 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     menu: async () => { notify('Menus are native in the desktop app; the demo has none.'); return null; },
     extensions: { list: async () => [] },
     onShortcut: listen('shortcut'),
+    /** Not in the app's API: the body of a page the demo draws itself (Settings, a transcript), or null. */
+    demoPage: (/** @type {string} */ url) => harness.page(url),
   };
   return api;
 }

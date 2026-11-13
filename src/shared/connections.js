@@ -18,10 +18,17 @@ export const SHELLS = [
  * @param {{ ok: boolean, state: string }} health
  * @returns {Connection}
  */
-export function hubRow(url, health) {
-  if (health.ok) return { id: 'hub', name: 'Project Hub', state: 'ok', detail: `${url} · ${health.state || 'ready'}` };
+export function hubRow(url, health, token = 'none') {
+  const tok = token === 'sent' ? ' · access token sent' : token === 'withheld' ? ' · access token withheld (plain http to another machine)' : '';
+  if (health.ok) return { id: 'hub', name: 'Project Hub', state: 'ok', detail: `${url} · ${health.state || 'ready'}${tok}` };
+  if (/ returned 401\b/.test(health.state)) {
+    return {
+      id: 'hub', name: 'Project Hub', state: 'bad', detail: `${url} · wants an access token${tok}`,
+      fix: token === 'sent' ? "Hub refused the token: set ACC_HUB_TOKEN in .env to the HUB_TOKEN Hub runs with, then restart the app." : 'Set ACC_HUB_TOKEN in .env to the HUB_TOKEN Hub runs with, then restart the app.',
+    };
+  }
   return {
-    id: 'hub', name: 'Project Hub', state: 'bad', detail: `${url} · ${health.state || 'not answering'}`,
+    id: 'hub', name: 'Project Hub', state: 'bad', detail: `${url} · ${health.state || 'not answering'}${tok}`,
     fix: 'Start Project Hub. If it runs elsewhere, set hubUrl in settings.json (or ACC_HUB_URL), then restart the app.',
   };
 }

@@ -6,7 +6,7 @@ import { isAllowedNavigation, toUrl } from '../src/shared/url.js';
 
 /** @returns {import('../src/shared/scopes.js').Snapshot} */
 const snap = (over = {}) => ({
-  hubUrl: 'http://127.0.0.1:4273', quickLinks: 2, newsSources: 1, bookmarkSource: '', adBlock: true, closeToTray: false,
+  hubUrl: 'http://127.0.0.1:4273', hubToken: 'sent', quickLinks: 2, newsSources: 1, bookmarkSource: '', adBlock: true, closeToTray: false,
   chat: { model: 'claude-x', missing: [] }, cronsole: { configured: false, ui: '' }, mcpUrl: 'http://127.0.0.1:1/mcp',
   workspaces: 3, workspace: { name: 'acme', folder: 'D:\\acme', tabs: 1, terminals: 2 },
   core: { dir: 'C:\\data', sessions: 1, identities: 2, grants: 5, askGrants: 1, approvals: 0, limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 } },
@@ -38,6 +38,7 @@ test('values come from the snapshot: the Core\'s own limits, counts, chat and wo
   assert.equal(row(rows, 'Agent identities and grants').value, '2 identities, 5 grants (1 ask)');
   assert.equal(row(rows, 'Audit log').value, 'C:\\data\\audit');
   assert.equal(row(rows, 'Chat').value, 'on, model claude-x');
+  assert.equal(row(rows, 'Project Hub').value, 'http://127.0.0.1:4273, with its access token');
   assert.equal(row(rows, 'Tabs, terminals and conversations').value, '1 tab, 2 terminals');
   assert.equal(row(controls(snap({ chat: { model: '', missing: ['ACC_CHAT_API_KEY'] } })), 'Chat').value, 'off: ACC_CHAT_API_KEY not set');
 });

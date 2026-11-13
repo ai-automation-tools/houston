@@ -56,6 +56,25 @@ function hubAddress(value, remoteOk) {
 }
 
 /**
+ * The header that carries Project Hub's access token (ACC_HUB_TOKEN), and whether it may be sent.
+ * A token goes only to a Hub on this machine or over https, so it never crosses a network in
+ * clear: set for a plain-http remote Hub, it is withheld.
+ * @param {string} hubUrl
+ * @param {string | undefined} token
+ * @returns {{ state: 'none' | 'sent' | 'withheld', headers: Record<string, string> }}
+ */
+export function hubAuth(hubUrl, token) {
+  const t = (token ?? '').trim();
+  if (!t) return { state: 'none', headers: {} };
+  let safe = false;
+  try {
+    const u = new URL(hubUrl);
+    safe = u.protocol === 'https:' || /^(127\.0\.0\.1|localhost|\[::1\])$/i.test(u.hostname);
+  } catch { /* not a URL: withheld */ }
+  return safe ? { state: 'sent', headers: { authorization: `Bearer ${t}` } } : { state: 'withheld', headers: {} };
+}
+
+/**
  * @param {unknown} raw the parsed file, or anything else
  * @param {Record<string, string | undefined>} [env] ACC_HUB_URL wins over the file; ACC_HUB_REMOTE=1 allows a non-loopback Hub
  * @returns {Settings}

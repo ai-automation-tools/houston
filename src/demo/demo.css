@@ -18,7 +18,10 @@ body.demo #app { height: calc(100vh - var(--srcbar-h)); }
 #demo-page .url { color: var(--accent); word-break: break-all; }
 #demo-page p { max-width: 520px; margin: 4px 0; }
 
-#demo-about { position: absolute; inset: 0; overflow-y: auto; padding: 36px 24px 56px; color: var(--text-2); line-height: 1.6; }
+#demo-about, #demo-app-page { position: absolute; inset: 0; overflow-y: auto; padding: 36px 24px 56px; color: var(--text-2); line-height: 1.6; }
+#demo-app-page[hidden], #demo-about[hidden] { display: none; }
+#demo-app-page h1 { margin: 0 0 6px; font-size: 24px; color: var(--text); }
+#demo-app-page .note { color: var(--text-3); }
 .demo-doc { max-width: 780px; margin: 0 auto; }
 .demo-doc a { color: var(--accent); text-decoration: none; }
 .demo-doc a:hover { text-decoration: underline; }

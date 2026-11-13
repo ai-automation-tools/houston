@@ -2,12 +2,16 @@
 // Sec-Fetch-Site header, so Hub's same-origin guard lets it through the same way it
 // lets curl through. The renderer never talks to Hub directly.
 
+import { env } from './env.js';
 import { store } from './store.js';
+import { hubAuth } from '../shared/settings.js';
 import { feedSse } from '../shared/events.js';
 import { toggleFavorite } from '../shared/favorites.js';
 
 // settings.json's hubUrl, or ACC_HUB_URL (src/shared/settings.js).
 const HUB = store.settings().hubUrl;
+// ACC_HUB_TOKEN from .env, as a bearer header on every request, when Hub asks for one.
+const AUTH = hubAuth(HUB, env.ACC_HUB_TOKEN);
 const TIMEOUT_MS = 30_000; // a cold scan of every workspace takes ~12 s
 const RETRY_MS = 3_000; // Hub's /api/events stream advertises retry: 3000
 
@@ -27,7 +31,7 @@ async function hubFetch(path, init = {}, read = (res) => res.json()) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(HUB + path, { ...init, signal: ctrl.signal });
+    const res = await fetch(HUB + path, { ...init, headers: { ...AUTH.headers, ...init.headers }, signal: ctrl.signal });
     if (!res.ok && res.status !== 204) {
       const text = await res.text().catch(() => '');
       throw new Error(`Project Hub ${path} returned ${res.status}${text ? `: ${text}` : ''}`);
@@ -47,6 +51,8 @@ let favoriteQueue = Promise.resolve();
 
 export const hub = {
   url: HUB,
+  /** Whether an access token goes with each request: none set, sent, or withheld (a plain-http remote Hub). */
+  token: AUTH.state,
 
   async health() {
     try {
@@ -141,7 +147,7 @@ export function subscribeHubEvents(onChange) {
     while (!stopped) {
       controller = new AbortController();
       try {
-        const res = await fetch(HUB + '/api/events', { signal: controller.signal });
+        const res = await fetch(HUB + '/api/events', { headers: AUTH.headers, signal: controller.signal });
         if (!res.ok || !res.body) throw new Error(`Project Hub /api/events returned ${res.status}`);
         const reader = res.body.getReader();
         const decoder = new TextDecoder();

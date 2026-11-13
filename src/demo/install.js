@@ -14,7 +14,11 @@ const about = document.createElement('div');
 about.id = 'demo-about';
 about.hidden = true;
 about.innerHTML = ABOUT_HTML;
-content.append(page, about);
+// The app's own pages the demo can draw: Settings and a session's transcript (harness.js).
+const appPage = document.createElement('div');
+appPage.id = 'demo-app-page';
+appPage.hidden = true;
+content.append(page, about, appPage);
 
 /** @param {string} text */
 function notify(text) {
@@ -28,11 +32,16 @@ function notify(text) {
 const acc = demoApi({
   notify,
   askAfterMs: 6000,
+  approvalAfterMs: 15000,
   onTab(tab) {
     const welcome = tab?.url === WELCOME_URL;
+    // Built from escaped text by src/shared/scopes.js and logs.js, the same as the app's pages.
+    const html = tab && !welcome ? acc.demoPage(tab.url) : null;
     about.hidden = !welcome;
-    page.hidden = !tab || welcome;
-    if (!tab || welcome) return;
+    appPage.hidden = html === null;
+    if (html !== null) appPage.innerHTML = `<article class="demo-doc">${html}</article>`;
+    page.hidden = !tab || welcome || html !== null;
+    if (!tab || welcome || html !== null) return;
     /** @type {HTMLElement} */ (page.querySelector('h2')).textContent = tab.title;
     /** @type {HTMLElement} */ (page.querySelector('.url')).textContent = tab.url;
   },

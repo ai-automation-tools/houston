@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_HUB_URL, settingsFrom } from '../src/shared/settings.js';
+import { DEFAULT_HUB_URL, hubAuth, settingsFrom } from '../src/shared/settings.js';
 
 test('settingsFrom gives neutral defaults for no file, junk, or an empty object', () => {
   for (const raw of [undefined, null, 'x', [], {}]) {
@@ -72,4 +72,15 @@ test('settingsFrom keeps news sources that are web addresses or local .md files,
   ]);
   const many = settingsFrom({ newsSources: Array.from({ length: 20 }, (_, i) => ({ label: `n${i}`, url: `https://n${i}.example.com/` })) });
   assert.equal(many.newsSources.length, 12);
+});
+
+test('hubAuth sends the token as a bearer header only to a Hub on this machine or over https', () => {
+  assert.deepEqual(hubAuth('http://127.0.0.1:4273', ''), { state: 'none', headers: {} });
+  assert.deepEqual(hubAuth('http://127.0.0.1:4273', undefined), { state: 'none', headers: {} });
+  for (const url of ['http://127.0.0.1:4273', 'http://localhost:4273', 'http://[::1]:4273', 'https://hub.example.com']) {
+    assert.deepEqual(hubAuth(url, ' t0k '), { state: 'sent', headers: { authorization: 'Bearer t0k' } }, url);
+  }
+  // Plain http to another machine would carry it in clear.
+  assert.deepEqual(hubAuth('http://hub.example.com:4273', 't0k'), { state: 'withheld', headers: {} });
+  assert.deepEqual(hubAuth('not a url', 't0k'), { state: 'withheld', headers: {} });
 });

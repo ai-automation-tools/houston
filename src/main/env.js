@@ -37,8 +37,8 @@ export function onPath(file) {
   return dirs.map((d) => path.join(d, file)).find((f) => fs.existsSync(f)) ?? null;
 }
 
-/** The app's own credentials (the chat key, under either name): never passed to a child. */
-const APP_SECRETS = new Set(['ACC_CHAT_API_KEY', 'ANTHROPIC_API_KEY']);
+/** The app's own credentials (the chat key, under either name; Hub's token): never passed to a child. */
+const APP_SECRETS = new Set(['ACC_CHAT_API_KEY', 'ANTHROPIC_API_KEY', 'ACC_HUB_TOKEN']);
 
 /**
  * The environment for a terminal or other child process: `base` without the app's own

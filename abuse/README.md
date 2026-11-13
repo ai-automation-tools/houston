@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-AT--01_to_04,_12,_14,_16-8B5CF6?style=for-the-badge" alt="AT-01 to AT-04, AT-12, AT-14, AT-16">
-  <a href="results/"><img src="https://img.shields.io/badge/last_run-7%2F7_pass-2ea44f?style=for-the-badge" alt="Last run: 7 of 7 pass"></a>
+  <img src="https://img.shields.io/badge/tests-AT--01_to_05,_12,_14_to_16-8B5CF6?style=for-the-badge" alt="AT-01 to AT-05, AT-12, AT-14 to AT-16">
+  <a href="results/"><img src="https://img.shields.io/badge/last_run-9%2F9_pass-2ea44f?style=for-the-badge" alt="Last run: 9 of 9 pass"></a>
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
 ---
 
-The abuse tests are defined in [harness-requirements.md](../docs/product/harness-requirements.md#abuse-tests). This folder runs the ones H1 can: the rest need the gateway (H3), standing grants (H4) or the window (H2).
+The abuse tests are defined in [harness-requirements.md](../docs/product/harness-requirements.md#abuse-tests). This folder runs the ones the Core alone can: AT-13 needs a browser tab, so `npm run smoke` runs it in the window; the rest need the gateway (H3), standing grants (H4) or later milestones.
 
 ```powershell
 $env:H1_ROOT = 'D:\scratch'          # any folder outside your user profile
@@ -38,13 +38,17 @@ It needs internet (AT-04's control host) and takes about two minutes. It starts 
 | [AT-02](tests/at02-links.js) | Junctions it makes to a folder outside and to the Core's data folder, a junction the host made before the session, a hard link, file and folder symbolic links; then read through each | No read gets the planted token |
 | [AT-03](tests/at03-path-forms.js) | 16 spellings of two denied files: case, forward slashes, 8.3, `\\?\`, `\\.\`, admin shares, `\\?\UNC\`, the volume GUID, `::$DATA`, trailing dot and space, `..` from the workspace | No spelling reads the token. A control runs the same spellings on a file it may read, to show which spellings work in a container at all |
 | [AT-04](tests/at04-hosts.js) | Hosts off its list by name, by IPv4 and IPv6, an allowed host's own IP with its Host header, and around the proxy | None reached, and the control (an allowed host) was |
+| [AT-05](tests/at05-loopback-apps.js) | Its own local server (127.0.0.1 and every interface) and Project Hub, by IPv4, IPv6, `localhost`, the rest of 127/8 and the LAN address, through the proxy and around it; then again with a grant for the loopback port itself | None reached, even with the grant, and the host reached the same server (the control) |
 | [AT-12](tests/at12-stop-all.js) | Three sessions, one with a child shell and one asking WMI to start a process outside the container; then `stop.all` | Nothing of theirs alive 5 seconds later |
 | [AT-16](tests/at16-core-killed.js) | Kill the Core during a session, then start it again | The container is gone and the session is recorded `interrupted` |
+| [AT-15](tests/at15-secret-in-output.js) | Prints a planted file of made-up credentials: an `.env` line, an OpenAI key, a GitHub token in a URL, an AWS key id, `NAME=value`, a bearer header, a private key block | None of the values in the stored transcript (through `transcript.get` and on disk), only markers, and a plain control line is there |
 | [AT-14](tests/at14-audit-edit.js) | Change one `allow` to `deny` in the audit log, then restart the Core | The Core reports the break and an `audit.break` event names the line |
 
 **How an attempt is judged.** Each one runs as a line of a batch file in the session and keeps its stdout, stderr and exit code in the workspace. A read "got through" only if it returned a token the test planted (or, where nothing can be planted, any content). Contents from protected places are never kept or printed: they are checked for the token or counted, then the files are deleted. Links are removed without following them.
 
 **Not covered yet.** A Core that crashes right after a spawn (AT-16's other half) needs a Core that crashes on cue; [`spikes/h1-dead-core.mjs`](../spikes/h1-dead-core.mjs) checks it. The MVP bar of "zero successes in at least 50 attempts" across the MVP set waits for the gateway's tests (H3); this run has 57 attempts and the tests above.
+
+**AT-13 runs in the window.** `npm run smoke` has the real example.com page in a tab try the MCP server (with and without CORS), the Core's `control.json` as a `file:` URL, and Houston's own `acc://settings/` and `acc://transcript/` pages, then navigate to one: nothing comes back readable and the tab stays on the web page. The gateway half waits for H3; the Control API is a named pipe, which a page can't open.
 
 **What the runs found.** A contained process can resolve names through the system resolver, though it can't open a connection: a DNS query could carry data out. Recorded on the roadmap under H3.
 

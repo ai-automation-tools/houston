@@ -362,7 +362,7 @@ async function createWindow() {
     const layout = store.layout();
     const ws = current();
     const body = settingsBody({
-      hubUrl: hub.url, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, bookmarkSource: layout.bookmarkSource,
+      hubUrl: hub.url, hubToken: hub.token, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, bookmarkSource: layout.bookmarkSource,
       adBlock: layout.adBlock, closeToTray: layout.closeToTray,
       chat: conversation.info(), cronsole: cron.info(), mcpUrl: mcp?.url ?? '',
       workspaces: spaces.list.length,
@@ -671,7 +671,7 @@ async function createWindow() {
     };
     const groups = await Promise.all([
       want('core') ? core.status().then((s) => [coreRow(s)]) : [],
-      want('hub') ? hub.health().then((h) => [hubRow(hub.url, h)]) : [],
+      want('hub') ? hub.health().then((h) => [hubRow(hub.url, h, hub.token)]) : [],
       want('cronsole') ? cronRow().then((r) => [r]) : [],
       want('shells') ? shellRows(terminals.rescanShells()) : [],
       want('chat') ? [chatRow(conversation.info())] : [],
