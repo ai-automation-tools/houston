@@ -577,6 +577,9 @@ async function createWindow() {
       }
     },
   };
+  // The Core's gateway serves this server to sessions (core.js offerMcp); a Core that starts after the app is told at its next Connections check.
+  let mcpOffered = false;
+  const offerMcp = () => { if (mcp && !mcpOffered) core.offerMcp(mcp).then((ok) => { mcpOffered = ok; }); };
   const callLog = mcpLog(send);
   handle('mcp:log', () => callLog.entries);
   handle('activity:list', () => activityRows(activity.list));
@@ -588,6 +591,7 @@ async function createWindow() {
       mcp = m;
       terminals.env = { ACC_MCP_URL: m.url, ACC_MCP_TOKEN: m.token };
       console.log(`[mcp] listening on ${m.url}`);
+      offerMcp();
     })
     .catch((err) => console.error('[mcp] failed to start; the app runs without it:', err));
 
@@ -670,7 +674,7 @@ async function createWindow() {
       }
     };
     const groups = await Promise.all([
-      want('core') ? core.status().then((s) => [coreRow(s)]) : [],
+      want('core') ? core.status().then((s) => { if (s && !('error' in s)) offerMcp(); return [coreRow(s)]; }) : [],
       want('hub') ? hub.health().then((h) => [hubRow(hub.url, h, hub.token)]) : [],
       want('cronsole') ? cronRow().then((r) => [r]) : [],
       want('shells') ? shellRows(terminals.rescanShells()) : [],

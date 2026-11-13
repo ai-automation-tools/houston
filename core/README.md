@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H3-8B5CF6?style=for-the-badge" alt="Milestone: Harness H3">
-  <img src="https://img.shields.io/badge/schema-v4-2ea44f?style=for-the-badge" alt="Schema v4">
+  <img src="https://img.shields.io/badge/schema-v5-2ea44f?style=for-the-badge" alt="Schema v5">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -72,7 +72,7 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v4
+## 🧱 Schema v5
 
 | Table | Holds |
 |:---|:---|
@@ -80,7 +80,7 @@ The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` com
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end. |
 | `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. |
-| `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command, env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. |
+| `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
 
 The enums are `CHECK` constraints, so a bad row is refused by the database whatever code wrote it. Audit events are not in the database: they go to JSON-lines files, described below.
 
@@ -224,6 +224,8 @@ launchRequest({ ...spec, proxyPort: proxy.port });
 - **One event per decision**, of type `egress.connect`, with the host, port, scheme (`https` or `http`), method for plain HTTP, decision, reason and, when allowed, the address. Wiring it to the audit log comes with the runner.
 
 Listens on `127.0.0.1` only. `close()` ends open tunnels too.
+
+**DNS.** A contained process can resolve names, though it can connect nowhere off its list: Windows answers lookups through its DNS Client service, outside the container, so egress rules never see them (its own `nslookup`, which sends packets itself, times out). The containers SDK has no DNS control: its network rules match addresses and ports only. Accepted on 2026-11-13 as a known limit: a lookup could carry a little data out to a name server someone controls, but brings nothing in except addresses the container still can't connect to. Found by AT-04 (abuse run 2026-11-12).
 
 **Revocation lists.** Windows' own TLS (schannel: `curl.exe`, PowerShell's web cmdlets) fetches certificate revocation lists over plain HTTP before it trusts a certificate, and fails without them. So a session's policy names those hosts as `net:<host>:80` grants (Google's are `c.pki.goog` and `o.pki.goog`), and the proxy forwards plain `GET` and `HEAD` to them. A first run showed `curl.exe` failing with `CRYPT_E_REVOCATION_OFFLINE` before this was added.
 
@@ -465,6 +467,20 @@ npm run ctl -- grant.add identity=local:dev-claude resource=tool:github/* permis
 
 **A server's container.** It starts on a session's first call to it, as its own identity: that identity's file and `net:` grants are its container's policy (its own egress proxy, `ask` is deny since nobody watches a server), its program folders are read-only and on `PATH`, and its home (`houston-agents\mcp+<name>`) is its `USERPROFILE`, `APPDATA` and npm cache. Each `secret:<name>` in its env needs a `secret:<name>` use grant; each injection is a `credential.inject` event, and without the grant the server doesn't start. It stops when the session ends. Its tools are listed again at every start and hashed (name, title, description, schemas, annotations); a hash that isn't the pinned one moves it to `needs_review` (AT-08).
 
+**Host and http servers.** Some servers can't work in a container, so a registration names its `transport`. `host` starts the command on the host, unconfined: it gets the Windows basics, a clean `PATH` with its program folders, its own home and temp folders and its env, and nothing else of the Core's environment, and its file and `net:` grants don't bind it. Cronsole's server is one, because it calls Cronsole's API on loopback, which a container can't reach. `http` is a server already listening on loopback (plain http, no credentials in the URL), reached at its `url` with its env as request headers; `Bearer secret:<name>` takes the value from the vault under the same use grant. `mcp.update` gives an http server a new address. Either way its identity is `unconfined`, and every event by it says so. Pinning, the per-call check and result handling are the same for all three.
+
+Houston registers its own MCP server this way at every start: an http server named `houston`, with its per-launch token in the vault as `houston-mcp` and the use grant made with it, and its new address sent with `mcp.update`. The operator still installs and pins it before any session sees its tools, and it needs review again whenever an app update changes them. Cronsole's is registered by hand:
+
+```powershell
+Write-Output $env:CRONSOLE_TOKEN | npm run ctl -- secret.set name=cronsole-token
+npm run ctl -- mcp.add name=cronsole transport=host command='"C:\Program Files\nodejs\node.exe" D:\path\to\cronsole\mcp-server\dist\index.js' env='{"CRONSOLE_TOKEN":"secret:cronsole-token"}' pathDirs='["C:\\Program Files\\nodejs"]'
+npm run ctl -- grant.add identity=local:mcp/cronsole resource=secret:cronsole-token permission=use
+npm run ctl -- mcp.install name=cronsole
+npm run ctl -- mcp.pin name=cronsole hash=<toolsHash from the install>
+```
+
+Checked on 2026-11-13 by [`spikes/h3-host-servers.mjs`](../spikes/h3-host-servers.mjs): an agent in a real container listed and called `cronsole.list_tasks` (Cronsole's real server on the host, with its token from the vault) and `houston.list_tabs` (an http server built from the app's own MCP code). An ungranted Cronsole tool was refused, the container couldn't reach the http server's port directly, neither token was in the transcript or the audit log, and no server process was left running.
+
 **A call.** Tools are `<server>.<tool>` to the agent and `tool:<server>/<tool>` in a grant. `tools/list` shows a pinned server's tools that the identity isn't denied. `tools/call` is one policy check: `deny` is refused without the server hearing of it, `ask` waits on a card, `allow` goes through. Every call is an `mcp.tool_call` event with the arguments as a clipped, redacted preview and a SHA-256, the decision, and the outcome. A refused call comes back as a tool error (`isError`) that says why.
 
 **A result.** Every vault value is redacted, the first content block says it is untrusted content from that server, `_meta["houston/untrusted-content"]` says the same, and anything over 1 MB is cut block by block. Checked in real containers by [`spikes/h3-gateway.mjs`](../spikes/h3-gateway.mjs) on 2026-11-12: a contained agent listed and called the stub server's tools through its proxy and straight at the port, the ungranted tool was refused, and the server's injected token came back only as its marker; the value was in neither the agent's environment nor the audit log.
@@ -501,9 +517,10 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
 | `grant.remove` | `id` | the grant removed |
-| `mcp.list`, `mcp.get` | `name` for get | registrations: `name`, `identity`, `command`, `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
-| `mcp.add` | `name`, `command`; optional `env`, `pathDirs` | the registration, `discovered`, with the full command; its identity `local:mcp/<name>` is made active with no grants |
-| `mcp.install` | `name` | runs it once in its container and reads its tools: `installed` (or `needs_review` if it was pinned and the list changed) |
+| `mcp.list`, `mcp.get` | `name` for get | registrations: `name`, `identity`, `transport`, `command` (or `url` for http), `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
+| `mcp.add` | `name`, then `command`, or `transport=http` and `url`; optional `transport` (`container`, the default, or `host`), `env` (an http server's request headers), `pathDirs` | the registration, `discovered`, with the full command; its identity `local:mcp/<name>` is made active with no grants, `unconfined` unless it runs in a container |
+| `mcp.update` | `name`, `url` | an http server at its new address; its state stays, and its tools are still checked against the pin at every start |
+| `mcp.install` | `name` | runs it once (in its container, on the host, or over http) and reads its tools: `installed` (or `needs_review` if it was pinned and the list changed) |
 | `mcp.pin` | `name`, `hash` (the `toolsHash` the operator read) | `pinned`: sessions get its tools. `conflict` when the hash isn't the list as last read |
 | `mcp.disable` | `name` | `disabled`: calls are refused at once; `mcp.pin` enables it again |
 | `secret.set` | `name`, `value` | `{ name, created_at, updated_at, last_used_at }`, never the value. `ctl` reads the value from stdin ([Vault](#-vault)) |
@@ -555,7 +572,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H2 are done, and H3 is under way: the gateway and the vault are in. Next in [H3](../docs/ROADMAP.md): Houston's own MCP server and Cronsole's behind the gateway, an Integrations screen and the DNS question. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H2 are done, and H3 is under way: the gateway, the vault, and Houston's own MCP server and Cronsole's behind the gateway are in, and DNS from a container is decided (see [Egress proxy](#-egress-proxy)). Next in [H3](../docs/ROADMAP.md): the Integrations screen. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

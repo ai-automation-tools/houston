@@ -53,7 +53,7 @@ It needs internet (AT-04's control host) and takes about two minutes. It starts 
 
 **AT-13 runs in the window.** `npm run smoke` has the real example.com page in a tab try the MCP server (with and without CORS), the Core's `control.json` as a `file:` URL, and Houston's own `acc://settings/` and `acc://transcript/` pages, then navigate to one: nothing comes back readable and the tab stays on the web page. The gateway half is a unit test (`tests/core/gateway.test.js`): a foreign Host or Origin is refused. The Control API is a named pipe, which a page can't open.
 
-**What the runs found.** A contained process can resolve names through the system resolver, though it can't open a connection: a DNS query could carry data out. Recorded on the roadmap under H3. AT-07 (2026-11-12) also lists the folder names under the session temp root (the drive enumeration S1 found), though it reads no file there.
+**What the runs found.** A contained process can resolve names through the system resolver, though it can't open a connection: a DNS query could carry data out. The containers SDK has no control for it, so it was accepted as a documented limit on 2026-11-13 ([Core README](../core/README.md#-egress-proxy)). AT-07 (2026-11-12) also lists the folder names under the session temp root (the drive enumeration S1 found), though it reads no file there.
 
 ---
 

@@ -67,7 +67,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-17 | External model providers | Must | MVP | Whatever the backends support; provider hosts on the session's network allowlist |
 | CORE-18 | Memory | Should | Next | A curated per-profile store with provenance and a review queue |
 | CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |
-| CORE-20 | Native plugins | Should | MVP | First-party MCP servers behind the gateway |
+| CORE-20 | Native plugins | Should | MVP; Houston's own MCP server behind the gateway (H3) | First-party MCP servers behind the gateway |
 | CORE-21 | Third-party plugins | Could | MCP servers MVP, packages Later | A manifest with declared needs; always contained |
 | CORE-22 | MCP integrations | Must | MVP; gateway built (H3), screen next | The gateway |
 
@@ -75,7 +75,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
-| INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; standing grants Next | Its MCP server behind the gateway; `harness run --grant` as the task action |
+| INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; MCP server behind the gateway (H3); standing grants Next | Its MCP server behind the gateway; `harness run --grant` as the task action |
 | INT-02 | Roundtable for collaboration | Should | Next | Its stdio MCP server, one per identity, started by the gateway |
 | INT-03 | Promptbook for prompts, skills, agents and MCP-server cards | Should | Next | Its stdio MCP server, read-only, as the discovery catalogue |
 | INT-04 | Project Hub for files, bookmarks and recent items | Must | Done; access token built (H2) | The HTTP adapter in `src/main/hub.js` |

@@ -115,4 +115,12 @@ export const MIGRATIONS = [
     updated_at   TEXT NOT NULL
   ) STRICT;
   `,
+
+  // v5 (H3): how the gateway reaches a server. 'container' starts its stdio command in a
+  // container of its own; 'host' starts it on the host, unconfined, for a server that needs
+  // what a container refuses (Cronsole's calls its own API on loopback); 'http' is a server
+  // already listening on loopback (Houston's own), and command holds its URL.
+  `
+  ALTER TABLE mcp_servers ADD COLUMN transport TEXT NOT NULL DEFAULT 'container' CHECK (transport IN ('container', 'host', 'http'));
+  `,
 ];

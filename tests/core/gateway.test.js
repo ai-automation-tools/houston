@@ -305,3 +305,71 @@ test('disable refuses calls at once; a session\'s servers stop with it', { skip:
   assert.match((await s.rpc('tools/call', { name: 'stub.echo', arguments: { text: 'x' } })).body.result.content[0].text, /disabled/);
   await s.gw.close();
 });
+
+test('a host server starts unconfined, outside any container, with its secret and none of the Core\'s environment', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { gateway, vault, registry, agent, session, sdk, events } = await setup(t);
+  vault.set('github-token', TOKEN_VALUE);
+  process.env.HOUSTON_GW_PARENT_ONLY = 'from the Core';
+  t.after(() => { delete process.env.HOUSTON_GW_PARENT_ONLY; });
+  const s0 = gateway.add({ name: 'stub', transport: 'host', command: `"${process.execPath}" "${STUB}"`, env: { GITHUB_TOKEN: 'secret:github-token' }, pathDirs: [path.dirname(process.execPath)] });
+  assert.equal(s0.transport, 'host');
+  assert.equal(registry.get('local:mcp/stub').containment, 'unconfined');
+  registry.addGrant({ identity: 'local:mcp/stub', resource: 'secret:github-token', permission: 'use' }, OPERATOR);
+  gateway.pin('stub', (await gateway.install('stub')).toolsHash);
+  assert.equal(sdk.requests.length, 0, 'no container');
+  assert.equal(events().filter((e) => e.type === 'mcp.list_tools').at(-1).identity.containment, 'unconfined');
+
+  agent('local:dev', [['tool:stub/env', 'call']]);
+  const s = await session('local:dev');
+  const env = async (/** @type {string} */ name) => (await s.rpc('tools/call', { name: 'stub.env', arguments: { name } })).body.result.content[1].text;
+  assert.equal(await env('GITHUB_TOKEN'), '[REDACTED:secret:github-token]', 'injected, and redacted on the way back');
+  assert.equal(await env('HOUSTON_GW_PARENT_ONLY'), '(unset)');
+  assert.match(await env('PATH'), /^[A-Z]:\\Windows\\System32;/i);
+  assert.match(await env('USERPROFILE'), /agents[\\/]mcp\+stub$/);
+});
+
+test('an http server on loopback is reached with its header from the vault; its address can move; others are refused', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { gateway, vault, registry, agent, session, events } = await setup(t);
+  const { createMcpServer } = await import('../../src/shared/mcp.js');
+  const appToken = 'a'.repeat(20) + 'pp-token-for-the-gateway';
+  /** @type {Map<string, any>} */
+  const tools = new Map([['hello', { description: 'Say hello.', inputSchema: { type: 'object' }, run: () => ({ said: 'hello' }) }]]);
+  const app = createMcpServer({ token: appToken, tools, version: '1' });
+  await new Promise((r) => app.listen(0, '127.0.0.1', () => r(undefined)));
+  t.after(() => app.close());
+  const url = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (app.address()).port}/mcp`;
+
+  const bad = (/** @type {any} */ spec, /** @type {RegExp} */ re) => assert.throws(() => gateway.add(spec), (e) => e instanceof GatewayError && re.test(e.message));
+  bad({ name: 'x', transport: 'http', url: 'https://example.com/mcp' }, /loopback/);
+  bad({ name: 'x', transport: 'http', url: 'http://user:pw@127.0.0.1:1/mcp' }, /loopback/);
+  bad({ name: 'x', transport: 'http', url, pathDirs: ['C:/x'] }, /no pathDirs/);
+  bad({ name: 'x', transport: 'pipe', command: 'x' }, /transport/);
+  bad({ name: 'x', transport: 'http', url, env: { Authorization: 'Token secret:app-token' } }, /names a vault secret/);
+
+  const added = gateway.add({ name: 'app', transport: 'http', url: 'http://127.0.0.1:1/mcp', env: { Authorization: 'Bearer secret:app-token' } });
+  assert.deepEqual([added.transport, added.url, added.command], ['http', 'http://127.0.0.1:1/mcp', null]);
+  assert.equal(registry.get('local:mcp/app').containment, 'unconfined');
+  assert.throws(() => gateway.update('app', 'http://10.0.0.1/mcp'), /loopback/);
+  assert.equal(gateway.update('app', url).url, url);
+
+  // Without the use grant the header isn't sent; with a wrong value the app refuses.
+  vault.set('app-token', 'wrong-token-value');
+  await assert.rejects(gateway.install('app'), /no use grant on secret:app-token/);
+  registry.addGrant({ identity: 'local:mcp/app', resource: 'secret:app-token', permission: 'use' }, OPERATOR);
+  await assert.rejects(gateway.install('app'), /HTTP 401/);
+  vault.set('app-token', appToken);
+  const installed = await gateway.install('app');
+  assert.deepEqual(installed.tools.map((x) => x.name), ['hello']);
+  gateway.pin('app', installed.toolsHash);
+
+  agent('local:dev', [['tool:app/hello', 'call']]);
+  const s = await session('local:dev');
+  assert.deepEqual((await s.rpc('tools/list')).body.result.tools.map((/** @type {any} */ x) => x.name), ['app.hello']);
+  const out = await s.rpc('tools/call', { name: 'app.hello', arguments: {} });
+  assert.match(out.body.result.content[0].text, /Untrusted content from the MCP server 'app'/);
+  assert.equal(out.body.result.content[1].text, '{"said":"hello"}');
+  assert.equal(events().filter((e) => e.type === 'mcp.change').at(-1).action, 'mcp.pin');
+  assert.ok(events().some((e) => e.action === 'mcp.update' && e.server.was === 'http://127.0.0.1:1/mcp'));
+  assert.ok(!JSON.stringify(events()).includes(appToken), 'the app\'s token is in no audit event');
+  assert.throws(() => gateway.update('nope', url), /no MCP server/);
+});
