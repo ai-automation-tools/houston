@@ -34,7 +34,7 @@ const PEM_END = /-----END [A-Z0-9 ]*PRIVATE KEY-----/;
 /**
  * One line with every secret it holds replaced by a marker.
  * ponytail: patterns for well-known key formats and NAME=value; a secret with no telltale shape
- * gets through. The vault (H3) adds exact-value redaction for the credentials it injects.
+ * gets through by shape; `exact` (the vault's redact) replaces every stored vault value too.
  * @param {string} line
  */
 export function redact(line) {
