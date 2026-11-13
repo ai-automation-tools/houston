@@ -13,7 +13,7 @@
 
 The rules every change has to keep are in [AGENTS.md](../../AGENTS.md)'s security invariants. To report a problem, see [SECURITY.md](../../SECURITY.md).
 
-This page is the app as it runs today. The agent harness (identities, OS containers, a gateway, a vault, audit) is planned in [ADR-004](../decisions/adr-004-core-companion-process.md) and partly built under [`core/`](../../core/README.md) (audit log, policy check, launch defaults, egress proxy, session runner, identity registry, Control API), with the window starting no agent yet; what the spikes showed a container can and cannot do is in the [spike results](../decisions/spikes/2026-11-12-h0-spike-results.md).
+This page is the app as it runs today. The agent harness (identities, OS containers, a gateway, a vault, audit) is planned in [ADR-004](../decisions/adr-004-core-companion-process.md) and partly built under [`core/`](../../core/README.md) (audit log, policy check, launch defaults, egress proxy, session runner, identity registry, Control API, backend manifests); the window's Agents tab asks the Core to start sessions (below). What the spikes showed a container can and cannot do is in the [spike results](../decisions/spikes/2026-11-12-h0-spike-results.md).
 
 ## Web pages
 
@@ -38,6 +38,8 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 - The main process keeps the command and folder from the moment it asks. The click only says yes or no.
 - A run's result is its exit code, never its output. Closing its tab while it runs ends it and every process it started, found by the pid the app started, never by name.
 - Newlines, control characters and invisible characters are refused, so the bar shows exactly what runs. Unanswered asks expire after 5 minutes.
+- The Agents tab's sessions are the Core's, not the app's. The window names an identity or a session and nothing else; the folder is the active workspace's and the command is the identity's backend manifest or a fixed `cmd.exe`. The Core checks the identity and its grants and runs the session in an OS container, which can't read your profile, reach other local apps, or connect anywhere its grants don't list. Its terminal reaches the window over the Core's named pipe, never a port.
+- A Claude Code or Codex identity signs in to a folder of its own (`%LOCALAPPDATA%\houston-agents`), never your own `.claude` or `.codex`, so it can read its own sign-in and nothing of yours: not your MCP servers' tokens, hooks or history.
 
 ## The MCP server
 

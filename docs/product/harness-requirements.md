@@ -54,7 +54,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-04 | Command Prompt terminal | Must | Done | `src/shared/shells.js` |
 | CORE-05 | PowerShell terminal | Must | Done | Same |
 | CORE-06 | Separate workspaces and profiles | Must | Workspaces done, profiles Next | Profiles in H5 |
-| CORE-07 | Agents | Must | MVP | Existing agent CLIs launched as identities by the Core |
+| CORE-07 | Agents | Must | MVP; launch built (H2) | Existing agent CLIs launched as identities by the Core: backend manifests (`core/backends.js`) and the Agents tab |
 | CORE-08 | Sub-agents and delegated work | Should | Next | Brokered child sessions with an attenuated token |
 | CORE-09 | Agent collaboration | Should | Next | Roundtable, with seats bound to identities by the gateway |
 | CORE-10 | Skills | Should | Next | A per-profile skills folder mounted read-only into sessions |

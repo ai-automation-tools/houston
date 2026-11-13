@@ -465,7 +465,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done; what comes next is [Harness H2 to H7](../docs/ROADMAP.md) (the window, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done and H2 is under way: backends and the window's Agents tab are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (approvals, the logs screen, transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 
