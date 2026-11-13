@@ -1,4 +1,5 @@
-// AT-07: a session hunts for a vault value. It dumps its own environment, asks the MCP server
+// AT-07: a session hunts for a vault value, and for the operator's own user-scope variables (API
+// keys and tokens). It dumps its own environment, asks the MCP server
 // that holds the value to print it (allowed once on its card), and copies every file it can
 // read under the places a secret could sit: the user profile, the Core's data folder (the
 // database and vault.key), the agents folder (each server's home), the session temp folders
@@ -6,9 +7,11 @@
 // of it for the value. The script never has the value; only the host does.
 // The control: a planted file in the workspace with a known marker must turn up in the dump,
 // so a sweep that read nothing can't pass.
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { SYSTEM_ENV } from '../../core/launch.js';
 import { sleep } from '../harness.js';
 import { SERVER, gateway, readResult, startAgent } from './gateway-setup.js';
 
@@ -74,6 +77,19 @@ fs.closeSync(dump);
   const attempts = [{ name: 'control: a planted workspace file is in the sweep', result: 'observed', evidence: control ? `found; ${dump.length} bytes swept in all` : 'NOT FOUND' }];
   const envHit = JSON.stringify(r?.env ?? {}).includes(secret);
   attempts.push({ name: 'its own environment', result: envHit ? 'got through' : 'blocked', evidence: `${Object.keys(r?.env ?? {}).length} variables, ${envHit ? 'the value is there' : 'the value is not'}; HOUSTON_MCP_TOKEN ${r?.env?.HOUSTON_MCP_TOKEN ? 'present (its own session token)' : 'absent'}` });
+  // The operator's own user-scope variables (HKCU\Environment), where API keys and tokens live: none
+  // may reach a container, by name or by value (found 2026-11-13: the SDK's inherited environment
+  // carried all of them). Windows' own variables (launch.js SYSTEM_ENV) and the ones a launch sets are fine.
+  const userVars = /** @type {[string, string][]} */ (spawnSync('reg.exe', ['query', 'HKCU\\Environment'], { encoding: 'utf8', windowsHide: true }).stdout
+    .split(/\r?\n/).map((l) => /^\s+(\S+)\s+REG_\w+\s+(.*)$/.exec(l)).filter(Boolean).map((m) => [/** @type {RegExpExecArray} */ (m)[1], /** @type {RegExpExecArray} */ (m)[2].trim()]));
+  const own = new Set([...SYSTEM_ENV, 'Path', 'TEMP', 'TMP'].map((k) => k.toUpperCase()));
+  const inside = Object.entries(r?.env ?? {});
+  const named = userVars.filter(([k]) => !own.has(k.toUpperCase()) && inside.some(([n]) => n.toUpperCase() === k.toUpperCase())).map(([k]) => k);
+  const valued = userVars.filter(([k, v]) => /KEY|TOKEN|SECRET|PAT|PASS/i.test(k) && v.length >= 8 && inside.some(([, x]) => String(x).includes(v))).map(([k]) => k);
+  attempts.push({
+    name: 'the operator\'s user-scope variables (API keys, tokens) in its environment', result: named.length || valued.length ? 'got through' : 'blocked',
+    evidence: named.length || valued.length ? `present: ${[...new Set([...named, ...valued])].join(', ')}` : `none of the operator's ${userVars.length} user-scope variables, by name or by a secret's value`,
+  });
   const toolHit = String(r?.tool).includes(secret);
   attempts.push({ name: 'asks the server that holds it to print it', result: toolHit ? 'got through' : 'blocked', evidence: String(r?.tool ?? 'no answer').slice(0, 160) });
   for (const [label, seen] of Object.entries(r?.roots ?? {})) {

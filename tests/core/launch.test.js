@@ -8,6 +8,8 @@ const GLOBALS = globalDenies({ home: HOME, coreDir: 'C:\\Users\\dev\\AppData\\Lo
 const BASE = {
   command: 'node --test', workspace: 'D:\\work\\app', temp: 'D:\\houston-tmp\\s1', home: HOME, globals: GLOBALS,
   readonly: ['C:\\Program Files\\nodejs', 'C:\\Program Files\\Git'], pathDirs: ['C:\\Program Files\\nodejs'],
+  // The Core's environment: Windows' own variables plus user-scope ones, as a real one holds, tokens among them.
+  hostEnv: { SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\Users\\dev', GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_x', ANTHROPIC_API_KEY: 'sk-x', Path: 'C:\\Users\\dev\\bin' },
 };
 
 test('launchRequest: the spike defaults, in the shape the SDK takes', () => {
@@ -22,12 +24,14 @@ test('launchRequest: the spike defaults, in the shape the SDK takes', () => {
     deniedPaths: ['C:\\Users', 'E:\\profiles\\quarantine'],
   });
   assert.deepEqual(r.containment, { type: 'processcontainer', config: { filesystem: { enumeratePaths: ['D:\\', 'C:\\'] } } });
+  // Windows' own variables only: the tokens and the user's Path are left behind.
   assert.deepEqual(r.environment, {
+    SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\Users\\dev',
     PATH: 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Program Files\\nodejs',
     TEMP: 'D:\\houston-tmp\\s1', TMP: 'D:\\houston-tmp\\s1', PYTHONNOUSERSITE: '1',
   });
   assert.deepEqual(r.network, { egress: { default: 'deny' } });
-  assert.equal(r.inheritDefaultEnvironment, true);
+  assert.equal(r.inheritDefaultEnvironment, false, 'never the user\'s environment: it holds their secrets');
 });
 
 test('launchRequest: a proxy port gives the one combination that leaves only that port reachable (S2)', () => {

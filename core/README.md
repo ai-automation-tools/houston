@@ -188,6 +188,7 @@ Each default comes from a [spike result](../docs/decisions/spikes/2026-11-12-h0-
 | Workspace and temp folder outside every denied folder | Node will not run under a denied folder. A program or a CLI's config folder under the profile may still be granted |
 | `PATH` is `System32`, the Windows folder, `Wbem`, then the program folders | The SDK shells out to `whoami`; nothing from the operator's own `PATH` |
 | `TEMP` and `TMP` in the session's temp folder; `PYTHONNOUSERSITE=1` | The profile's temp and per-user site-packages are denied |
+| Only Windows' own variables (`SYSTEM_ENV`: `SystemRoot`, `ProgramFiles`, `USERPROFILE` and the like) and what the launch sets; `inheritDefaultEnvironment: false` | The SDK's inherited default environment is the user's, which held every user-scope variable: 30 API keys and tokens reached a container until 2026-11-13. AT-07 now checks for them by name and value |
 | `NODE_USE_ENV_PROXY=1` when there is a proxy port | Node's own `fetch` ignores `HTTPS_PROXY` without it |
 | No network; or, with `proxyPort`, the container proxy setting | Leaves that one host port reachable and nothing else on the machine or the network |
 

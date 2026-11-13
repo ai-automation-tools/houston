@@ -8,6 +8,7 @@
 //   unless private trees are denied, hence the next rule.
 // - Deny the users folder (every profile) and every global deny folder.
 // - The workspace and temp folder may not sit under a denied folder: Node will not run there (S1).
+// - Only Windows' own variables (SYSTEM_ENV), never the user's environment, which holds secrets.
 // - A clean PATH with System32 first (the SDK shells out to `whoami`), TEMP inside the session's
 //   temp folder, and PYTHONNOUSERSITE because per-user site-packages is under the denied profile.
 // - Network: everything off, or, with a proxy port, the container proxy setting that leaves
@@ -37,6 +38,26 @@ const within = (key, parentKey) => key === parentKey || key.startsWith(parentKey
 const OWNED = new Set(['path', 'temp', 'tmp', 'pythonnousersite', 'node_use_env_proxy']);
 
 /**
+ * What a session keeps of the Core's environment: Windows' own variables, which programs need
+ * to find the system, and nothing else. The SDK's inherited default environment is the user's,
+ * and that held every user-scope variable, API keys and tokens included (found 2026-11-13: 30
+ * of them in a container), so it is off and this list is the environment's base.
+ */
+export const SYSTEM_ENV = [
+  'SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'PATHEXT', 'OS', 'DriverData',
+  'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION',
+  'ProgramData', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'CommonProgramFiles', 'CommonProgramFiles(x86)', 'CommonProgramW6432',
+  'ALLUSERSPROFILE', 'PUBLIC', 'COMPUTERNAME', 'USERNAME', 'USERDOMAIN',
+  // Where the profile is: denied in a container, but programs expect the names (a backend's manifest points its own elsewhere).
+  'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+];
+
+/** @param {Record<string, string | undefined>} [from] the Core's environment @returns {Record<string, string>} its SYSTEM_ENV variables */
+export function systemEnv(from = process.env) {
+  return Object.fromEntries(SYSTEM_ENV.flatMap((k) => (from[k] === undefined ? [] : [[k, /** @type {string} */ (from[k])]])));
+}
+
+/**
  * @typedef {object} LaunchSpec
  * @property {string} command the full command line
  * @property {string} workspace the working folder, read and write
@@ -51,6 +72,7 @@ const OWNED = new Set(['path', 'temp', 'tmp', 'pythonnousersite', 'node_use_env_
  * @property {string} [systemRoot] defaults to C:\Windows
  * @property {number} [proxyPort] the Core's egress proxy on 127.0.0.1; omit for no network at all
  * @property {number} [timeoutMs]
+ * @property {Record<string, string | undefined>} [hostEnv] the Core's environment, whose SYSTEM_ENV variables a session keeps; process.env by default
  */
 
 /**
@@ -61,7 +83,7 @@ const OWNED = new Set(['path', 'temp', 'tmp', 'pythonnousersite', 'node_use_env_
 export function launchRequest(spec) {
   const {
     command, workspace, temp, home, readonly = [], readwrite = [], pathDirs = [], env = {},
-    globals = [], denied = [], systemRoot = 'C:\\Windows', proxyPort, timeoutMs = 30 * 60_000,
+    globals = [], denied = [], systemRoot = 'C:\\Windows', proxyPort, timeoutMs = 30 * 60_000, hostEnv = process.env,
   } = spec;
   if (typeof command !== 'string' || !command.trim() || /[\r\n\0]/.test(command)) throw new LaunchError('the command is one non-empty line');
 
@@ -114,8 +136,9 @@ export function launchRequest(spec) {
   return {
     command,
     workingDirectory: win(ws),
-    environment: { ...env, PATH, TEMP: win(tmp), TMP: win(tmp), PYTHONNOUSERSITE: '1', ...(proxyPort === undefined ? {} : { NODE_USE_ENV_PROXY: '1' }) },
-    inheritDefaultEnvironment: true,
+    environment: { ...systemEnv(hostEnv), ...env, PATH, TEMP: win(tmp), TMP: win(tmp), PYTHONNOUSERSITE: '1', ...(proxyPort === undefined ? {} : { NODE_USE_ENV_PROXY: '1' }) },
+    // Never the user's environment: it holds every user-scope variable, secrets included.
+    inheritDefaultEnvironment: false,
     timeoutMs,
     filesystem: { readwritePaths: rw.map(win), readonlyPaths: ro.map(win), deniedPaths: deny.map(win) },
     network,

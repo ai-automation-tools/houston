@@ -29,7 +29,7 @@ import path from 'node:path';
 import { canonical } from './audit.js';
 import { startEgressProxy } from './egress.js';
 import { OPERATOR } from './identities.js';
-import { LaunchError, launchRequest } from './launch.js';
+import { LaunchError, launchRequest, systemEnv } from './launch.js';
 import { LEGACY_VERSIONS, META, PROTOCOL_VERSIONS, bearerMatches, checkRequest, isLoopbackHost, isLoopbackOrigin, isObject, rpcError } from './mcp-protocol.js';
 import { PathError, canonicalPath, pathKey } from './paths.js';
 import { decide, globalDenies, policyVersion } from './policy.js';
@@ -52,8 +52,6 @@ export const STATES = ['discovered', 'installed', 'pinned', 'needs_review', 'dis
 export const TRANSPORTS = ['container', 'host', 'http'];
 /** An env or header value that names a vault secret: the whole value, or after "Bearer ". */
 const SECRET_REF = /^(Bearer )?secret:([a-z0-9][a-z0-9_-]{0,62})$/;
-/** What a host server keeps of the Core's environment: what Windows programs expect, nothing of the operator's. */
-const HOST_ENV = ['SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'PATHEXT', 'OS', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'USERNAME', 'USERDOMAIN', 'COMPUTERNAME'];
 
 /**
  * An http server's address: plain http to loopback only, no credentials in it.
@@ -339,7 +337,8 @@ export function createGateway({
     for (const d of [dirs.work, dirs.temp, serverHome]) fs.mkdirSync(d, { recursive: true });
     const sys = process.env.SystemRoot ?? 'C:\\Windows';
     const pathDirs = /** @type {string[]} */ (JSON.parse(reg.path_dirs));
-    const base = Object.fromEntries(HOST_ENV.flatMap((k) => (process.env[k] === undefined ? [] : [[k, process.env[k]]])));
+    // What Windows programs expect (launch.js SYSTEM_ENV), nothing of the operator's; its profile folders are its own home.
+    const base = systemEnv();
     const proc = spawnHost(reg.command, {
       shell: true, cwd: dirs.work, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: {
