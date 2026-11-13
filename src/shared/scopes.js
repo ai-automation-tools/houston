@@ -10,7 +10,7 @@ export const SETTINGS_URL = 'acc://settings/';
 /** @type {Record<Scope, { label: string, rule: string }>} */
 export const SCOPES = {
   global: { label: 'Global', rule: 'One per install. No profile, workspace or grant overrides it.' },
-  profile: { label: 'Profile', rule: 'Belongs to a profile and is never seen from another. Profiles come in H5; until then there is one, so these apply to this install.' },
+  profile: { label: 'Profile', rule: 'Belongs to a profile and is never seen from another. Shown for the active profile; switch from the 🧭 Houston menu, which restarts Houston in the other one.' },
   workspace: { label: 'Workspace', rule: 'Saved with each workspace and restored when it opens. Shown for the active workspace.' },
   session: { label: 'Session', rule: 'Lives as long as one agent session, and dies with it.' },
 };
@@ -26,6 +26,7 @@ export const SCOPES = {
  *   mcpUrl: string,
  *   workspaces: number,
  *   workspace: { name: string, folder: string, tabs: number, terminals: number },
+ *   profile?: { active: string, name: string, list: { id: string, displayName: string }[] },
  *   core: null | { error: string } | {
  *     dir: string, sessions: number, identities: number, grants: number, askGrants: number, approvals: number,
  *     limits: { approvalSeconds: number, transcriptBytes: number, sessionTranscriptBytes: number },
@@ -63,8 +64,9 @@ export function controls(s) {
     { label: 'Approval timeout', scope: 'global', value: fromCore((c) => `an unanswered card denies after ${c.limits.approvalSeconds} s`), where: 'Core default (core/approvals.js)' },
     { label: 'MCP server', scope: 'global', value: s.mcpUrl || 'not running', where: 'Fixed: loopback only, a new token at every launch' },
     { label: 'Close to tray', scope: 'global', value: s.closeToTray ? 'on' : 'off', where: 'File menu, or the tray menu' },
-    // Profile: one profile until H5.
-    { label: 'Agent identities and grants', scope: 'profile', value: fromCore((c) => `${count(c.identities, 'identity', 'identities')}, ${count(c.grants, 'grant')} (${c.askGrants} ask)`), where: 'npm run ctl -- identity.* / grant.* (the Identity Center comes in H5); the Agents tab lists them' },
+    { label: 'Profiles', scope: 'global', value: s.profile ? `${count(s.profile.list.length, 'profile')}; this window runs as ${s.profile.name}` : 'one', where: 'Switch from the 🧭 Houston menu (restarts Houston); make one with npm run ctl -- profile.create' },
+    // Profile: the active one's.
+    { label: 'Agent identities and grants', scope: 'profile', value: fromCore((c) => `${count(c.identities, 'identity', 'identities')}, ${count(c.grants, 'grant')} (${c.askGrants} ask)`), where: 'npm run ctl -- identity.create ... profile=<id> / grant.*; the Agents tab and the Identity Center list them' },
     { label: 'MCP servers (gateway)', scope: 'profile', value: fromCore((c) => (c.mcp ? `${count(c.mcp.servers, 'server')} registered, ${c.mcp.pinned} pinned${c.mcp.review ? `, ${c.mcp.review} need review` : ''}` : 'needs a newer Core')), where: 'npm run ctl -- mcp.add, then Install and Pin on the Integrations tab; each agent session reaches them through its own gateway, HOUSTON_MCP_URL' },
     { label: 'Secrets (vault)', scope: 'profile', value: fromCore((c) => (typeof c.secrets === 'number' ? `${count(c.secrets, 'secret')} stored; values are never shown` : 'needs a newer Core')), where: 'npm run ctl -- secret.set name=<name> (the value from stdin); only an MCP server with a secret: use grant receives one' },
     { label: 'Project Hub', scope: 'profile', value: `${s.hubUrl}${s.hubToken === 'sent' ? ', with its access token' : s.hubToken === 'withheld' ? ', access token withheld (plain http to another machine)' : ''}`, where: 'settings.json hubUrl, or ACC_HUB_URL in .env; its access token is ACC_HUB_TOKEN in .env' },
@@ -92,7 +94,7 @@ export function settingsBody(s, esc) {
   const rows = controls(s);
   const tables = /** @type {Scope[]} */ (Object.keys(SCOPES)).map((scope) => {
     const mine = rows.filter((r) => r.scope === scope);
-    const title = scope === 'workspace' ? `${SCOPES[scope].label}: ${s.workspace.name}` : SCOPES[scope].label;
+    const title = scope === 'workspace' ? `${SCOPES[scope].label}: ${s.workspace.name}` : scope === 'profile' && s.profile ? `${SCOPES[scope].label}: ${s.profile.name}` : SCOPES[scope].label;
     return `<h2>${esc(title)}</h2><p class="note">${esc(SCOPES[scope].rule)}</p>`
       + '<table><thead><tr><th>Control</th><th>Now</th><th>Changed in</th></tr></thead><tbody>'
       + mine.map((r) => `<tr><td>${esc(r.label)}</td><td>${esc(r.value)}</td><td>${esc(r.where)}</td></tr>`).join('')

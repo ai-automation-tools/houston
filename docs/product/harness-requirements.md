@@ -53,7 +53,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-03 | Filesystem explorer | Must | Done | The sidebar over Project Hub |
 | CORE-04 | Command Prompt terminal | Must | Done | `src/shared/shells.js` |
 | CORE-05 | PowerShell terminal | Must | Done | Same |
-| CORE-06 | Separate workspaces and profiles | Must | Workspaces done; profiles in the Core built (H5), the window's next | Profiles in H5 |
+| CORE-06 | Separate workspaces and profiles | Must | Workspaces done; profiles built (H5) | Profiles in H5 |
 | CORE-07 | Agents | Must | MVP; launch built (H2) | Existing agent CLIs launched as identities by the Core: backend manifests (`core/backends.js`) and the Agents tab |
 | CORE-08 | Sub-agents and delegated work | Should | Next | Brokered child sessions with an attenuated token |
 | CORE-09 | Agent collaboration | Should | Next | Roundtable, with seats bound to identities by the gateway |
@@ -111,7 +111,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
-| SET-01 | Per-profile settings, bookmarks and folders | Must | Next | A profile directory |
+| SET-01 | Per-profile settings, bookmarks and folders | Must | Built (H5) | A profile directory |
 | SET-02 | Per-profile agents, skills and MCP configuration | Must | Agents and MCP configuration built in the Core (H5); skills Next | Profile-scoped rows in the Core |
 | SET-03 | Custom themes | Could | Later | CSS variables |
 | SET-04 | Custom folder icons | Could | Next | Project Hub already stores them |

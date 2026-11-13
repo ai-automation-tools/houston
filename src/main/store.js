@@ -1,7 +1,6 @@
-// Small JSON files under the app's userData folder. Written atomically (temp file +
+// Small JSON files under the active profile's folder (profile.js; the default's is userData itself). Written atomically (temp file +
 // rename) so a crash mid-write can't leave a half file behind.
 
-import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cleanMessages } from '../shared/chat.js';
@@ -10,9 +9,10 @@ import { settingsFrom } from '../shared/settings.js';
 import { chatFileName, cleanWorkspaces } from '../shared/workspaces.js';
 import { cleanIndex, isConversationId, touchConversation } from '../shared/conversations.js';
 import { env } from './env.js';
+import { profileBase } from './profile.js';
 
 /** @param {string} name */
-const file = (name) => path.join(app.getPath('userData'), name);
+const file = (name) => path.join(profileBase(), name);
 
 /** A workspace's chat folder; chatFileName throws for anything that isn't a workspace id. @param {string} ws */
 const chatDir = (ws) => {

@@ -14,6 +14,7 @@ import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
 import { describeAsk, secondsLeft } from './shared/approvals.js';
 import { SETTINGS_URL } from './shared/scopes.js';
+import { profileMenu } from './shared/profiles.js';
 
 /** @type {any} */
 const api = /** @type {any} */ (window).acc;
@@ -24,6 +25,8 @@ const cron = await api.cronsole.info();
 /** @typedef {{ active: string, list: { id: string, name: string, folder: string, hubId: string }[], folder: string, terminals: string[], live: boolean }} SpaceInfo */
 /** @type {SpaceInfo} */
 let space = await api.workspace.info();
+// The active profile's name, on the 🧭 button when it isn't the default (H5). Read once: switching restarts the app.
+const profileName = await api.profile.info().then((/** @type {any} */ p) => p.name, () => '');
 const layout = info.layout;
 const appEl = $('app');
 const mainEl = $('main');
@@ -598,7 +601,7 @@ const spaceBtn = $('workspace');
 async function showSpace(w) {
   space = w;
   const cur = w.list.find((x) => x.id === w.active);
-  spaceBtn.textContent = `🧭 ${cur && w.active !== 'default' ? cur.name : 'Houston'}`;
+  spaceBtn.textContent = `🧭 ${profileName && profileName !== 'Default' ? `${profileName} · ` : ''}${cur && w.active !== 'default' ? cur.name : 'Houston'}`;
   spaceBtn.title = `Workspace: ${cur?.name || 'Default'}${w.folder ? ` (${w.folder})` : ''}. Click to switch; right-click a folder in Files to add one.`;
   sidebar.setRoot(cur?.hubId || '');
   terminals.showWorkspace(w.active);
@@ -609,7 +612,10 @@ api.workspace.onChanged((/** @type {SpaceInfo} */ w) => showSpace(w));
 
 spaceBtn.addEventListener('click', async () => {
   const cur = space.list.find((x) => x.id === space.active);
+  // Profiles first (H5): the Core's list, the active one checked. Picking another restarts Houston in it.
+  const prof = await api.profile.info().catch(() => null);
   const picked = await api.menu([
+    ...(prof ? [...profileMenu(prof.list, prof.active), '-'] : []),
     ...space.list.map((w) => ({ id: `go:${w.id}`, label: `${w.id === space.active ? '✓ ' : '    '}${w.name}` })),
     '-',
     ...(cur && cur.id !== 'default' ? [{ id: 'remove', label: `Remove "${cur.name}" (its folder stays)` }] : []),
@@ -619,6 +625,8 @@ spaceBtn.addEventListener('click', async () => {
     if (picked?.startsWith('go:')) await api.workspace.switch(picked.slice(3));
     if (picked === 'remove') await api.workspace.remove(space.active);
     if (picked === 'add') sidebar.show('files');
+    if (picked?.startsWith('profile:')) await api.profile.switch(picked.slice(8));
+    if (picked === 'profile-new') toast('Make a profile with npm run ctl -- profile.create id=<id> displayName=<name>, then pick it here.');
   } catch (err) {
     toast(errText(err));
   }
