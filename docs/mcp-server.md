@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tools-12-8B5CF6?style=for-the-badge" alt="12 tools">
+  <img src="https://img.shields.io/badge/tools-16-8B5CF6?style=for-the-badge" alt="16 tools">
   <a href="README.md"><img src="https://img.shields.io/badge/↩-docs_home-6B7280?style=for-the-badge" alt="Back to docs"></a>
 </p>
 
