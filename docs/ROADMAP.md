@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/now-Harness_H1-F59E0B?style=for-the-badge" alt="Now: Harness H1">
+  <img src="https://img.shields.io/badge/now-Harness_H2-F59E0B?style=for-the-badge" alt="Now: Harness H2">
   <img src="https://img.shields.io/badge/stage-private_·_harness_build-8B5CF6?style=for-the-badge" alt="Stage: private, harness build">
   <a href="README.md"><img src="https://img.shields.io/badge/↩-docs_home-6B7280?style=for-the-badge" alt="Back to docs"></a>
 </p>
@@ -120,7 +120,7 @@ One identity, one contained shell, one audit line. Done when AT-01 to AT-04, AT-
 The first thing usable in daily work, and the earliest point to stop. Done when the MVP acceptance criteria for launch, approval and logging pass, AT-05, AT-13 and AT-15 pass, and real work has run through a contained Codex and a contained Claude Code session.
 
 - [x] Core client in the main process; a Connections row for the Core and the containment rung in use — 2026-11-12; `src/main/core.js` calls the Control API through `core/client.js`, which has only Node built-ins so the window never loads the Core's database or runner. A new `core.status` method gives the pid, schema, the rung (`container`, the only one until H7) and the running sessions. The **Houston Core** row says running with that detail, not running with how to start it, or running older code than the app (the logon task keeps the code it started with until it is restarted). Checked against the real logon task in all three states, and `npm run smoke` passes 40 of 40 with the row `ok`
-- [ ] Backend adapter manifests for Codex and Claude Code
+- [x] Backend adapter manifests for Codex and Claude Code — 2026-11-12; `core/backends.js`. An identity created with `backend` runs that manifest's command (a caller can't pass one), with the CLI's native program read-only and a **home of its own** (`%LOCALAPPDATA%\houston-agents\<id>\<backend>`, restricted to the operator) where it signs in once. The operator's `~/.claude` and `~/.codex` are never granted: they hold the operator's MCP list with tokens in its env blocks, and Codex's `-c mcp_servers={}` merges rather than replaces, so a fresh home is the only way to start with no MCP servers. Each manifest declares the hosts it needs; the identity still needs a `net:` grant for each, and `session.start` lists any it lacks. The Control API gains `backend.list`. Checked with `spikes/h2-backends.mjs`: both CLIs reach their first screen in a real container (Claude Code's theme picker, Codex's sign-in), and Codex's GitHub calls are denied and logged. Signing in and real work are the Agents panel's to show
 - [ ] Agents panel: identities and running sessions; "start as identity" opens a contained terminal
 - [ ] Approval inbox: allow once, allow for this session, deny; a card shows the exact action, identity and workspace; unanswered cards deny at their timeout
 - [ ] Stop All button and hotkey, always visible

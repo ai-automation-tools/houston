@@ -38,6 +38,7 @@ function fakeRunner() {
     get: (id) => live.get(id),
     list: () => [...live.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt })),
     stopAll: () => Promise.all([...live.values()].map((s) => s.stop())),
+    backends: () => [{ name: 'codex', displayName: 'Codex', hosts: ['chatgpt.com:443'], signIn: 'x', installed: true }],
   };
 }
 
@@ -117,11 +118,19 @@ test('session.start validates, passes the spec to the runner, drains the termina
   assert.equal(s.runner.live.get('s1').output.readableFlowing, true);
   assert.deepEqual(await s.call('session.list'), [started]);
 
-  for (const bad of [{}, { identity: 'local:dev', workspace: 'D:\\w' }, { identity: 1, workspace: 'D:\\w', command: 'x' },
+  // No command is the runner's call (a backend identity's manifest sets it), so it passes through as undefined.
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w' });
+  assert.equal(s.runner.starts[1].command, undefined);
+  for (const bad of [{}, { identity: 'local:dev', workspace: 'D:\\w', command: 3 }, { identity: 1, workspace: 'D:\\w', command: 'x' },
     { identity: 'a', workspace: 'b', command: 'c', attended: 'yes' }, { identity: 'a', workspace: 'b', command: 'c', program: { readonly: 'C:\\' } }]) {
     await assert.rejects(s.call('session.start', bad), (e) => e.code === 'bad_request');
   }
   await assert.rejects(s.call('session.start', { identity: 'local:refused', workspace: 'b', command: 'c' }), (e) => e.code === 'refused' && /suspended/.test(e.message));
+});
+
+test('backend.list returns the runner\'s manifests', async (t) => {
+  const s = await setup(t);
+  assert.deepEqual((await s.call('backend.list')).map((b) => [b.name, b.installed]), [['codex', true]]);
 });
 
 test('session.stop, stop.all', async (t) => {

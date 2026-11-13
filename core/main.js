@@ -83,6 +83,20 @@ export function sessionTemp(env = process.env) {
 }
 
 /**
+ * Where each backend identity's CLI home goes (core/backends.js): beside the data folder, so
+ * in the profile, which only that identity's own sessions are granted a folder of. Restricted
+ * to the operator like the data folder; it holds each identity's sign-in.
+ * @param {string} dir the data folder
+ * @returns {string}
+ */
+export function agentsRoot(dir) {
+  const root = path.join(path.dirname(dir), 'houston-agents');
+  fs.mkdirSync(root, { recursive: true });
+  secureDir(root);
+  return root;
+}
+
+/**
  * Append one line to <data>/core.log. A Core started hidden at logon has no console, so this
  * is where its start line and a failure to start can be read.
  * ponytail: a line per start; cap it with the log limits (H7).
@@ -104,7 +118,7 @@ if (import.meta.main) {
     }
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
-    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() }) : null;
+    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp(), agentsRoot: agentsRoot(core.dir) }) : null;
     const control = runner ? await startControl({
       dir: core.dir, runner, audit: core.audit, schema: core.schema.to,
       // The same globals the runner uses, so both record the same policy version.
