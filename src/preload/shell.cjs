@@ -147,7 +147,7 @@ contextBridge.exposeInMainWorld('acc', {
   /** The Core's audit log, filtered by identity, session and decision. */
   logs: { query: invoke('logs:query') },
 
-  /** The Core's MCP servers, secret names, standing grants and backends; install, pin and disable a server by name, pause and resume a standing grant by id. */
+  /** The Core's MCP servers, secret names, standing grants and backends; install, pin and disable a server by name, pause and resume a standing grant by id, approve or reject a memory item. */
   integrations: {
     info: invoke('integrations:info'),
     install: invoke('integrations:install'),
@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('acc', {
     disable: invoke('integrations:disable'),
     pauseGrant: invoke('integrations:pauseGrant'),
     resumeGrant: invoke('integrations:resumeGrant'),
+    reviewMemory: invoke('integrations:reviewMemory'),
   },
 
   /** The Core's approval inbox: cards waiting for the operator, and their answers. */

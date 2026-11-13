@@ -86,6 +86,35 @@ export function backendRows(backends) {
   }));
 }
 
+/** A memory item's id: a UUID (core/memory.js). @param {unknown} id */
+export function memoryId(id) {
+  if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id)) throw new Error('That is not a memory item id.');
+  return id;
+}
+
+/** @param {unknown} d the renderer's; approve or reject */
+export function memoryDecision(d) {
+  if (d !== 'approve' && d !== 'reject') throw new Error('A memory item is approved or rejected.');
+  return d;
+}
+
+/**
+ * The profile's memory (H6): the items waiting for review, oldest first, each with who wrote it
+ * and from which session, and how many are approved. Only approved ones reach a session.
+ * @param {{ id: string, text: string, state: string, source: { identity: string, session: string | null }, createdAt: string }[]} list memory.list's answer
+ */
+export function memoryRows(list) {
+  const waiting = list.filter((m) => m.state === 'pending').reverse();
+  return {
+    approved: list.filter((m) => m.state === 'approved').length,
+    waiting: waiting.map((m) => ({
+      id: m.id, text: m.text.length > 140 ? `${m.text.slice(0, 139)}…` : m.text,
+      sub: `from ${m.source.identity} · ${new Date(m.createdAt).toLocaleString()}`,
+      title: [m.text, '', `Written by ${m.source.identity}${m.source.session ? ` in session ${m.source.session}` : ''}.`, 'Approve to serve it to this profile\'s sessions that hold a memory read grant; reject to keep it out.'].join('\n'),
+    })),
+  };
+}
+
 /** A standing grant's id, as core/standing.js STANDING_ID. */
 const STANDING = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 

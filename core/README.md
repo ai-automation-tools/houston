@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H5-8B5CF6?style=for-the-badge" alt="Milestone: Harness H5">
-  <img src="https://img.shields.io/badge/schema-v10-2ea44f?style=for-the-badge" alt="Schema v10">
+  <img src="https://img.shields.io/badge/schema-v11-2ea44f?style=for-the-badge" alt="Schema v11">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**delegate.js**](delegate.js) | Sub-agents: the gateway's `harness.delegate` tool, the intersection of what a child asks for with what its parent holds, and the child's identity from start to retirement. |
+| [**memory.js**](memory.js) | Profile memory: an agent's proposals, pending until the operator reviews them, and the approved items a session may recall. |
 | [**skills.js**](skills.js) | Skills: installing a skill folder into a profile with its content hash, and the skills a session gets (its `skill:` grants, unchanged ones only), linked into an agent CLI's home. |
 | [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
@@ -79,7 +80,7 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v10
+## 🧱 Schema v11
 
 | Table | Holds |
 |:---|:---|
@@ -88,6 +89,7 @@ The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` com
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
 | `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
 | `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. Since v9, its profile. |
+| `memories` | Profile memory (v11): the text (redacted against the vault), its profile, `pending`, `approved` or `rejected`, the identity and session that wrote it, and when and by whom it was reviewed ([Profile memory](#-profile-memory)). |
 | `skills` | Skills installed in a profile (v10): profile, name, where it came from, its content hash at install, its file count and size, and when and by whom ([Skills](#-skills)). |
 | `profiles` | Each profile (v9): an id, a display name and when it was made. `default` always exists, and every row from before v9 is in it. |
 | `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
@@ -545,6 +547,21 @@ npm run ctl -- grant.add identity=local:claude-runner resource=skill:git-pushing
 
 Checked on 2026-11-13 by [`spikes/h6-skills.mjs`](../spikes/h6-skills.mjs): a contained agent searched contained, read-only Promptbook for "git" and read `git-pushing` (its write tool was refused as not pinned); the operator installed it; and Claude Code, unattended in a container, asked for the skill's first heading, answered `NO-SKILL` without the grant and `SKILL-SEEN Git Push Workflow` with it.
 
+## 🧠 Profile memory
+
+[`memory.js`](memory.js) keeps what agents learn, per profile, with where it came from, and serves it only after the operator approves it (H6).
+
+- **Remember.** A session whose identity holds `memory:<its profile>` with permission `write` (allow) sees `harness.remember`. An item is up to 2,000 characters, redacted against the vault, and stored `pending` with the identity and session that wrote it. A profile holds at most 100 pending items, so an agent can't bury the queue.
+- **Review.** The operator approves or rejects each one: the window's Integrations tab (**Memory**), or `memory.review`. `memory.add` writes an approved item directly. Every step is a `memory.change` event.
+- **Recall.** A `read` grant shows `harness.recall`: approved items of the session's profile, newest first, each with its source, optionally only those containing every word asked for. A pending or rejected item is never served, so nothing an agent wrote (or a tool result talked it into writing) reaches another session until a person has read it. Another profile's memory is never served.
+
+```powershell
+npm run ctl -- grant.add identity=local:dev-claude resource=memory:default permission=write
+npm run ctl -- grant.add identity=local:dev-claude resource=memory:default permission=read
+npm run ctl -- memory.list state=pending
+npm run ctl -- memory.review id=<id> decision=approve
+```
+
 ## 🧬 Sub-agents
 
 [`delegate.js`](delegate.js) lets a running session start a child for part of its work (CORE-08, H5). Only the Core makes the child; a session can't mint its own token.
@@ -623,6 +640,10 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
 | `profile.create` | `id`, `displayName` | the new profile; its folder is made ([Profiles](#-profiles)) |
+| `memory.list` | optional `profile`, `state` (`pending`, `approved`, `rejected`) | items, newest first: `id`, `profile`, `text`, `state`, `source` (`identity`, `session`), `createdAt`, `reviewedAt`, `reviewedBy`, `note` ([Profile memory](#-profile-memory)) |
+| `memory.add` | `text`; optional `profile` | the item, approved, its source the operator |
+| `memory.review` | `id`, `decision` (`approve` or `reject`); optional `note` | the item |
+| `memory.remove` | `id` | `{ removed }` |
 | `skill.list` | optional `profile` | installed skills: `name`, `profile`, `source`, `hash`, `files`, `bytes`, `installedAt`, `installedBy`, `folder` ([Skills](#-skills)) |
 | `skill.install` | `from` (an absolute folder with a `SKILL.md`); optional `name` (the folder's, lower-cased), `profile`, `source` | the installed skill; a name already installed in the profile is a conflict |
 | `skill.remove` | `name`; optional `profile` | `{ removed }`; its folder goes, and its links go at the next session start |
@@ -695,7 +716,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Next on the [roadmap](../docs/ROADMAP.md): profile memory with a review queue. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Profile memory is in, with its review queue ([Profile memory](#-profile-memory)). Next on the [roadmap](../docs/ROADMAP.md): local model runtimes. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

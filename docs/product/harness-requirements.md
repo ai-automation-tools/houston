@@ -65,7 +65,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-15 | Scheduled tasks | Must | MVP; standing grants and `harness run` built (H4) | Cronsole owns schedules; the Core authorises each run with a standing grant |
 | CORE-16 | Local LLM support | Should | Next | Discovery of local OpenAI-compatible runtimes, passed to backends that take a base URL |
 | CORE-17 | External model providers | Must | MVP | Whatever the backends support; provider hosts on the session's network allowlist |
-| CORE-18 | Memory | Should | Next | A curated per-profile store with provenance and a review queue |
+| CORE-18 | Memory | Should | Built (H6) | A curated per-profile store with provenance and a review queue |
 | CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |
 | CORE-20 | Native plugins | Should | MVP; Houston's own MCP server behind the gateway (H3) | First-party MCP servers behind the gateway |
 | CORE-21 | Third-party plugins | Could | MCP servers MVP, packages Later | A manifest with declared needs; always contained |

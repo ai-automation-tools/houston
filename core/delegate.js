@@ -15,9 +15,9 @@ const DEFAULT_MINUTES = 30;
 /** The action a grant's type and permission are checked as. */
 const ACTION = {
   'file:read': 'file.read', 'file:write': 'file.write', 'file:list': 'file.list', 'net:connect': 'net.connect',
-  'tool:call': 'tool.call', 'command:run': 'command.run', 'secret:use': 'secret.use', 'session:run': 'session.start', 'session:spawn': 'session.spawn', 'skill:use': 'skill.use',
+  'tool:call': 'tool.call', 'command:run': 'command.run', 'secret:use': 'secret.use', 'session:run': 'session.start', 'session:spawn': 'session.spawn', 'skill:use': 'skill.use', 'memory:read': 'memory.read', 'memory:write': 'memory.write',
 };
-const TYPE = { file: 'File', net: 'Host', tool: 'Tool', command: 'Command', secret: 'Secret', session: 'Session', skill: 'Skill' };
+const TYPE = { file: 'File', net: 'Host', tool: 'Tool', command: 'Command', secret: 'Secret', session: 'Session', skill: 'Skill', memory: 'Memory' };
 
 export class DelegationError extends Error {
   /** @param {string} message */

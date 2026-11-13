@@ -31,6 +31,7 @@ import { startEgressProxy } from './egress.js';
 import { OPERATOR } from './identities.js';
 import { DEFAULT_PROFILE, profileOf } from './profiles.js';
 import { DELEGATE_RESOURCE, DelegationError, TOOLS as HARNESS_TOOLS } from './delegate.js';
+import { MemoryError, TOOLS as MEMORY_TOOLS } from './memory.js';
 
 /** The gateway's own tools' server name (delegate.js); no registration may take it. */
 export const BUILTIN = 'harness';
@@ -158,6 +159,8 @@ export function createGateway({
   const row = (name) => /** @type {any} */ (db.prepare('SELECT * FROM mcp_servers WHERE name = ?').get(name));
   /** Sub-agents (delegate.js), set once the runner exists: the runner needs the gateway first. @type {ReturnType<typeof import('./delegate.js').createDelegation> | null} */
   let delegation = null;
+  /** Profile memory (memory.js), set by main.js. @type {ReturnType<typeof import('./memory.js').createMemory> | null} */
+  let memory = null;
   /** A server's profile is its identity's (H5). @param {{ identity_id: string }} reg */
   const profileOfServer = (reg) => /** @type {any} */ (db.prepare('SELECT profile_id FROM identities WHERE id = ?').get(reg.identity_id))?.profile_id ?? DEFAULT_PROFILE;
   /** @param {unknown} name */
@@ -393,6 +396,10 @@ export function createGateway({
     const spawn = () => decide({ principal: { type: 'Identity', id: s.identity }, action: 'session.spawn', resource: { type: 'Session', id: DELEGATE_RESOURCE }, context: { session_id: s.id, attended: s.attended } },
       { ...s.policy, now: now() });
 
+    /** Its `memory:<profile>` read or write grant: only an allow serves (memory.js). @param {'memory.read' | 'memory.write'} action */
+    const memoryAccess = (action) => decide({ principal: { type: 'Identity', id: s.identity }, action, resource: { type: 'Memory', id: profile }, context: { session_id: s.id, attended: s.attended } },
+      { ...s.policy, now: now() });
+
     /** @param {string} action @param {string} id */
     const check = (action, id) => decide({ principal: { type: 'Identity', id: s.identity }, action, resource: { type: 'Tool', id }, context: { session_id: s.id, attended: s.attended } },
       { ...s.policy, now: now() });
@@ -400,6 +407,8 @@ export function createGateway({
     /** Pinned servers' tools this identity isn't denied. */
     function visibleTools() {
       const out = delegation && spawn().decision !== 'deny' ? HARNESS_TOOLS.map((t) => ({ ...t, name: `${BUILTIN}.${t.name}` })) : [];
+      if (memory && memoryAccess('memory.write').decision === 'allow') out.push({ ...MEMORY_TOOLS.remember, name: `${BUILTIN}.remember` });
+      if (memory && memoryAccess('memory.read').decision === 'allow') out.push({ ...MEMORY_TOOLS.recall, name: `${BUILTIN}.recall` });
       for (const r of /** @type {any[]} */ (db.prepare("SELECT name, tools, identity_id FROM mcp_servers WHERE state = 'pinned' ORDER BY name").all())) {
         if (profileOfServer(r) !== profile) continue;
         for (const t of JSON.parse(r.tools ?? '[]')) {
@@ -462,6 +471,19 @@ export function createGateway({
       };
 
       if (!isObject(args)) return refuse('arguments must be an object');
+      if (server === BUILTIN && memory && (tool === 'remember' || tool === 'recall')) {
+        const d = memoryAccess(tool === 'remember' ? 'memory.write' : 'memory.read');
+        if (d.decision !== 'allow') return refuse(`not granted: ${tool} needs an allow grant on memory:${profile} (${tool === 'remember' ? 'write' : 'read'}); ${d.reasons.join('; ')}`, { policy_ids: d.determining_policies });
+        try {
+          const out = tool === 'remember' ? memory.propose({ id: s.id, identity: s.identity, profile }, args) : memory.recall({ profile }, args);
+          record('allow', tool === 'remember' ? `proposed memory item ${/** @type {any} */ (out).id}, pending review` : `${/** @type {any} */ (out).items.length} approved items`, { policy_ids: d.determining_policies });
+          return { content: [{ type: 'text', text: vault.redact(JSON.stringify(out, null, 2)) }] };
+        } catch (e) {
+          if (!(e instanceof MemoryError)) throw e;
+          record('allow', 'allowed', { policy_ids: d.determining_policies, status: 'error', error_code: 'memory' });
+          return { content: [{ type: 'text', text: e.message }], isError: true };
+        }
+      }
       if (server === BUILTIN && delegation) {
         const d = spawn();
         if (d.decision === 'deny') return refuse(`not granted: starting a sub-agent needs a session:${DELEGATE_RESOURCE} spawn grant (${d.reasons.join('; ')})`, { policy_ids: d.determining_policies });
@@ -606,6 +628,8 @@ export function createGateway({
     forSession,
     /** Turn on the built-in harness.delegate tools (main.js, once the runner exists). @param {ReturnType<typeof import('./delegate.js').createDelegation>} d */
     useDelegation(d) { delegation = d; },
+    /** Turn on harness.remember and harness.recall (main.js). @param {ReturnType<typeof import('./memory.js').createMemory>} m */
+    useMemory(m) { memory = m; },
 
     /** @param {unknown} [profile] only that profile's servers */
     list(profile = undefined) {

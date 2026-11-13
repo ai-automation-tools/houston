@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../src/shared/integrations.js';
+import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg, memoryDecision, memoryId, memoryRows } from '../src/shared/integrations.js';
 
 const tools = [{ name: 'echo', description: 'Echo it.\nSecond line.' }, { name: 'env' }];
 /** @param {object} o */
@@ -77,4 +77,21 @@ test('standingRows: ones that won\'t run first, Pause or Resume, revoked left ou
   assert.match(by.zz.title, /harness run --grant zz/);
   assert.equal(standingId('nightly-docs'), 'nightly-docs');
   for (const bad of ['Night', '', '-x', 'a'.repeat(41), 3]) assert.throws(() => standingId(bad), /not a standing grant id/);
+});
+
+test('memoryRows lists the items waiting for review, oldest first, with who wrote them, and counts the approved', () => {
+  const at = (/** @type {number} */ h) => new Date(Date.UTC(2026, 10, 13, h)).toISOString();
+  const r = memoryRows([
+    { id: 'c', text: 'newest', state: 'pending', source: { identity: 'local:b', session: 's2' }, createdAt: at(12) },
+    { id: 'b', text: 'x'.repeat(200), state: 'pending', source: { identity: 'local:a', session: 's1' }, createdAt: at(11) },
+    { id: 'a', text: 'kept', state: 'approved', source: { identity: 'local:operator', session: null }, createdAt: at(10) },
+    { id: 'z', text: 'no', state: 'rejected', source: { identity: 'local:a', session: 's1' }, createdAt: at(9) },
+  ]);
+  assert.equal(r.approved, 1);
+  assert.deepEqual(r.waiting.map((m) => m.id), ['b', 'c']);
+  assert.equal(r.waiting[0].text.length, 140);
+  assert.match(r.waiting[0].sub, /^from local:a · /);
+  assert.match(r.waiting[1].title, /Written by local:b in session s2\./);
+  assert.throws(() => memoryId('../x'), /not a memory item id/);
+  assert.throws(() => memoryDecision('maybe'), /approved or rejected/);
 });

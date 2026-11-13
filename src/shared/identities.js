@@ -26,7 +26,7 @@ export function reviewState(i, now) {
 
 /** @param {string | null | undefined} t */
 const when = (t) => (t ? new Date(t).toLocaleString() : '—');
-const TYPES = { file: 'Files', net: 'Network', tool: 'MCP tools', command: 'Commands', secret: 'Secrets', session: 'Sessions', skill: 'Skills' };
+const TYPES = { file: 'Files', net: 'Network', tool: 'MCP tools', command: 'Commands', secret: 'Secrets', session: 'Sessions', skill: 'Skills', memory: 'Memory' };
 
 /**
  * @typedef {{ id: string, kind: string, displayName: string, owner: string | null, parent: string | null, purpose: string | null,

@@ -892,6 +892,21 @@ export class Sidebar {
       }
     }
 
+    // Profile memory (H6): what agents proposed, waiting for review. Only approved items are served.
+    if (info.memory) {
+      host.append(groupTitle(`Memory (${info.memory.waiting.length} waiting, ${info.memory.approved} approved)`));
+      if (!info.memory.waiting.length) host.append(note('Nothing waiting. An agent with a memory:<profile> write grant proposes items with harness.remember; they wait here until you approve them.'));
+      for (const m of info.memory.waiting) {
+        const row = line('idle', '10px', '🧠', m.text, m.sub, m.title);
+        for (const [decision, label, title] of [['approve', 'Approve', 'Serve it to sessions with a memory read grant'], ['reject', 'Reject', 'Keep it out of every session']]) {
+          q(row, '.acts').append(button(label, title, () => {
+            this.api.integrations.reviewMemory(m.id, decision).then(() => this.loadIntegrations(), (/** @type {unknown} */ err) => toast(errText(err)));
+          }));
+        }
+        host.append(row);
+      }
+    }
+
     host.append(groupTitle('Agent backends'));
     for (const b of info.backends) host.append(line(b.installed ? 'ready' : 'exited', '10px', b.installed ? '●' : '○', b.name, b.sub, b.title));
   }

@@ -957,6 +957,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         // The Integrations tab over this Core: a server registered with ctl (after Settings, which counts identities), then Install and Pin pressed in the tab.
         const stub = fileURLToPath(new URL('../../tests/core/stub-mcp-server.js', import.meta.url));
         await ctl('mcp.add', { name: 'smoke-stub', transport: 'host', command: `"${node}" "${stub}"` });
+        await ctl('memory.add', { text: 'Smoke: the workspace is a scratch folder.' });
         await ctl('standing.create', { id: 'smoke-nightly', identity: 'local:smoke-shell', workspace: ws, command: 'cmd.exe /d /c exit 0', maxMinutes: 5, expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
         agentRun.integrations = await wc.executeJavaScript(`(async () => {
           const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1076,7 +1077,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('the Integrations tab shows a registered server\'s command before it runs, installs it, lists the tools a pin would serve, and pins them',
         Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'
           && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
-          && ig.sections.join() === 'MCP servers (1),Secrets (0),Standing grants (1),Agent backends'), ig);
+          && ig.sections.join() === 'MCP servers (1),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends'), ig);
       check('the Integrations tab lists a standing grant with who it runs as, and Pause and Resume change it in the Core',
         Boolean(ig?.grantBefore?.sub === 'local:smoke-shell · up to 5 min' && ig.grantBefore.buttons.join() === 'Pause' && /^paused/.test(ig.grantPaused)
           && ig.grantStatus === 'active' && ig.grantChanges?.join() === 'standing.create,standing.pause,standing.resume'), ig);

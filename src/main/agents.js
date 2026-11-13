@@ -9,7 +9,7 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
-import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
+import { backendRows, memoryDecision, memoryId, memoryRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
 import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
 import { identitiesBody } from '../shared/identities.js';
@@ -102,7 +102,9 @@ export const integrations = {
       const [servers, secrets, backends] = await Promise.all([core.call('mcp.list', { profile }), core.call('secret.list', { profile }), core.call('backend.list')]);
       // A Core from before H4 has no standing grants: null, and the tab says so.
       const standing = await core.call('standing.list', { profile }).catch(() => null);
-      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()) };
+      // And none from before H6's memory.
+      const memory = await core.call('memory.list', { profile }).catch(() => null);
+      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()), memory: memory && memoryRows(memory) };
     } catch (e) {
       return { error: /** @type {any} */ (e).code === 'unknown_method' ? 'The Core runs older code than the app: end and run the Houston Core task.' : why(e) };
     }
@@ -119,6 +121,9 @@ export const integrations = {
   pauseGrant: (id) => core.call('standing.pause', { id: standingId(id) }).then(() => true),
   /** @param {unknown} id */
   resumeGrant: (id) => core.call('standing.resume', { id: standingId(id) }).then(() => true),
+  // A memory item an agent proposed: serve it to the profile's sessions, or keep it out.
+  /** @param {unknown} id @param {unknown} decision */
+  reviewMemory: (id, decision) => core.call('memory.review', { id: memoryId(id), decision: memoryDecision(decision) }).then(() => true),
 };
 
 /**

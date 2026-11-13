@@ -207,4 +207,22 @@ export const MIGRATIONS = [
   ALTER TABLE grants_v10 RENAME TO grants;
   CREATE INDEX grants_by_identity ON grants (identity_id);
   `,
+
+  // v11 (H6): profile memory (memory.js). An agent's item is pending until the operator reviews
+  // it; only approved items are served. source_* say who wrote it, from which session.
+  `
+  CREATE TABLE memories (
+    id               TEXT PRIMARY KEY,
+    profile_id       TEXT NOT NULL REFERENCES profiles(id),
+    text             TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 2000),
+    state            TEXT NOT NULL CHECK (state IN ('pending', 'approved', 'rejected')),
+    source_identity  TEXT NOT NULL,
+    source_session   TEXT,
+    created_at       TEXT NOT NULL,
+    reviewed_at      TEXT,
+    reviewed_by      TEXT,
+    review_note      TEXT
+  ) STRICT;
+  CREATE INDEX memories_by_profile ON memories (profile_id, state);
+  `,
 ];
