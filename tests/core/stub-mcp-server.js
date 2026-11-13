@@ -7,8 +7,11 @@
 import fs from 'node:fs';
 import readline from 'node:readline';
 
+// A desc.txt beside the server, read at start, also changes it: the abuse suite's way of updating a pinned server.
+let fileDesc;
+try { fileDesc = fs.readFileSync(new URL('./desc.txt', import.meta.url), 'utf8').trim(); } catch { /* none */ }
 const tools = [
-  { name: 'echo', description: process.env.STUB_ECHO_DESC ?? 'Echo the text back.', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } },
+  { name: 'echo', description: process.env.STUB_ECHO_DESC ?? fileDesc ?? 'Echo the text back.', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } },
   { name: 'env', description: 'Read one environment variable.', inputSchema: { type: 'object', properties: { name: { type: 'string' } } } },
   { name: 'big', description: 'A long text result.', inputSchema: { type: 'object', properties: { bytes: { type: 'number' } } } },
 ];

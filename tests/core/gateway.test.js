@@ -67,6 +67,7 @@ function fakeSdk() {
 /** @param {import('node:test').TestContext} t */
 async function setup(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-gw-'));
+  fs.mkdirSync(SCRATCH, { recursive: true });
   const scratch = fs.mkdtempSync(path.join(SCRATCH, 'gw-'));
   const db = openDb(':memory:');
   migrate(db);
@@ -129,7 +130,7 @@ async function setup(t) {
   return { db, audit, vault, approvals, gateway, sdk, registry, events, session, pinnedStub, agent };
 }
 
-test('add registers a server, discovered, with its own active identity; bad specs are refused', async (t) => {
+test('add registers a server, discovered, with its own active identity; bad specs are refused', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
   const { gateway, registry } = await setup(t);
   const s = gateway.add({ name: 'stub', command: 'node stub.js', env: { TOKEN: 'secret:github-token', MODE: 'test' } });
   assert.equal(s.state, 'discovered');

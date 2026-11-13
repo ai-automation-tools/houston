@@ -126,14 +126,14 @@ if (import.meta.main) {
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
     const approvals = createApprovals({ audit: core.audit });
-    // The same globals the runner uses, so both record the same policy version.
-    const registry = createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) });
+    // The same globals the runner uses, so both record the same policy version. Windows paths, so Windows only.
+    const registry = win32 ? createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }) : undefined;
     const vault = win32 ? await openVault({ db: core.db, dir: core.dir, audit: core.audit }) : undefined;
     const where = { coreDir: core.dir, tempRoot: win32 ? sessionTemp() : '', agentsRoot: win32 ? agentsRoot(core.dir) : '' };
-    const gateway = vault ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
+    const gateway = vault && registry ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway }) : null;
     const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
-    const control = runner ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault }) : null;
+    const control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));
