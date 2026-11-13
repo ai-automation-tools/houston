@@ -228,6 +228,55 @@ export function docsTasks(tasks) {
 }
 
 /**
+ * The standing grant a task's command runs under (H4): `harness.js run --grant <id>`, or
+ * `npm run harness -- run --grant <id>`, anywhere in its exported definition (Task Scheduler
+ * XML or Cronsole's JSON). Null when it doesn't run one.
+ * @param {string} text
+ * @returns {string | null}
+ */
+export function standingGrantIn(text) {
+  const t = String(text).replaceAll('&quot;', '"').replaceAll('\\"', '"');
+  return /harness(?:\.js)?"?\s+(?:--\s+)?run\s+--grant(?:=|\s+)"?([a-z0-9][a-z0-9_-]{0,39})(?![A-Za-z0-9_-])/.exec(t)?.[1] ?? null;
+}
+
+/**
+ * A task's exported definition as text, through Cronsole's export_task, to find what it runs.
+ * @param {ReturnType<typeof stdioRpc>} rpc
+ * @param {string} taskId
+ */
+export async function exportedTask(rpc, taskId) {
+  const result = await rpc.request('tools/call', { name: 'export_task', arguments: { taskId } });
+  if (result?.isError) throw new Error(toolText(result) || 'Cronsole refused export_task');
+  return `${toolText(result)}\n${JSON.stringify(result?.structuredContent ?? {})}`;
+}
+
+/**
+ * The line a task shows for its standing grant, from the Core's standing.get (or why there is none).
+ * @param {{ id: string, standing?: any, error?: string }} g
+ * @param {number} now ms since the epoch
+ * @returns {{ icon: string, text: string, sub: string, title: string, bad: boolean }}
+ */
+export function grantLine(g, now) {
+  const s = g.standing;
+  if (!s) return { icon: '⚠', text: `standing grant ${g.id}`, sub: g.error ?? 'unknown', title: `Its command runs harness run --grant ${g.id}, but ${g.error ?? 'the Core has no such grant'}. The run will be refused.`, bad: true };
+  const expired = !(Date.parse(s.expiresAt) > now);
+  const why = s.status !== 'active' ? s.status : expired ? 'expired' : s.grantsChanged ? 'grants changed: approve it again' : '';
+  return {
+    icon: why ? '⚠' : '🛡',
+    text: `${s.identity} · standing grant ${s.id}`,
+    sub: why || `up to ${s.maxMinutes} min`,
+    title: [
+      `Runs contained as ${s.identity}, unattended (every ask is a deny), under standing grant ${s.id}.`,
+      `In ${s.workspace}: ${s.command}`,
+      `Budget ${s.maxMinutes} min; expires ${new Date(s.expiresAt).toLocaleString()}; ${s.status}.`,
+      s.grantsChanged ? `${s.identity}'s grants changed since it was approved, so runs are refused until the operator approves it again (standing.update).` : '',
+      s.lastRunAt ? `Last run ${new Date(s.lastRunAt).toLocaleString()}.` : 'Not run yet.',
+    ].filter(Boolean).join('\n'),
+    bad: Boolean(why),
+  };
+}
+
+/**
  * A task's last few runs, newest first, through Cronsole's get_task_history. Only runs
  * Cronsole performed are there; a Windows task firing on its own trigger isn't.
  * @param {ReturnType<typeof stdioRpc>} rpc

@@ -522,6 +522,8 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       info: async () => ({ configured: true, ui: CRONSOLE_UI }),
       tasks: async () => tasks(now()),
       history: async (/** @type {string} */ taskId) => runs(taskId, now()),
+      // The nightly backup runs contained, under a made-up standing grant (the Integrations tab lists it too).
+      grant: async (/** @type {string} */ taskId) => (taskId === 'task-backup' ? { id: 'nightly-backup', standing: harness.standingGrant('nightly-backup') } : null),
     },
 
     // A made-up repo. The diff pages are the desktop app's (acc://git), so the demo's rows open the stand-in page.

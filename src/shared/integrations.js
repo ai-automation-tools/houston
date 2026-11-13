@@ -85,3 +85,41 @@ export function backendRows(backends) {
     title: [b.name, b.hosts?.length ? `Reaches ${b.hosts.join(', ')}` : '', b.signIn && `First time: ${b.signIn}`].filter(Boolean).join('\n'),
   }));
 }
+
+/** A standing grant's id, as core/standing.js STANDING_ID. */
+const STANDING = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+
+/** @param {unknown} id the renderer's; must be a standing grant id */
+export function standingId(id) {
+  if (typeof id !== 'string' || !STANDING.test(id)) throw new Error('That is not a standing grant id.');
+  return id;
+}
+
+/**
+ * One row per standing grant (H4), ones that won't run first: who it runs as, for how long, until when,
+ * and Pause or Resume. Stop All pauses them all, so Resume is how a scheduled run comes back. Revoked
+ * ones are left out; making and approving one stays with ctl.
+ * @param {{ id: string, identity: string, workspace: string, command: string, maxMinutes: number, expiresAt: string, status: string,
+ *   grantsChanged: boolean, lastRunAt: string | null, running: string | null }[]} list standing.list's answer
+ * @param {number} now ms since the epoch
+ */
+export function standingRows(list, now) {
+  return list
+    .filter((s) => s.status !== 'revoked')
+    .map((s) => {
+      const expired = !(Date.parse(s.expiresAt) > now);
+      const problem = s.status === 'paused' ? 'paused: no scheduled run starts' : expired ? 'expired' : s.grantsChanged ? "its identity's grants changed: approve it again (ctl)" : '';
+      return {
+        id: s.id, problem: Boolean(problem),
+        icon: s.running ? '●' : problem ? '⏸' : '⏱',
+        tone: /** @type {'ready' | 'idle' | 'exited'} */ (s.running ? 'ready' : problem ? 'exited' : 'idle'),
+        sub: problem || `${s.identity} · up to ${s.maxMinutes} min${s.running ? ' · running now' : ''}`,
+        title: [`${s.id}: runs ${s.identity}, unattended, in ${s.workspace}`, s.command, `Budget ${s.maxMinutes} min; expires ${new Date(s.expiresAt).toLocaleString()}`,
+          s.lastRunAt ? `Last run ${new Date(s.lastRunAt).toLocaleString()}` : 'Not run yet', `A task runs it with: harness run --grant ${s.id}`].join('\n'),
+        actions: s.status === 'paused'
+          ? [{ act: /** @type {'resume'} */ ('resume'), label: 'Resume', title: 'Let scheduled runs start again' }]
+          : [{ act: /** @type {'pause'} */ ('pause'), label: 'Pause', title: 'Refuse scheduled runs until resumed; a run going now carries on' }],
+      };
+    })
+    .sort((a, b) => Number(b.problem) - Number(a.problem) || a.id.localeCompare(b.id));
+}

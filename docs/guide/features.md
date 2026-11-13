@@ -101,6 +101,7 @@ The **Integrations** tab is what the Core's gateway serves. It needs the Core ru
 
 - **MCP servers.** Each one with how it runs (contained; on the host or over http, both marked unconfined), its full command or address, and its state. Servers that need a decision come first. **Install** runs a new one once and reads its tools; the tools it read are listed under it, and **Pin N tools** serves them to sessions whose identities are granted them. A pinned server whose tools change is held for review until you pin it again. **Read again** checks a pinned one, **Disable** stops serving it at once and **Enable** brings it back. Houston adds its own MCP server here whenever the Core is running.
 - **Secrets.** The vault's names, when each was set, and when a server last got it. Values never come back out.
+- **Standing grants.** What scheduled tasks run under (`harness run --grant <id>`): who each runs as, its budget, and anything that stops its next run. **Pause** refuses its runs and **Resume** lets them start again; Stop All pauses them all. Making and approving one is `npm run ctl`'s ([Standing grants](../../core/README.md#-standing-grants)).
 - **Agent backends.** Claude Code and Codex, and whether each is installed. Hover for the hosts it reaches and how to sign in the first time.
 - Adding a server or setting a secret is `npm run ctl`'s, so no command line or secret value goes through the window.
 

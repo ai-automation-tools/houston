@@ -28,7 +28,7 @@ ACC_CRONSOLE_MCP=<cronsole>/mcp-server/dist/index.js
 |:---|:---|
 | Look at the tab's label | A red count of active tasks whose last run failed, checked at start and every minute with the Hub dot; hover it for their names. Paused and missing tasks aren't counted |
 | Open the tab | Lists `list_tasks`: next run, paused, missing or failed, details on hover |
-| Click a task | Unfolds its last five runs: when, how it went, how long |
+| Click a task | Unfolds its last five runs: when, how it went, how long. A task whose command is `harness run --grant <id>` also shows the identity and standing grant it runs under, contained, and what would stop its next run (paused, expired, its grants changed). That comes from the task's definition (`export_task`) and the Houston Core |
 | Click a run | Opens `acc://run/<task>/<run>` in a tab: the run's log, or for a platform run (a Claude routine, a GitHub Action) what `get_run_output` returns |
 | **Open Cronsole** | Shows Cronsole's UI in a pinned tab, first in the strip, with no close button (Ctrl+W still closes it) |
 | **Refresh** | Asks Cronsole again |

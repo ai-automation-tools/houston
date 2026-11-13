@@ -9,7 +9,7 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
-import { backendRows, secretRows, serverName, serverRows, toolsHashArg } from '../shared/integrations.js';
+import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
 import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
@@ -75,7 +75,9 @@ export const integrations = {
     if (process.platform !== 'win32') return { error: 'The gateway runs in the Core, which runs on Windows only.' };
     try {
       const [servers, secrets, backends] = await Promise.all([core.call('mcp.list'), core.call('secret.list'), core.call('backend.list')]);
-      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends) };
+      // A Core from before H4 has no standing grants: null, and the tab says so.
+      const standing = await core.call('standing.list').catch(() => null);
+      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()) };
     } catch (e) {
       return { error: /** @type {any} */ (e).code === 'unknown_method' ? 'The Core runs older code than the app: end and run the Houston Core task.' : why(e) };
     }
@@ -87,6 +89,11 @@ export const integrations = {
   pin: (name, hash) => core.call('mcp.pin', { name: serverName(name), hash: toolsHashArg(hash) }).then(() => true),
   /** @param {unknown} name */
   disable: (name) => core.call('mcp.disable', { name: serverName(name) }).then(() => true),
+  // A standing grant, by id: refuse its scheduled runs, or let them start again (Stop All pauses them all).
+  /** @param {unknown} id */
+  pauseGrant: (id) => core.call('standing.pause', { id: standingId(id) }).then(() => true),
+  /** @param {unknown} id */
+  resumeGrant: (id) => core.call('standing.resume', { id: standingId(id) }).then(() => true),
 };
 
 /**

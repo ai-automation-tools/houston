@@ -7,7 +7,7 @@
 import { app } from 'electron';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import { cronsoleConfig, initialize, listTasks, runFromUrl, runOutput, runTask, stdioRpc, taskHistory, taskIdArg } from '../shared/cronsole.js';
+import { cronsoleConfig, exportedTask, initialize, listTasks, runFromUrl, runOutput, runTask, standingGrantIn, stdioRpc, taskHistory, taskIdArg } from '../shared/cronsole.js';
 import { runPage } from '../shared/docs.js';
 import { childEnv, env } from './env.js';
 
@@ -66,6 +66,9 @@ export function cronsole() {
 
     /** A task's last few runs, for the sidebar. @param {unknown} taskId */
     history: async (taskId) => taskHistory(await client(), taskIdArg(taskId)),
+
+    /** The standing grant a task's command runs under (harness run --grant), or null. @param {unknown} taskId */
+    grant: async (taskId) => standingGrantIn(await exportedTask(await client(), taskIdArg(taskId))),
 
     /**
      * The acc://run page for one run: only a task in list_tasks, and a run in its history.

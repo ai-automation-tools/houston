@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { backendRows, secretRows, serverName, serverRows, toolsHashArg } from '../src/shared/integrations.js';
+import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../src/shared/integrations.js';
 
 const tools = [{ name: 'echo', description: 'Echo it.\nSecond line.' }, { name: 'env' }];
 /** @param {object} o */
@@ -60,4 +60,21 @@ test('secretRows shows names and dates only; backendRows says what is installed'
   const [b] = backendRows([{ name: 'codex', displayName: 'Codex', installed: false, signIn: 'Sign in once.', hosts: ['chatgpt.com:443'] }]);
   assert.deepEqual([b.name, b.installed, b.sub], ['Codex', false, 'not installed on this machine']);
   assert.match(b.title, /chatgpt\.com:443[\s\S]*First time: Sign in once\./);
+});
+
+test('standingRows: ones that won\'t run first, Pause or Resume, revoked left out; standingId checks the id', () => {
+  const now = Date.parse('2026-11-13T00:00:00Z');
+  const g = (/** @type {object} */ o) => ({ id: 'a', identity: 'local:n', workspace: 'D:\\w', command: 'c', maxMinutes: 30, expiresAt: '2026-12-01T00:00:00Z', status: 'active', grantsChanged: false, lastRunAt: null, running: null, ...o });
+  const rows = standingRows([g({ id: 'zz' }), g({ id: 'paused', status: 'paused' }), g({ id: 'gone', status: 'revoked' }), g({ id: 'old', expiresAt: '2026-11-01T00:00:00Z' }), g({ id: 'live', running: 's1' }), g({ id: 'moved', grantsChanged: true })], now);
+  assert.deepEqual(rows.map((r) => r.id), ['moved', 'old', 'paused', 'live', 'zz']);
+  const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.deepEqual(by.paused.actions.map((a) => a.act), ['resume']);
+  assert.deepEqual(by.zz.actions.map((a) => a.act), ['pause']);
+  assert.equal(by.zz.sub, 'local:n · up to 30 min');
+  assert.match(by.live.sub, /running now/);
+  assert.equal(by.old.sub, 'expired');
+  assert.match(by.moved.sub, /approve it again/);
+  assert.match(by.zz.title, /harness run --grant zz/);
+  assert.equal(standingId('nightly-docs'), 'nightly-docs');
+  for (const bad of ['Night', '', '-x', 'a'.repeat(41), 3]) assert.throws(() => standingId(bad), /not a standing grant id/);
 });

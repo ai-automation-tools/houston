@@ -3,7 +3,7 @@
 // the log of calls agents made to the app's MCP server and the run history; Cron, Cronsole's tasks;
 // and News, headlines from the sources settings.json lists.
 
-import { docsTasks, failedTasks, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
+import { docsTasks, failedTasks, grantLine, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
 import { diffAreas, gitUrl } from './shared/git.js';
 import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
@@ -847,6 +847,22 @@ export class Sidebar {
     if (!info.secrets.length) host.append(note('The vault is empty. Set one with npm run ctl -- secret.set name=<name>, which reads the value from stdin. Values never come back out.'));
     for (const s of info.secrets) host.append(line('idle', '10px', '🔑', s.name, s.sub, `${s.name}\nA server gets it only with a secret:${s.name} use grant.`));
 
+    // Standing grants (H4): what scheduled tasks run under. Stop All pauses them all; Resume brings one back.
+    if (info.standing) {
+      host.append(groupTitle(`Standing grants (${info.standing.length})`));
+      if (!info.standing.length) host.append(note('None. A scheduled task runs contained under one with harness run --grant <id>; make one with npm run ctl -- standing.create (core/README.md, Standing grants).'));
+      for (const g of info.standing) {
+        const row = line(g.tone, '10px', g.icon, g.id, g.sub, g.title);
+        for (const a of g.actions) {
+          q(row, '.acts').append(button(a.label, a.title, () => {
+            const call = a.act === 'resume' ? this.api.integrations.resumeGrant(g.id) : this.api.integrations.pauseGrant(g.id);
+            call.then(() => this.loadIntegrations(), (/** @type {unknown} */ err) => toast(errText(err)));
+          }));
+        }
+        host.append(row);
+      }
+    }
+
     host.append(groupTitle('Agent backends'));
     for (const b of info.backends) host.append(line(b.installed ? 'ready' : 'exited', '10px', b.installed ? '●' : '○', b.name, b.sub, b.title));
   }
@@ -978,10 +994,26 @@ export class Sidebar {
     box.className = 'runs';
     box.append(note('Asking Cronsole…'));
     row.after(box);
+    // Which identity and standing grant it runs under, when its command is `harness run --grant` (H4).
+    // Its own call, so a task Cronsole can't export still shows its runs.
+    const grant = this.api.cronsole.grant(taskId).catch(() => null);
     try {
       /** @type {import('./shared/cronsole.js').CronRun[]} */
       const runs = await this.api.cronsole.history(taskId);
       box.innerHTML = '';
+      const g = await grant;
+      if (g) {
+        const s = grantLine(g, Date.now());
+        const line = document.createElement('div');
+        line.className = `row run grant${s.bad ? ' failed' : ''}`;
+        line.style.paddingLeft = '28px';
+        line.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span>';
+        q(line, '.icon').textContent = s.icon;
+        q(line, '.name').textContent = s.text;
+        q(line, '.sub').textContent = s.sub;
+        line.title = s.title;
+        box.append(line);
+      }
       if (!runs.length) box.append(note('Cronsole has recorded no runs. A task that fires on its own trigger is recorded by its platform: Open Cronsole shows those.'));
       const now = Date.now();
       for (const r of runs) {

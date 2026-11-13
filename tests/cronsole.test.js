@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_UI, cronsoleConfig, docsTasks, failedTasks, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
+import { DEFAULT_UI, cronsoleConfig, docsTasks, exportedTask, failedTasks, grantLine, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, standingGrantIn, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
 
 test('cronsoleConfig reads the server path and the UI origin, http(s) only', () => {
   assert.deepEqual(cronsoleConfig({}), { server: '', ui: DEFAULT_UI });
@@ -183,4 +183,32 @@ test('runSummary: when, status and how long; failures and timeouts are marked', 
   assert.equal(ok.icon, '✓');
   assert.equal(ok.text, 'just now · success · 5 min');
   assert.equal(runSummary({ ...RUN, status: 'PENDING', durationMs: null, triggeredAt: null }, now).text, 'unknown time · pending');
+});
+
+test('standingGrantIn finds harness run --grant in a task\'s exported definition', () => {
+  const xml = '<Exec><Command>C:\\Program Files\\nodejs\\node.exe</Command><Arguments>&quot;D:\\houston\\core\\harness.js&quot; run --grant nightly-docs</Arguments></Exec>';
+  assert.equal(standingGrantIn(xml), 'nightly-docs');
+  assert.equal(standingGrantIn(JSON.stringify({ command: 'node "D:/houston/core/harness.js" run --grant=nightly_2' })), 'nightly_2');
+  assert.equal(standingGrantIn('npm run harness -- run --grant backup'), 'backup');
+  for (const none of ['node build.js', 'harness run', 'harness.js run --grant Bad', 'harness.js run --grant -x', 'harness.js start --grant x']) assert.equal(standingGrantIn(none), null, none);
+});
+
+test('exportedTask reads the export as text; a refusal throws', async () => {
+  const xml = '<Arguments>harness.js run --grant nightly</Arguments>';
+  const rpc = { request: async (/** @type {string} */ _m, /** @type {any} */ p) => (p.arguments.taskId === 'bad' ? { isError: true, content: [{ type: 'text', text: 'no such task' }] } : { content: [{ type: 'text', text: 'Windows Task Scheduler XML' }], structuredContent: { xml } }) };
+  assert.equal(standingGrantIn(await exportedTask(/** @type {any} */ (rpc), 't1')), 'nightly');
+  await assert.rejects(exportedTask(/** @type {any} */ (rpc), 'bad'), /no such task/);
+});
+
+test('grantLine: who a task runs as, and what will stop the next run', () => {
+  const now = Date.parse('2026-11-13T00:00:00Z');
+  const s = { id: 'nightly', identity: 'local:nightly', workspace: 'D:\\w', command: 'cmd.exe /c x', maxMinutes: 30, expiresAt: '2026-12-01T00:00:00Z', status: 'active', grantsChanged: false, lastRunAt: null };
+  const ok = grantLine({ id: 'nightly', standing: s }, now);
+  assert.deepEqual([ok.icon, ok.text, ok.sub, ok.bad], ['🛡', 'local:nightly · standing grant nightly', 'up to 30 min', false]);
+  assert.match(ok.title, /unattended[\s\S]*Not run yet/);
+  assert.equal(grantLine({ id: 'nightly', standing: { ...s, status: 'paused' } }, now).sub, 'paused');
+  assert.equal(grantLine({ id: 'nightly', standing: { ...s, expiresAt: '2026-11-01T00:00:00Z' } }, now).sub, 'expired');
+  assert.match(grantLine({ id: 'nightly', standing: { ...s, grantsChanged: true } }, now).sub, /approve it again/);
+  const missing = grantLine({ id: 'gone', error: 'the Core has no standing grant by that name' }, now);
+  assert.deepEqual([missing.icon, missing.bad, missing.sub], ['⚠', true, 'the Core has no standing grant by that name']);
 });

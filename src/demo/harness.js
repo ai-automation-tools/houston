@@ -4,7 +4,7 @@
 // approvals.js) on fabricated state, in the browser tab. Nothing runs, nothing is fetched.
 
 import { agentRows } from '../shared/agents.js';
-import { backendRows, secretRows, serverName, serverRows } from '../shared/integrations.js';
+import { backendRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
@@ -232,6 +232,16 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     return s;
   };
 
+  /** A made-up standing grant: the Cron tab's nightly backup runs under it. */
+  const standing = [{ id: 'nightly-backup', identity: 'local:build-shell', workspace: WS.replaceAll('/', '\\'), command: 'cmd.exe /d /c backup.cmd', pathDirs: [], maxMinutes: 30,
+    expiresAt: iso(now() + 60 * 24 * 60 * MIN), status: 'active', grantsChanged: false, lastRunAt: iso(now() - 18 * 60 * MIN), running: null, createdAt: iso(now() - 3 * 24 * 60 * MIN), updatedAt: iso(now() - 3 * 24 * 60 * MIN) }];
+  /** @param {unknown} id */
+  const grantFor = (id) => {
+    const g = standing.find((x) => x.id === standingId(id));
+    if (!g) throw new Error(`no standing grant ${String(id)}`);
+    return g;
+  };
+
   const list = () => [...sessions.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt }));
   const grants = IDENTITIES.flatMap((i) => i.grants);
 
@@ -262,7 +272,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     },
 
     integrations: {
-      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS) }),
+      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS), standing: standingRows(standing, now()) }),
       install: async (/** @type {unknown} */ name) => {
         const s = server(name);
         s.state = s.state === 'discovered' ? 'installed' : s.state;
@@ -270,7 +280,12 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
       },
       pin: async (/** @type {unknown} */ name) => { const s = server(name); s.state = 'pinned'; s.pinnedHash = s.toolsHash; return true; },
       disable: async (/** @type {unknown} */ name) => { server(name).state = 'disabled'; return true; },
+      pauseGrant: async (/** @type {unknown} */ id) => { grantFor(id).status = 'paused'; return true; },
+      resumeGrant: async (/** @type {unknown} */ id) => { grantFor(id).status = 'active'; return true; },
     },
+
+    /** The Cron tab's view of a standing grant, as the Core's standing.get. @param {string} id */
+    standingGrant: (id) => ({ ...grantFor(id) }),
 
     approvals: {
       list: async () => [...pending],

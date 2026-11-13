@@ -217,7 +217,7 @@ $('settings-open').addEventListener('click', () => runAction('settings'));
 $('stop-all').addEventListener('click', () => { api.agents.stopAll().catch((/** @type {unknown} */ err) => toast(errText(err))); });
 api.agents.onStopped((/** @type {{ stopped?: number, paused?: number, error?: string }} */ r) => {
   // Paused standing grants stay paused until the operator resumes each one, so say so.
-  const paused = r.paused ? `\nPaused ${r.paused} standing grant${r.paused === 1 ? '' : 's'}: no scheduled run starts until you resume it (npm run ctl -- standing.resume id=<id>).` : '';
+  const paused = r.paused ? `\nPaused ${r.paused} standing grant${r.paused === 1 ? '' : 's'}: no scheduled run starts until you resume it on the Integrations tab.` : '';
   toast(r.error ? `Stop All: ${r.error}`
     : `${r.stopped ? `Stop All: stopped ${r.stopped} agent session${r.stopped === 1 ? '' : 's'}` : 'Stop All: no agent session was running'}${paused}`);
 });
