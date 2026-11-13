@@ -44,7 +44,7 @@ export const BACKENDS = {
     programs: ({ home }) => [path.win32.join(home, '.local', 'bin', 'claude.exe')],
     read: 'file',
     homeVar: 'CLAUDE_CONFIG_DIR',
-    // Only servers from --mcp-config, and there is none: a workspace .mcp.json adds nothing.
+    // Only servers from --mcp-config, which is the session's gateway (gatewayArgs): a workspace .mcp.json adds nothing.
     args: ['--strict-mcp-config'],
     // No telemetry, error reports or self-update (its program is read-only anyway).
     env: { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1' },
@@ -111,6 +111,30 @@ export function resolveBackend(name, { identity, agentsRoot, where, isFile = exi
 
 /** @param {string} a */
 const quote = (a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a);
+
+/**
+ * Point a backend's CLI at the session's gateway (H3): the arguments to add to its command
+ * line, quoted. The token stays in HOUSTON_MCP_TOKEN, never on the command line, which the
+ * session.start event records.
+ * @param {string} name a key of BACKENDS
+ * @param {string} url the session's gateway
+ * @param {string} dir a folder the session can read (its temp folder), for a config file
+ * @returns {string} '' for a backend with no way in
+ */
+export function gatewayArgs(name, url, dir) {
+  if (name === 'claude-code') {
+    const file = path.win32.join(dir, 'houston-mcp.json');
+    // Claude Code expands ${VAR} in an MCP config's headers.
+    fs.writeFileSync(file, JSON.stringify({ mcpServers: { houston: { type: 'http', url, headers: { Authorization: 'Bearer ${HOUSTON_MCP_TOKEN}' } } } }));
+    return ['--mcp-config', file].map(quote).join(' ');
+  }
+  if (name === 'codex') {
+    // A value that isn't TOML is taken as a string. The tool timeout covers an approval card's two minutes.
+    return ['-c', `mcp_servers.houston.url=${url}`, '-c', 'mcp_servers.houston.bearer_token_env_var=HOUSTON_MCP_TOKEN', '-c', 'mcp_servers.houston.tool_timeout_sec=300']
+      .map(quote).join(' ');
+  }
+  return '';
+}
 
 /** What the Control API's `backend.list` shows: the manifests, and whether each program is installed here. @param {Where} where */
 export function listBackends(where, isFile = exists) {

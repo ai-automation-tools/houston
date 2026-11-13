@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createApprovals } from './approvals.js';
+import { createGateway } from './gateway.js';
 import { openAudit } from './audit.js';
 import { dataDir } from './client.js';
 import { CoreLockedError, migrate, openDb } from './db.js';
@@ -15,8 +16,12 @@ import { createRegistry, ensureOperator } from './identities.js';
 import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 import { createTranscripts } from './transcripts.js';
+import { openVault } from './vault.js';
 
 export { dataDir };
+
+/** The app's version, for the gateway's serverInfo. */
+const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 /**
  * Make the data folder the operator's alone: inherited entries removed, full control for the
@@ -121,13 +126,14 @@ if (import.meta.main) {
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
     const approvals = createApprovals({ audit: core.audit });
-    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp(), agentsRoot: agentsRoot(core.dir), approvals }) : null;
-    const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit }) : undefined;
-    const control = runner ? await startControl({
-      dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts,
-      // The same globals the runner uses, so both record the same policy version.
-      registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
-    }) : null;
+    // The same globals the runner uses, so both record the same policy version. Windows paths, so Windows only.
+    const registry = win32 ? createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }) : undefined;
+    const vault = win32 ? await openVault({ db: core.db, dir: core.dir, audit: core.audit }) : undefined;
+    const where = { coreDir: core.dir, tempRoot: win32 ? sessionTemp() : '', agentsRoot: win32 ? agentsRoot(core.dir) : '' };
+    const gateway = vault && registry ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
+    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway }) : null;
+    const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
+    const control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));

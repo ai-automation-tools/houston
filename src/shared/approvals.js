@@ -5,7 +5,7 @@
 export const ANSWERS = ['once', 'session', 'deny'];
 
 /**
- * @typedef {{ id: string, identity: string, session_id: string, workspace: string, action: string, resource: { type: string, id: string }, createdAt: string, expiresAt: string }} Approval
+ * @typedef {{ id: string, identity: string, session_id: string, workspace: string, action: string, resource: { type: string, id: string, args_preview?: string }, createdAt: string, expiresAt: string }} Approval
  */
 
 /**
@@ -15,7 +15,8 @@ export const ANSWERS = ['once', 'session', 'deny'];
  */
 export function describeAsk({ action, resource }) {
   if (action === 'net.connect') return `connect to ${resource.id}`;
-  if (action === 'tool.call') return `call the tool ${resource.id}`;
+  // A tool's arguments come clipped and with vault values redacted (core/gateway.js).
+  if (action === 'tool.call') return `call the tool ${resource.id}${resource.args_preview ? ` with ${resource.args_preview}` : ''}`;
   if (action === 'command.run') return `run ${resource.id}`;
   return `${action} on ${resource.type} ${resource.id}`;
 }

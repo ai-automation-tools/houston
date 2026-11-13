@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BACKENDS, BackendError, listBackends, resolveBackend } from '../../core/backends.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { BACKENDS, BackendError, gatewayArgs, listBackends, resolveBackend } from '../../core/backends.js';
 
 const where = { home: 'C:\\Users\\op', appData: 'C:\\Users\\op\\AppData\\Roaming', PATH: 'relative\\git;C:\\Program Files\\Git\\cmd;C:\\Windows\\System32' };
 const CLAUDE = 'C:\\Users\\op\\.local\\bin\\claude.exe';
@@ -49,4 +52,21 @@ test('refusals: unknown backend, inherited names, not installed, no Git', () => 
 test('listBackends says which are installed', () => {
   assert.deepEqual(listBackends(where, on(CODEX)).map((b) => [b.name, b.installed]), [['claude-code', false], ['codex', true]]);
   assert.deepEqual(Object.keys(BACKENDS), ['claude-code', 'codex']);
+});
+
+test('gatewayArgs points each CLI at the session gateway, with the token left in the environment', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-gwargs-'));
+  // Windows paths, as the Core builds them; on Linux CI this is a file named with a backslash.
+  const file = path.win32.join(dir, 'houston-mcp.json');
+  try {
+    const url = 'http://127.0.0.1:50123/mcp';
+    const claude = gatewayArgs('claude-code', url, dir);
+    assert.ok(claude.startsWith('--mcp-config '));
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(cfg, { mcpServers: { houston: { type: 'http', url, headers: { Authorization: 'Bearer ${HOUSTON_MCP_TOKEN}' } } } });
+    const codex = gatewayArgs('codex', url, dir);
+    assert.match(codex, /mcp_servers\.houston\.url=http:\/\/127\.0\.0\.1:50123\/mcp/);
+    assert.match(codex, /bearer_token_env_var=HOUSTON_MCP_TOKEN/);
+    assert.equal(gatewayArgs('other', url, dir), '');
+  } finally { fs.rmSync(file, { force: true }); fs.rmSync(dir, { recursive: true, force: true }); }
 });

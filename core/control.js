@@ -16,13 +16,16 @@ import net from 'node:net';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { ApprovalError } from './approvals.js';
+import { GatewayError } from './gateway.js';
 import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
+import { VaultError } from './vault.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
+  'mcp.list', 'mcp.get', 'mcp.add', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
 ];
 const MAX_LINE = 1024 * 1024;
 /** How much of a session's recent output an attach replays first. */
@@ -86,11 +89,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -215,7 +218,26 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'identity.retire': (p) => deactivate(str(p.id, 'id'), 'retired', p.reason),
     'grant.add': (p) => registry.addGrant(p, OPERATOR),
     'grant.remove': (p) => registry.removeGrant(str(p.id, 'id'), OPERATOR),
+
+    // The MCP gateway's servers (gateway.js): add shows the command, install runs it once to read
+    // its tools, pin accepts that list by its hash.
+    'mcp.list': () => need(gateway, 'gateway').list(),
+    'mcp.get': (p) => need(gateway, 'gateway').get(p.name),
+    'mcp.add': (p) => need(gateway, 'gateway').add(p),
+    'mcp.install': (p) => need(gateway, 'gateway').install(p.name),
+    'mcp.pin': (p) => need(gateway, 'gateway').pin(p.name, p.hash),
+    'mcp.disable': (p) => need(gateway, 'gateway').disable(p.name),
+    // The vault (vault.js): names and dates out, values only in. There is no secret.get.
+    'secret.list': () => need(vault, 'vault').list(),
+    'secret.set': (p) => need(vault, 'vault').set(p.name, p.value),
+    'secret.delete': (p) => need(vault, 'vault').remove(p.name),
   };
+
+  /** @template T @param {T | undefined} part @param {string} what @returns {T} */
+  function need(part, what) {
+    if (!part) throw new ControlError('not_found', `this Core has no ${what}`);
+    return part;
+  }
 
   /** @param {string} id @param {'suspended' | 'retired'} to @param {string} [reason] */
   async function deactivate(id, to, reason) {
@@ -267,7 +289,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }

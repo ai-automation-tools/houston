@@ -228,6 +228,27 @@ test('origin-form requests go to the fallback, or 404 without one', async (t) =>
   assert.equal(q.events.length, 0);
 });
 
+test('the gateway on its own port: absolute form and a CONNECT to itself reach the fallback; any other loopback port does not', async (t) => {
+  const echo = await echoServer(t);
+  const q = await proxy(t, [], { fallback: (req, res) => { req.resume(); req.on('end', () => res.writeHead(200).end(`gw ${req.method} ${req.url}`)); } });
+  // A client that sends loopback through HTTP_PROXY too.
+  const abs = await viaProxy(q.port, 'POST', `http://127.0.0.1:${q.port}/mcp?x=1`, {}, '{}');
+  assert.deepEqual([abs.status, abs.body], [200, 'gw POST /mcp?x=1']);
+  // Node's own proxy support: a tunnel to the proxy's port, with the request inside it.
+  const c = await connect(q.port, `127.0.0.1:${q.port}`, `POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:${q.port}\r\nContent-Length: 2\r\n\r\n{}`);
+  assert.equal(c.status, 200);
+  const inside = c.rest.includes('gw POST') ? c.rest : c.rest + await read(c.socket, 1);
+  assert.match(inside, /gw POST \/mcp/);
+  c.socket.destroy();
+  // The same spellings for another loopback port are ordinary traffic, refused by policy.
+  assert.equal((await connect(q.port, `127.0.0.1:${echo.port}`)).status, 403);
+  assert.equal((await viaProxy(q.port, 'GET', `http://127.0.0.1:${echo.port}/`)).status, 403);
+  assert.equal(echo.count(), 0);
+  // Without a fallback, a CONNECT to the proxy's own port is just another refused host.
+  const plain = await proxy(t, []);
+  assert.equal((await connect(plain.port, `127.0.0.1:${plain.port}`)).status, 403);
+});
+
 
 test('the proxy listens on 127.0.0.1 only, and closing it ends open tunnels', async (t) => {
   const echo = await echoServer(t);

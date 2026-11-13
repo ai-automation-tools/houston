@@ -47,9 +47,16 @@ export async function coreSettings() {
     const [status, identities, approvals] = await Promise.all([core.call('core.status', {}, 3000), core.call('identity.list'), core.call('approval.list')]);
     if (!status.limits) return { error: 'it runs older code than the app; end and run the Houston Core task' };
     const grants = identities.flatMap((/** @type {any} */ i) => i.grants ?? []);
+    // A Core from before the gateway (H3) has neither method: shown as needing a newer Core.
+    const [servers, secrets] = await Promise.all([core.call('mcp.list').catch(() => null), core.call('secret.list').catch(() => null)]);
     return {
       dir: dataDir(), sessions: status.sessions, identities: identities.length, grants: grants.length,
       askGrants: grants.filter((/** @type {any} */ g) => g.effect === 'ask').length, approvals: approvals.length, limits: status.limits,
+      mcp: servers && {
+        servers: servers.length, pinned: servers.filter((/** @type {any} */ m) => m.state === 'pinned').length,
+        review: servers.filter((/** @type {any} */ m) => m.state === 'needs_review').length,
+      },
+      secrets: secrets && secrets.length,
     };
   } catch (e) {
     return { error: why(e) };

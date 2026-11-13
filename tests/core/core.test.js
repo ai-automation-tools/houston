@@ -34,7 +34,7 @@ const tables = (db) => db.prepare("SELECT name FROM sqlite_schema WHERE type = '
 test('migrate builds schema v1 on an empty database and does nothing the second time', () => {
   const db = openDb(':memory:');
   assert.deepEqual(migrate(db), { from: 0, to: MIGRATIONS.length });
-  assert.deepEqual(tables(db), ['grants', 'identities', 'sessions']);
+  assert.deepEqual(tables(db), ['grants', 'identities', 'mcp_servers', 'secrets', 'sessions']);
   assert.equal(version(db), MIGRATIONS.length);
   assert.deepEqual(migrate(db), { from: MIGRATIONS.length, to: MIGRATIONS.length });
 });

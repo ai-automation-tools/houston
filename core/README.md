@@ -1,18 +1,18 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, keeps a registry of identities and their grants, starts contained sessions on a terminal behind an egress proxy, starts Claude Code and Codex from their manifests, and takes orders from the operator over a named pipe.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, keeps a registry of identities and their grants, starts contained sessions on a terminal behind an egress proxy, starts Claude Code and Codex from their manifests, serves each session an MCP gateway to servers it runs in containers of their own, keeps secrets in a vault that only those servers receive, and takes orders from the operator over a named pipe.</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/milestone-Harness_H2-8B5CF6?style=for-the-badge" alt="Milestone: Harness H2">
-  <img src="https://img.shields.io/badge/schema-v3-2ea44f?style=for-the-badge" alt="Schema v3">
+  <img src="https://img.shields.io/badge/milestone-Harness_H3-8B5CF6?style=for-the-badge" alt="Milestone: Harness H3">
+  <img src="https://img.shields.io/badge/schema-v4-2ea44f?style=for-the-badge" alt="Schema v4">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
 ---
 
-The Core is a plain Node 24 process, separate from the Electron app ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)). Houston is its client: it shows and asks, and never enforces. Same conventions as [`src/`](../src/README.md): ES modules, JSDoc types, `node:test`, no bundler. It has no dependencies of its own yet: SQLite is Node's built-in `node:sqlite`.
+The Core is a plain Node 24 process, separate from the Electron app ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)). Houston is its client: it shows and asks, and never enforces. Same conventions as [`src/`](../src/README.md): ES modules, JSDoc types, `node:test`, no bundler. Its dependencies: the Execution Containers SDK, and `koffi` for DPAPI in the vault (MIT, already installed by the SDK, named in `package.json` since H3). SQLite is Node's built-in `node:sqlite`.
 
 ```powershell
 npm run core        # or: node core/main.js
@@ -33,6 +33,10 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
+| [**vault.js**](vault.js) | The vault: named secrets sealed with DPAPI and entropy only the Core holds. Set, list and delete from the Control API; values go only to the gateway, for an MCP server's environment. |
+| [**gateway.js**](gateway.js) | The MCP gateway: each session's MCP endpoint on its proxy port, the server registrations (discovered, installed, pinned, needs review, disabled), each server in a container of its own, one policy check per call, results redacted, marked and capped. |
+| [**upstream.js**](upstream.js) | The gateway's side of one MCP server's stdio: JSON-RPC lines, the handshake, the tool list. |
+| [**mcp-protocol.js**](mcp-protocol.js) | What every MCP endpoint here checks the same way: protocol versions (2026-07-28 and the 2025 handshake), the bearer token, Host and Origin. Shared with the app's own MCP server. |
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
 | [**client.js**](client.js) | The client side: `dataDir()`, `callControl()` and `attachSession()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
@@ -58,7 +62,7 @@ The Core uses the folder's long, final spelling (`realpathSync.native`): the pat
 
 It sits under the user profile on purpose. A session container is denied the profile, so an agent cannot read the database or, later, the vault. Abuse test AT-01 will check that. Don't point `HOUSTON_CORE_DATA` at a folder any identity is granted.
 
-The folder holds `core.db` (plus its `-wal` file while the Core runs), the `audit\` folder, the `transcripts\` folder and, while the Core runs, `control.json`.
+The folder holds `core.db` (plus its `-wal` file while the Core runs), `vault.key` (the vault's entropy), the `audit\` folder, the `transcripts\` folder and, while the Core runs, `control.json`.
 
 **Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on the folder are kept: one you chose with `HOUSTON_CORE_DATA` may have some on purpose, and a folder made by an elevated process carries one for Administrators, who are outside the threat model anyway ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)).
 
@@ -68,13 +72,15 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v3
+## 🧱 Schema v4
 
 | Table | Holds |
 |:---|:---|
 | `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end. |
+| `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. |
+| `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command, env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. |
 
 The enums are `CHECK` constraints, so a bad row is refused by the database whatever code wrote it. Audit events are not in the database: they go to JSON-lines files, described below.
 
@@ -406,7 +412,7 @@ Every step, refusals included, is in the audit log: 16 events.
 
 Each ask is an `approval.requested` audit event (decision `ask`, the approval id and when it expires) and each outcome an `approval.decided` (allow or deny, the answer, and who gave it: `local:operator`, or `local:core` for a timeout or a session's end). An unattended session never gets here: `check` turns its `ask` into `deny`.
 
-**Who asks today.** The egress proxy: an identity with an `ask` grant on `net:<host>:<port>` gets a proxy even with no `allow` grant, and a `CONNECT` or plain `GET` to that host is held, before any TLS, until the answer. `session.start`'s `launch.network.ask` lists those hosts. The MCP gateway (H3) will ask the same way for tools and commands.
+**Who asks.** The egress proxy: an identity with an `ask` grant on `net:<host>:<port>` gets a proxy even with no `allow` grant, and a `CONNECT` or plain `GET` to that host is held, before any TLS, until the answer. `session.start`'s `launch.network.ask` lists those hosts. The MCP gateway (H3) asks the same way for a tool under an `ask` grant: the call is held, and the card shows the tool and its arguments (clipped, vault values redacted). The answer covers that one call; nothing the agent sends later can reuse it, unless the operator chose **Allow for this session**.
 
 Checked by `npm run smoke` against a throwaway Core on 2026-11-12: a contained `curl.exe` to an `ask` host showed a card with the identity, `connect to example.org:443` and the workspace; **Deny** gave curl a `403`. Two identical requests to another `ask` host asked once; **Allow for this session** let both through.
 
@@ -415,11 +421,53 @@ Checked by `npm run smoke` against a throwaway Core on 2026-11-12: a contained `
 [`transcripts.js`](transcripts.js) keeps what each session's terminal showed, on by default (CORE-19, LOG-01). One file per session, `transcripts\<session id>.txt` in the data folder, so only the operator can read it. It starts with a `# session` line (id, identity, workspace, start) and ends with `# ended: <reason>`.
 
 - **Plain text.** The terminal's escape sequences are resolved the way the window's own output reader does it (one line at a time), so it reads like the screen did, minus colours.
-- **Redacted before write** (LOG-04). Text is held until its line ends, so a secret split across two chunks is caught whole, and each line is checked before it reaches the disk: Anthropic, OpenAI, GitHub, Slack, AWS and Google key shapes, JWTs, `Bearer`/`Basic` credentials and `NAME=value` where the name ends in KEY, TOKEN, SECRET, PASSWORD or similar become `[REDACTED:<kind>]`; a private key block, over however many lines, becomes one `[REDACTED:private-key]`. A secret with no telltale shape gets through; the vault (H3) adds exact-value redaction for what it injects.
+- **Redacted before write** (LOG-04). Text is held until its line ends, so a secret split across two chunks is caught whole, and each line is checked before it reaches the disk: Anthropic, OpenAI, GitHub, Slack, AWS and Google key shapes, JWTs, `Bearer`/`Basic` credentials and `NAME=value` where the name ends in KEY, TOKEN, SECRET, PASSWORD or similar become `[REDACTED:<kind>]`; a private key block, over however many lines, becomes one `[REDACTED:private-key]`. A secret with no telltale shape gets through by shape, but every value stored in the vault is also replaced, wherever it shows, by `[REDACTED:secret:<name>]` (values of 8 characters or more).
 - **Caps.** One transcript stops at 100 MB with a line saying so (the session runs on). The folder is kept under 5 GB: past it, the oldest finished transcripts are deleted first, each a `log.deleted` audit event by `local:core`. A running session's transcript is never deleted, and the audit log is never rotated here.
 - **Reading one.** `transcript.get` gives a session's newest 1 MB (from a whole line), running or ended. Houston opens it as an `acc://transcript/<id>` page from the Logs tab's **Transcript** button.
 
 A disk error stops that transcript, not the session. Checked by `npm run smoke` on 2026-11-12: a made-up Anthropic key echoed in a contained shell shows only as its marker on the transcript page.
+
+## 🔐 Vault
+
+[`vault.js`](vault.js) holds named secrets (SEC-06) for MCP servers, never for an agent. The only module that stores or opens a value.
+
+- **Sealed twice.** Each value is a DPAPI blob for the operator's account, made with 32 bytes of entropy kept in `vault.key` in the data folder. Spike S5 found that a contained process, running as the same Windows user, can decrypt a plain DPAPI blob it is handed, but not one made with entropy it never sees. The blob and the key both sit in the data folder, which every session is denied. Off Windows (Linux CI) the same key seals values with AES-256-GCM.
+- **In, never out.** `secret.set`, `secret.list` (names and dates) and `secret.delete`. There is no `secret.get`: a value leaves the vault only through `reveal`, which the gateway calls to put it into a server's environment. Each change is a `secret.change` audit event with the name, never the value or a hash of it.
+- **Setting one.** `ctl` reads the value from stdin, so it isn't in shell history or a process list: `Get-Content token.txt | npm run ctl -- secret.set name=github-token`, or run it with no pipe and type it (not echoed).
+- **Redaction by value.** `vault.redact` replaces every stored value of 8 characters or more with `[REDACTED:secret:<name>]`. Tool results, the approval card's argument preview and transcripts all go through it.
+
+## 🚪 MCP gateway
+
+[`gateway.js`](gateway.js) is the only MCP endpoint a session sees and the only client an MCP server has (SEC-01, ADR-004).
+
+**Where it answers.** On the session's egress proxy port, which is the one host port its container can reach: `HOUSTON_MCP_URL` (`http://127.0.0.1:<port>/mcp`) and `HOUSTON_MCP_TOKEN` are in every session's environment. The port says which session is calling; the bearer token, random per session, must match it, and stops working when the session ends (Stop All included). Host and Origin must be loopback, which also refuses a web page (AT-13). A client that routes loopback through `HTTP_PROXY` reaches it too: absolute-form requests and a `CONNECT` to the proxy's own port are handed to the gateway, and every other loopback target is still refused. Both MCP eras are spoken: the 2025 `initialize` handshake and 2026-07-28's per-request `_meta` with mirrored headers ([`mcp-protocol.js`](mcp-protocol.js), shared with the app's own server). Claude Code gets the gateway through `--mcp-config` (a file in the session's temp folder that names `${HOUSTON_MCP_TOKEN}`), Codex through `-c mcp_servers.houston.*` with `bearer_token_env_var`; neither puts the token on the command line.
+
+**Registering a server.**
+
+| Step | Method | State after |
+|:---|:---|:---|
+| Register: the full command is shown, nothing runs | `mcp.add` | `discovered` |
+| Grant its identity `local:mcp/<name>` the folders, hosts and secrets it needs | `grant.add` | |
+| Run it once in its container and read its tools | `mcp.install` | `installed` |
+| Accept that list, by its hash | `mcp.pin` | `pinned`: sessions get its tools |
+| Its tools change (found when it next starts) | | `needs_review`: calls refused until it is installed and pinned again |
+| Switch it off | `mcp.disable` | `disabled`: calls refused at once |
+
+```powershell
+npm run ctl -- mcp.add name=github command='"C:\Program Files\nodejs\node.exe" D:\mcp\github\dist\index.js' env='{"GITHUB_PERSONAL_ACCESS_TOKEN":"secret:github-token"}' pathDirs='["C:\\Program Files\\nodejs"]'
+npm run ctl -- grant.add identity=local:mcp/github resource=file:D:/mcp/github/** permission=read
+npm run ctl -- grant.add identity=local:mcp/github resource=secret:github-token permission=use
+npm run ctl -- grant.add identity=local:mcp/github resource=net:api.github.com:443 permission=connect
+npm run ctl -- mcp.install name=github
+npm run ctl -- mcp.pin name=github hash=<toolsHash from the install>
+npm run ctl -- grant.add identity=local:dev-claude resource=tool:github/* permission=call
+```
+
+**A server's container.** It starts on a session's first call to it, as its own identity: that identity's file and `net:` grants are its container's policy (its own egress proxy, `ask` is deny since nobody watches a server), its program folders are read-only and on `PATH`, and its home (`houston-agents\mcp+<name>`) is its `USERPROFILE`, `APPDATA` and npm cache. Each `secret:<name>` in its env needs a `secret:<name>` use grant; each injection is a `credential.inject` event, and without the grant the server doesn't start. It stops when the session ends. Its tools are listed again at every start and hashed (name, title, description, schemas, annotations); a hash that isn't the pinned one moves it to `needs_review` (AT-08).
+
+**A call.** Tools are `<server>.<tool>` to the agent and `tool:<server>/<tool>` in a grant. `tools/list` shows a pinned server's tools that the identity isn't denied. `tools/call` is one policy check: `deny` is refused without the server hearing of it, `ask` waits on a card, `allow` goes through. Every call is an `mcp.tool_call` event with the arguments as a clipped, redacted preview and a SHA-256, the decision, and the outcome. A refused call comes back as a tool error (`isError`) that says why.
+
+**A result.** Every vault value is redacted, the first content block says it is untrusted content from that server, `_meta["houston/untrusted-content"]` says the same, and anything over 1 MB is cut block by block. Checked in real containers by [`spikes/h3-gateway.mjs`](../spikes/h3-gateway.mjs) on 2026-11-12: a contained agent listed and called the stub server's tools through its proxy and straight at the port, the ungranted tool was refused, and the server's injected token came back only as its marker; the value was in neither the agent's environment nor the audit log.
 
 ## 🎛️ Control API
 
@@ -453,6 +501,14 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
 | `grant.remove` | `id` | the grant removed |
+| `mcp.list`, `mcp.get` | `name` for get | registrations: `name`, `identity`, `command`, `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
+| `mcp.add` | `name`, `command`; optional `env`, `pathDirs` | the registration, `discovered`, with the full command; its identity `local:mcp/<name>` is made active with no grants |
+| `mcp.install` | `name` | runs it once in its container and reads its tools: `installed` (or `needs_review` if it was pinned and the list changed) |
+| `mcp.pin` | `name`, `hash` (the `toolsHash` the operator read) | `pinned`: sessions get its tools. `conflict` when the hash isn't the list as last read |
+| `mcp.disable` | `name` | `disabled`: calls are refused at once; `mcp.pin` enables it again |
+| `secret.set` | `name`, `value` | `{ name, created_at, updated_at, last_used_at }`, never the value. `ctl` reads the value from stdin ([Vault](#-vault)) |
+| `secret.list` | none | names and dates |
+| `secret.delete` | `name` | `{ name, deleted }` |
 
 Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `conflict` (the lifecycle doesn't allow it, or the id exists), `refused` (the runner said no, with its reason), `internal`. Every call acts as the operator: only the operator holds the token.
 
@@ -499,9 +555,9 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox, Stop All, the Logs tab, transcripts and the Settings page are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 and H2 are done, and H3 is under way: the gateway and the vault are in. Next in [H3](../docs/ROADMAP.md): Houston's own MCP server and Cronsole's behind the gateway, an Integrations screen, the DNS question, and abuse tests AT-06 to AT-08 in `abuse/`. The abuse tests the Core can run so far are in [`abuse/`](../abuse/README.md) and pass.
 
-Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
+Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 
 ---
 

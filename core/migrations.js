@@ -86,4 +86,33 @@ export const MIGRATIONS = [
   `
   CREATE UNIQUE INDEX one_operator ON identities (kind) WHERE kind = 'operator';
   `,
+
+  // v4 (H3): the vault and the gateway's MCP server registrations.
+  // A secret's blob is DPAPI with the Core's entropy (vault.js); its value is in no other column.
+  // A server runs as its own mcp-server identity, whose grants are the container's policy.
+  // env maps a variable to text or to 'secret:<name>'. tools and tools_hash are the list as
+  // last read from the server; a pinned server whose list changes goes to needs_review.
+  `
+  CREATE TABLE secrets (
+    name          TEXT PRIMARY KEY CHECK (length(name) BETWEEN 1 AND 63),
+    blob          BLOB NOT NULL,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    last_used_at  TEXT
+  ) STRICT;
+
+  CREATE TABLE mcp_servers (
+    name         TEXT PRIMARY KEY CHECK (length(name) BETWEEN 1 AND 40),
+    identity_id  TEXT NOT NULL UNIQUE REFERENCES identities(id),
+    command      TEXT NOT NULL,
+    env          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(env)),
+    path_dirs    TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(path_dirs)),
+    state        TEXT NOT NULL CHECK (state IN ('discovered', 'installed', 'pinned', 'needs_review', 'disabled')),
+    tools        TEXT CHECK (tools IS NULL OR json_valid(tools)),
+    tools_hash   TEXT,
+    pinned_hash  TEXT,
+    added_at     TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+  ) STRICT;
+  `,
 ];
