@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H4-8B5CF6?style=for-the-badge" alt="Milestone: Harness H4">
-  <img src="https://img.shields.io/badge/schema-v6-2ea44f?style=for-the-badge" alt="Schema v6">
+  <img src="https://img.shields.io/badge/schema-v7-2ea44f?style=for-the-badge" alt="Schema v7">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -74,14 +74,14 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v6
+## 🧱 Schema v7
 
 | Table | Holds |
 |:---|:---|
 | `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
-| `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked. |
+| `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
 | `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. |
 | `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
 
@@ -332,6 +332,9 @@ npm run ctl -- session.start identity=local:dev-claude workspace=D:\work\app
 | Also | Git Bash: Git's folder read-only, `CLAUDE_CODE_GIT_BASH_PATH`; no telemetry or self-update | |
 | Hosts it needs | `api.anthropic.com:443`, `platform.claude.com:443` (sign-in token) | `chatgpt.com:443`, `auth.openai.com:443`, `api.openai.com:443` |
 | Sign in | `/login`, then paste the code from the browser | device code |
+| Unattended (a standing grant's prompt) | `-p "<prompt>" --dangerously-skip-permissions` | not yet |
+
+**Signing in.** Start a session for the identity (from `ctl`, then **Open** on it in the Agents tab, or **Start** there when the active workspace is one it can write) and sign in in its tab. If keys stop working right after "Login successful" (the console echoes `^[` and the arrows do nothing), close the tab and start the session again: the sign-in is kept, and a fresh start reads keys normally (seen 2026-11-13 with Claude Code 2.1.323).
 
 **A home of its own.** Each identity gets `houston-agents\<id>\<backend>` beside the Core's data folder (`%LOCALAPPDATA%\houston-agents`), restricted to the operator at every start like the data folder, and granted read-write to that identity's sessions only. It signs in there once; the home outlives its sessions. The operator's own `~/.claude` and `~/.codex` are never granted: besides the sign-in they hold the operator's MCP list, with tokens in its env blocks, plus hooks and history. A fresh home also starts with no MCP servers, which the manifest could not have done otherwise: Codex's `-c mcp_servers={}` adds to the list instead of replacing it. The agent can read its own sign-in, as ADR-004 says; nothing else of the operator's.
 
@@ -494,7 +497,7 @@ Checked on 2026-11-13 by [`spikes/h3-host-servers.mjs`](../spikes/h3-host-server
 
 - **What one holds.** An id (what the task names), the identity, the workspace, the full command and its program folders, a budget in minutes (1 to 1440) and an expiry (at most a year away). It also holds the hash of the identity's grants (resource, permission, effect, expiry) when the operator approved it.
 - **Who makes one.** Only the Control API: `standing.create`, `standing.update` (approve again, with the identity's grants as they are now, and optionally a new budget or expiry), `standing.pause`, `standing.resume` and `standing.revoke` (for good: the id stays taken). Only the operator holds the token, and a contained session can reach neither the pipe nor the token (AT-11).
-- **For now, a command identity.** One with a backend (Claude Code, Codex) is refused: their manifests start the interactive CLI, and an unattended start for them comes with the first signed-in backend.
+- **A command, or a prompt.** An identity with no backend names its command. One whose backend has an unattended start (Claude Code) names a **prompt** instead (`prompt=...`, up to 8000 characters, schema v7), run as `claude -p "<prompt>"` with Claude Code's own permission prompts off: nobody is there to answer them, and the container and the identity's grants are the limit (ADR-004; the owner's choice, 2026-11-13). The identity signs in once, interactively. Codex has no unattended start yet.
 - **A run.** `standing.run` refuses, as a `standing.run` deny event, a grant that is paused, revoked or expired, one whose identity's grants differ from what was approved, and one with a run still going. Otherwise it starts a session for the identity, **unattended**, so every `ask` is a deny and no card is shown. The budget is the runner's timer: at the budget the container is ended and the session ends as `timeout`. The session carries `standing_grant` in its `session.start` event and the `sessions` row, and has a transcript like any other.
 - **Stop All** pauses every active standing grant before it stops the sessions, so no scheduled run starts in between (SEC-10). Each comes back only with `standing.resume`; the window's Stop All message says how many it paused.
 
@@ -518,11 +521,13 @@ npm run ctl -- identity.create id=local:nightly-docs kind=ai-agent displayName="
 npm run ctl -- grant.add identity=local:nightly-docs resource=file:D:/work/docs/** permission=write
 npm run ctl -- identity.activate id=local:nightly-docs
 npm run ctl -- standing.create id=nightly-docs identity=local:nightly-docs workspace=D:\work\docs command='cmd.exe /d /c build-docs.cmd' maxMinutes=30 expiresAt=2027-01-31T00:00:00Z
+# Or an agent: an identity with backend=claude-code, signed in once, and a prompt instead of a command:
+npm run ctl -- standing.create id=nightly-review identity=local:claude-runner workspace=D:\work\docs prompt="Review yesterday's commits and write REVIEW.md" maxMinutes=20 expiresAt=2027-01-31T00:00:00Z
 # The scheduled task's action (Cronsole or Task Scheduler), as the operator:
 node <houston>\core\harness.js run --grant nightly-docs
 ```
 
-Checked on 2026-11-13 by [`spikes/h4-standing.mjs`](../spikes/h4-standing.mjs) against a real Core and real containers: a run printed its output and passed on its exit code 3; its `ask` host was refused with no card; a second run while one was going got 74; Stop All ended the first (70) and paused both grants (75); a new grant on the identity gave 72 until it was approved again; an expired grant gave 73; a run past its 1-minute budget was ended at 61 s (71); and with no Core, 69. AT-11 is in [`abuse/`](../abuse/README.md).
+Checked on 2026-11-13 by [`spikes/h4-standing.mjs`](../spikes/h4-standing.mjs) against a real Core and real containers: a run printed its output and passed on its exit code 3; its `ask` host was refused with no card; a second run while one was going got 74; Stop All ended the first (70) and paused both grants (75); a new grant on the identity gave 72 until it was approved again; an expired grant gave 73; a run past its 1-minute budget was ended at 61 s (71); and with no Core, 69. AT-11 is in [`abuse/`](../abuse/README.md). A prompt grant was checked the same day by [`spikes/h4-claude-unattended.mjs`](../spikes/h4-claude-unattended.mjs) with a signed-in Claude Code identity: `harness run` exited 0 in 12 s, the file the prompt asked for was written, Claude replied as asked, it reached `api.anthropic.com` only, and no card was asked.
 
 ## 🎛️ Control API
 
@@ -566,7 +571,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `secret.list` | none | names and dates |
 | `secret.delete` | `name` | `{ name, deleted }` |
 | `standing.list`, `standing.get` | `id` for get | standing grants: `id`, `identity`, `workspace`, `command`, `pathDirs`, `maxMinutes`, `expiresAt`, `status`, `lastRunAt`, `grantsChanged` (a run is refused until it is approved again), `running` (its live session) ([Standing grants](#-standing-grants)) |
-| `standing.create` | `id`, `identity`, `workspace`, `command`, `maxMinutes`, `expiresAt`; optional `pathDirs` | the standing grant, active, approving the identity's grants as they are now |
+| `standing.create` | `id`, `identity`, `workspace`, `command` (or `prompt`, for a Claude Code identity), `maxMinutes`, `expiresAt`; optional `pathDirs` | the standing grant, active, approving the identity's grants as they are now |
 | `standing.update` | `id`; optional `maxMinutes`, `expiresAt` | approved again with the identity's grants as they are now |
 | `standing.pause`, `standing.resume`, `standing.revoke` | `id` | the standing grant; revoked is for good |
 | `standing.run` | `id` | `{ id, identity, workspace, startedAt, standingGrant }` of the unattended session it started. Refusals have the codes `not_found`, `revoked`, `paused`, `expired`, `changed`, `overlap` and `refused`, each a `standing.run` deny event. `harness.js` is its caller |
@@ -616,7 +621,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, and the window's Cron and Integrations tabs show them. Next on the [roadmap](../docs/ROADMAP.md): an unattended start for Claude Code and Codex, and the owner's first nightly job on a standing grant. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, and a standing grant can run Claude Code on a prompt. Next on the [roadmap](../docs/ROADMAP.md): the owner's first nightly job on a standing grant, and Codex's unattended start. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

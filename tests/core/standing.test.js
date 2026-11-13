@@ -76,7 +76,13 @@ test('create approves a command identity\'s run with its grants as they are; bad
   bad({ id: 'nightly' }, /exists/);
   bad({ id: 'Bad Id' }, /lower-case/);
   bad({ identity: 'local:nobody' }, /identity is an identity id/);
-  bad({ identity: 'local:claude' }, /no unattended start yet/);
+  bad({ identity: 'local:claude' }, /name a prompt, not a command/);
+  bad({ identity: 'local:claude', command: undefined }, /prompt is what the agent is asked to do/);
+  bad({ prompt: 'do it' }, /no backend: name the command/);
+  identity('local:codex', 'ai-agent', 'codex');
+  bad({ identity: 'local:codex', command: undefined, prompt: 'x' }, /no unattended start yet/);
+  const p = standing.create({ id: 'prompted', identity: 'local:claude', workspace: ws, prompt: 'Update the "docs"\nand commit', maxMinutes: 5, expiresAt: '2026-12-01T00:00:00Z' });
+  assert.deepEqual([p.prompt, p.command], ['Update the "docs"\nand commit', null]);
   bad({ identity: 'local:mcp/x' }, /can't hold a standing grant/);
   bad({ command: 'two\nlines' }, /one line/);
   bad({ maxMinutes: 0 }, /maxMinutes/);
@@ -84,7 +90,17 @@ test('create approves a command identity\'s run with its grants as they are; bad
   bad({ expiresAt: '2026-11-12T00:00:00Z' }, /future/);
   bad({ expiresAt: '2028-01-01T00:00:00Z' }, /a year/);
   bad({ workspace: 'relative\\ws' }, /workspace/);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM standing_grants').get()?.n, 1);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM standing_grants').get()?.n, 2);
+});
+
+test('a prompt grant runs its prompt through the backend; the runner refuses a prompt for a command identity', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { standing, runner, ws, identity, db } = setup(t);
+  identity('local:claude', 'ai-agent', 'claude-code');
+  db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES ('c1', 'local:claude', ?, 'write', 'allow', '2026-01-01T00:00:00Z', 'local:operator')").run(`file:${ws.replaceAll('\\', '/')}/**`);
+  standing.create({ id: 'prompted', identity: 'local:claude', workspace: ws, prompt: 'say hi', maxMinutes: 5, expiresAt: '2026-12-01T00:00:00Z' });
+  // This runner has no agents folder, so a backend can't start: the refusal shows the prompt reached the backend path.
+  await assert.rejects(standing.run('prompted'), (e) => e instanceof StandingError && e.code === 'refused' && /agents folder/.test(e.message));
+  await assert.rejects(runner.start({ identity: 'local:nightly', workspace: ws, prompt: 'x' }), /a prompt is for an identity with a backend/);
 });
 
 test('run starts one unattended session under its budget, recorded with the grant; refusals say why', { skip: !WIN && 'the Core is Windows only' }, async (t) => {

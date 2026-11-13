@@ -7,7 +7,8 @@
 // the manifest doesn't have to replace the list (S3: Codex's `-c mcp_servers={}` merges, it
 // doesn't replace, checked 2026-11-12 with `codex mcp list`).
 //
-// The CLI's own permission prompts stay on as the CLI's UX; the container is the boundary.
+// The CLI's own permission prompts stay on as the CLI's UX; the container is the boundary. An
+// unattended run (a standing grant's prompt, `headless`) turns them off, since nobody can answer.
 // Network needs are declared, not granted: the identity still needs a `net:` grant for each.
 
 import fs from 'node:fs';
@@ -35,6 +36,9 @@ export class BackendError extends Error {
  * @property {boolean} gitBash  Claude Code on Windows runs its shell commands in Git Bash
  * @property {string[]} hosts  `host:port` it talks to; each needs a net: connect grant
  * @property {string} signIn
+ * @property {(prompt: string) => string[]} [headless]  the arguments for one unattended run of a prompt (a standing
+ *   grant's, H4): no prompts of the CLI's own, since nobody is there to answer them; the container and the
+ *   identity's grants are the boundary (ADR-004). A backend without it can't run unattended.
  */
 
 /** @type {Record<string, Manifest>} */
@@ -52,6 +56,8 @@ export const BACKENDS = {
     // The model, and the sign-in's token exchange and refresh. The sign-in page itself opens in the operator's browser.
     hosts: ['api.anthropic.com:443', 'platform.claude.com:443'],
     signIn: 'Run /login in the session and paste the code from the browser.',
+    // Print mode, one prompt and out; its permission prompts off (the operator's choice, 2026-11-13).
+    headless: (prompt) => ['-p', prompt, '--dangerously-skip-permissions'],
   },
   codex: {
     displayName: 'Codex',
@@ -81,13 +87,15 @@ const slug = (id) => id.replace(/^local:/, '').replaceAll('/', '+'); // ids can'
  * Turn an identity's backend into what the runner needs. Finds the program on disk now.
  *
  * @param {string} name a key of BACKENDS
- * @param {{ identity: string, agentsRoot: string, where: Where, isFile?: (p: string) => boolean }} opts
+ * @param {{ identity: string, agentsRoot: string, where: Where, isFile?: (p: string) => boolean, prompt?: string }} opts
+ *   prompt: run it unattended (the manifest's headless start) instead of the interactive CLI
  * @returns {{ command: string, readonly: string[], readwrite: string[], pathDirs: string[], env: Record<string, string>, hosts: string[], home: string, program: string }}
  * @throws {BackendError} for an unknown backend or a program that isn't installed
  */
-export function resolveBackend(name, { identity, agentsRoot, where, isFile = exists }) {
+export function resolveBackend(name, { identity, agentsRoot, where, isFile = exists, prompt }) {
   const m = Object.hasOwn(BACKENDS, name) ? BACKENDS[name] : null;
   if (!m) throw new BackendError(`unknown backend '${name}'; one of ${Object.keys(BACKENDS).join(', ')}`);
+  if (prompt !== undefined && !m.headless) throw new BackendError(`${m.displayName} has no unattended start yet`);
   const program = m.programs(where).find(isFile);
   if (!program) throw new BackendError(`${m.displayName} is not installed (looked for ${m.programs(where).join(', ')})`);
 
@@ -106,11 +114,20 @@ export function resolveBackend(name, { identity, agentsRoot, where, isFile = exi
     pathDirs.push(path.win32.join(root, 'cmd'));
     env.CLAUDE_CODE_GIT_BASH_PATH = bash;
   }
-  return { command: [program, ...m.args].map(quote).join(' '), readonly, readwrite: [home], pathDirs, env, hosts: m.hosts, home, program };
+  const args = [...m.args, ...(prompt !== undefined && m.headless ? m.headless(prompt) : [])];
+  return { command: [program, ...args].map(quote).join(' '), readonly, readwrite: [home], pathDirs, env, hosts: m.hosts, home, program };
 }
 
-/** @param {string} a */
-const quote = (a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a);
+/**
+ * One argument for a Windows command line, as the C runtime (and CommandLineToArgvW) reads it back:
+ * quoted when it has a space, tab or quote or is empty; a quote escaped, and the backslashes before
+ * a quote, or before the closing quote, doubled. A prompt's own quotes and backslashes survive.
+ * @param {string} a
+ */
+export function quote(a) {
+  if (a && !/[\s"]/.test(a)) return a;
+  return `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;
+}
 
 /**
  * Point a backend's CLI at the session's gateway (H3): the arguments to add to its command

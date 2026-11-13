@@ -145,4 +145,10 @@ export const MIGRATIONS = [
   ) STRICT;
   ALTER TABLE sessions ADD COLUMN standing_grant_id TEXT REFERENCES standing_grants(id);
   `,
+
+  // v7 (H4): a standing grant for a backend identity (Claude Code) names a prompt, which the
+  // manifest's headless start runs; its command is then ''.
+  `
+  ALTER TABLE standing_grants ADD COLUMN prompt TEXT CHECK (prompt IS NULL OR length(prompt) BETWEEN 1 AND 8000);
+  `,
 ];
