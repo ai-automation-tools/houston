@@ -4,7 +4,7 @@
 // with ACC_SMOKE_LIVE=1 (npm run smoke -- --live); without it they're reported, not
 // failed. The verdict goes to <dir>/summary.json and the process exit code.
 
-import { app } from 'electron';
+import { app, Menu } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
@@ -838,6 +838,24 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         })()`);
         const { events } = await ctl('audit.query', { type: 'session.end' });
         agentRun.ended = events.map((/** @type {any} */ e) => e.decision?.reasons?.[0] ?? e.outcome?.error_code);
+
+        // Stop All: two running sessions, the navbar button, and nothing running within 5 s.
+        agentRun.stopAll = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          await window.acc.agents.start('local:smoke-shell');
+          await window.acc.agents.start('local:smoke-shell');
+          const running = (await window.acc.agents.info()).rows?.[0]?.sessions.length ?? null;
+          const t0 = Date.now();
+          document.getElementById('stop-all').click();
+          let left = null;
+          for (let i = 0; i < 100; i++) { left = (await window.acc.agents.info()).rows?.[0]?.sessions.length; if (left === 0) break; await pause(50); }
+          const ms = Date.now() - t0;
+          let toast = null;
+          for (let i = 0; i < 50 && !toast; i++) { toast = [...document.body.children].find((d) => d.textContent.startsWith('Stop All:'))?.textContent ?? null; if (!toast) await pause(100); }
+          return { running, left, ms, toast };
+        })()`);
+        agentRun.stopAll.audit = (await ctl('audit.query', { type: 'stop.all' })).events.map((/** @type {any} */ e) => `${e.identity.subject} ${e.decision.reasons[0]}`);
+        agentRun.stopAll.key = Menu.getApplicationMenu()?.getMenuItemById('stop-all')?.accelerator ?? null;
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -861,6 +879,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && agentRun.denied === '403' && agentRun.allowCard?.what === 'connect to example.com:443' && agentRun.allowed === 'done'
           && agentRun.approvals?.asked.join() === 'example.org:443,example.com:443'
           && agentRun.approvals.decided.join() === 'example.org:443 deny deny,example.com:443 session allow' && agentRun.barAfter === true), agentRun);
+      check('Stop All on the navbar ends every running session within 5 s, says how many, and is audited; the menu gives it Ctrl+Shift+Backspace',
+        Boolean(agentRun?.stopAll?.running === 2 && agentRun.stopAll.left === 0 && agentRun.stopAll.ms < 5000
+          && agentRun.stopAll.toast === 'Stop All: stopped 2 agent sessions' && agentRun.stopAll.audit?.join() === 'local:operator 2 running'
+          && agentRun.stopAll.key === 'CmdOrCtrl+Shift+Backspace'), agentRun?.stopAll);
     }
     // Last, so it shows terminal_run's output in the terminal.
     await wait(1500);

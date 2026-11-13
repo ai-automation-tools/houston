@@ -204,6 +204,8 @@ test('session.stop, stop.all', async (t) => {
   assert.deepEqual(await s.call('session.stop', { id: 's2' }), { reason: 'stopped', exitCode: null });
   assert.deepEqual(await s.call('stop.all'), { stopped: 2 });
   assert.deepEqual(await s.call('session.list'), []);
+  const { events: [e] } = await s.call('audit.query', { type: 'stop.all' });
+  assert.deepEqual([e.identity.subject, e.decision.reasons], ['local:operator', ['2 running']]);
 });
 
 test('several requests on one connection are each answered with their id', async (t) => {

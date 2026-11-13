@@ -108,6 +108,7 @@ function setCloseToTray(on) {
 function trayMenu() {
   return Menu.buildFromTemplate([
     { label: 'Show Houston', click: showWindow },
+    { label: 'Stop all agent sessions', click: () => stopAllSessions() },
     { label: 'Close to tray', type: 'checkbox', checked: store.layout().closeToTray, click: (mi) => setCloseToTray(mi.checked) },
     { type: 'separator' },
     { label: 'Quit Houston', click: () => app.quit() },
@@ -120,6 +121,29 @@ async function createTray() {
   tray.setToolTip('Houston');
   tray.setContextMenu(trayMenu());
   tray.on('click', showWindow);
+}
+
+// The hotkey for Stop All; the toolbar button's title in index.html names it too.
+const STOP_ALL_KEY = 'CmdOrCtrl+Shift+Backspace';
+
+/**
+ * Stop All (SEC-10): end every session the Core runs. The hotkey, the tray and the toolbar button
+ * all land here, in the main process; the tray needs no page, so it works with the window hung.
+ * The window shows the result.
+ * @returns {Promise<{ stopped: number } | { error: string }>}
+ */
+async function stopAllSessions() {
+  /** @type {{ stopped: number } | { error: string }} */
+  let r;
+  try {
+    r = await core.call('stop.all', {}, 15_000);
+  } catch (e) {
+    const err = /** @type {Error & { code?: string }} */ (e);
+    r = { error: err.code === 'ENOENT' ? 'The Houston Core is not running, so no agent session is either.' : err.message };
+  }
+  send('agents:stopped', r);
+  send('agents:changed');
+  return r;
 }
 
 /** @param {string} channel @param {...unknown} args */
@@ -212,6 +236,8 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
         // Chrome's rule: Ctrl+1 to Ctrl+8 pick that tab, Ctrl+9 the last.
         ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => item(`Tab ${n}`, `CmdOrCtrl+${n}`, `tab-${n}`)),
         item('Last tab', 'CmdOrCtrl+9', 'tab-last'),
+        { type: 'separator' },
+        { id: 'stop-all', label: 'Stop all agent sessions', accelerator: STOP_ALL_KEY, click: () => stopAllSessions() },
         { type: 'separator' },
         { id: 'close-to-tray', label: 'Close to tray', type: 'checkbox', checked: store.layout().closeToTray, click: (mi) => setCloseToTray(mi.checked) },
         { role: 'quit' },
@@ -706,6 +732,7 @@ async function createWindow() {
   handle('agents:start', (identity) => agents.start(identity));
   handle('agents:open', (session) => agents.open(session));
   handle('agents:stop', (session) => agents.stop(session));
+  handle('agents:stopAll', () => stopAllSessions());
   // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
   const approvals = watchApprovals(send);
   handle('approvals:list', () => approvals.list());

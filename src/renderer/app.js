@@ -210,6 +210,14 @@ $('approval-deny').addEventListener('click', () => answerApproval('deny'));
 api.approvals.onChanged((/** @type {any[]} */ list) => { approvalCards = list; showApproval(); });
 api.approvals.list().then((/** @type {any[]} */ list) => { approvalCards = list; showApproval(); });
 
+// Stop All: no confirm, it's the emergency button. Main does the work; the toast comes back the
+// same way for the button, the hotkey and the tray.
+$('stop-all').addEventListener('click', () => { api.agents.stopAll().catch((/** @type {unknown} */ err) => toast(errText(err))); });
+api.agents.onStopped((/** @type {{ stopped?: number, error?: string }} */ r) => {
+  toast(r.error ? `Stop All: ${r.error}`
+    : r.stopped ? `Stop All: stopped ${r.stopped} agent session${r.stopped === 1 ? '' : 's'}` : 'Stop All: no agent session was running');
+});
+
 // A run's terminal, opened by main on Run: shown and brought forward.
 api.term.onOpened((/** @type {any} */ t) => {
   setTerminalOpen(true);

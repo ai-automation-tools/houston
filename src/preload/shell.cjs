@@ -132,7 +132,10 @@ contextBridge.exposeInMainWorld('acc', {
     start: invoke('agents:start'),
     open: invoke('agents:open'),
     stop: invoke('agents:stop'),
+    stopAll: invoke('agents:stopAll'),
     onChanged: listen('agents:changed'),
+    /** Stop All's result, whichever of the button, hotkey or tray pressed it. */
+    onStopped: listen('agents:stopped'),
   },
 
   /** The Core's approval inbox: cards waiting for the operator, and their answers. */

@@ -95,7 +95,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
 | SEC-08 | Governance | Should | Next | Policy versions, expiry, grant review, lifecycle states, export |
 | SEC-09 | Controls enforced at execution boundaries | Must | MVP | Container policy and gateway checks. A prompt or a UI toggle is never the control |
-| SEC-10 | Emergency stop | Must | MVP | Stop All: end every session tree, revoke tokens, pause standing grants |
+| SEC-10 | Emergency stop | Must | MVP; sessions part built (H2), tokens and standing grants with H3 and H5 | Stop All: end every session tree, revoke tokens, pause standing grants |
 
 ### News feed
 
