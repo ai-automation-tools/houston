@@ -907,6 +907,13 @@ export class Sidebar {
       }
     }
 
+    // Local model runtimes (H6): found on this machine now; a session reaches one through its own relay.
+    if (info.runtimes) {
+      host.append(groupTitle(`Local models (${info.runtimes.length})`));
+      if (!info.runtimes.length) host.append(note('None answering. Houston looks for Ollama, LM Studio, llama.cpp, KoboldCpp and vLLM on their usual ports.'));
+      for (const r of info.runtimes) host.append(line('idle', '10px', '🖥', r.name, r.sub, r.title));
+    }
+
     host.append(groupTitle('Agent backends'));
     for (const b of info.backends) host.append(line(b.installed ? 'ready' : 'exited', '10px', b.installed ? '●' : '○', b.name, b.sub, b.title));
   }

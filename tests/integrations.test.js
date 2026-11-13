@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg, memoryDecision, memoryId, memoryRows } from '../src/shared/integrations.js';
+import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg, memoryDecision, memoryId, memoryRows, runtimeRows } from '../src/shared/integrations.js';
 
 const tools = [{ name: 'echo', description: 'Echo it.\nSecond line.' }, { name: 'env' }];
 /** @param {object} o */
@@ -94,4 +94,12 @@ test('memoryRows lists the items waiting for review, oldest first, with who wrot
   assert.match(r.waiting[1].title, /Written by local:b in session s2\./);
   assert.throws(() => memoryId('../x'), /not a memory item id/);
   assert.throws(() => memoryDecision('maybe'), /approved or rejected/);
+});
+
+test('runtimeRows says which agent CLI can use each local runtime, and what the others need', () => {
+  const [r] = runtimeRows([{ id: 'ollama', name: 'Ollama', port: 11434, models: ['llama3.2:latest'], apis: { chat: true, responses: false, messages: false } }]);
+  assert.deepEqual([r.name, r.sub], ['Ollama :11434', '1 model · no agent CLI can use it yet']);
+  assert.match(r.title, /Codex needs the responses API; Claude Code needs the messages API: a newer Ollama may serve it\./);
+  assert.match(r.title, /net:127\.0\.0\.1:11434 \(connect\)/);
+  assert.equal(runtimeRows([{ id: 'x', name: 'X', port: 1, models: ['a', 'b'], apis: { chat: true, responses: true, messages: true } }])[0].sub, '2 models · for Codex and Claude Code');
 });

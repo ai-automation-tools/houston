@@ -4,7 +4,7 @@
 // approvals.js) on fabricated state, in the browser tab. Nothing runs, nothing is fetched.
 
 import { agentRows } from '../shared/agents.js';
-import { backendRows, memoryRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
+import { backendRows, memoryRows, runtimeRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
@@ -307,7 +307,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     },
 
     integrations: {
-      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS), standing: standingRows(standing, now()), memory: memoryRows(memory) }),
+      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS), standing: standingRows(standing, now()), memory: memoryRows(memory), runtimes: runtimeRows([{ id: 'ollama', name: 'Ollama', port: 11434, models: ['llama3.2:latest', 'qwen3:4b'], apis: { chat: true, responses: true, messages: true } }]) }),
       install: async (/** @type {unknown} */ name) => {
         const s = server(name);
         s.state = s.state === 'discovered' ? 'installed' : s.state;

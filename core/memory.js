@@ -90,7 +90,7 @@ export function createMemory({ db, audit, redact = (s) => s, now = () => new Dat
     recall(s, args = {}) {
       const limit = Number.isInteger(args.limit) && args.limit >= 1 && args.limit <= 50 ? args.limit : 20;
       const words = typeof args.query === 'string' ? args.query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 10) : [];
-      const all = /** @type {any[]} */ (db.prepare("SELECT * FROM memories WHERE profile_id = ? AND state = 'approved' ORDER BY created_at DESC").all(s.profile ?? DEFAULT_PROFILE));
+      const all = /** @type {any[]} */ (db.prepare("SELECT * FROM memories WHERE profile_id = ? AND state = 'approved' ORDER BY created_at DESC, rowid DESC").all(s.profile ?? DEFAULT_PROFILE));
       const hits = all.filter((r) => words.every((w) => r.text.toLowerCase().includes(w))).slice(0, limit);
       return { items: hits.map((r) => ({ id: r.id, text: r.text, source: r.source_identity, at: r.created_at })) };
     },
@@ -99,7 +99,7 @@ export function createMemory({ db, audit, redact = (s) => s, now = () => new Dat
     list({ profile, state } = {}) {
       const p = profileOf(db, profile, fail);
       if (state !== undefined && !STATES.includes(/** @type {string} */ (state))) throw fail('bad_request', `state is one of ${STATES.join(', ')}`);
-      return /** @type {any[]} */ (db.prepare('SELECT * FROM memories WHERE profile_id = ? ORDER BY created_at DESC').all(p)).filter((r) => !state || r.state === state).map(shape);
+      return /** @type {any[]} */ (db.prepare('SELECT * FROM memories WHERE profile_id = ? ORDER BY created_at DESC, rowid DESC').all(p)).filter((r) => !state || r.state === state).map(shape);
     },
 
     /** The operator writes one directly: approved, its source the operator. @param {unknown} text @param {unknown} [profile] */

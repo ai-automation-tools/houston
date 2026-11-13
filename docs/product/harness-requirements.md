@@ -63,7 +63,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-13 | Loops | Could | Later | A recipe with an iteration cap, a time budget and a stop condition |
 | CORE-14 | Tasks | Should | MVP | A session with a goal, a budget and a recorded outcome |
 | CORE-15 | Scheduled tasks | Must | MVP; standing grants and `harness run` built (H4) | Cronsole owns schedules; the Core authorises each run with a standing grant |
-| CORE-16 | Local LLM support | Should | Next | Discovery of local OpenAI-compatible runtimes, passed to backends that take a base URL |
+| CORE-16 | Local LLM support | Should | Built (H6): relayed through the session's proxy | Discovery of local OpenAI-compatible runtimes, passed to backends that take a base URL |
 | CORE-17 | External model providers | Must | MVP | Whatever the backends support; provider hosts on the session's network allowlist |
 | CORE-18 | Memory | Should | Built (H6) | A curated per-profile store with provenance and a review queue |
 | CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |

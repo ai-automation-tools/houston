@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**delegate.js**](delegate.js) | Sub-agents: the gateway's `harness.delegate` tool, the intersection of what a child asks for with what its parent holds, and the child's identity from start to retirement. |
+| [**runtimes.js**](runtimes.js) | Local model runtimes: finding the ones answering on this machine and what APIs each serves, and the relay a session reaches one through. |
 | [**memory.js**](memory.js) | Profile memory: an agent's proposals, pending until the operator reviews them, and the approved items a session may recall. |
 | [**skills.js**](skills.js) | Skills: installing a skill folder into a profile with its content hash, and the skills a session gets (its `skill:` grants, unchanged ones only), linked into an agent CLI's home. |
 | [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
@@ -547,6 +548,16 @@ npm run ctl -- grant.add identity=local:claude-runner resource=skill:git-pushing
 
 Checked on 2026-11-13 by [`spikes/h6-skills.mjs`](../spikes/h6-skills.mjs): a contained agent searched contained, read-only Promptbook for "git" and read `git-pushing` (its write tool was refused as not pinned); the operator installed it; and Claude Code, unattended in a container, asked for the skill's first heading, answered `NO-SKILL` without the grant and `SKILL-SEEN Git Push Workflow` with it.
 
+## 🖥️ Local model runtimes
+
+[`runtimes.js`](runtimes.js) lets a session's agent use a model running on this machine (CORE-16, H6).
+
+- **Discovery.** `runtime.list` looks on the usual ports (Ollama 11434, LM Studio 1234, llama.cpp 8080, KoboldCpp 5001, vLLM 8000) for an OpenAI model list at `/v1/models`, and says which APIs each serves: `chat` (chat completions), `responses` and `messages` (Anthropic's). A port answering with anything else is left out. The window's Integrations tab lists them under **Local models**.
+- **Use.** `session.start` with `runtime` (its id) and `model` (one of its models). The identity needs `net:127.0.0.1:<port>` with permission `connect`. A container can't reach the host's loopback, and the egress proxy refuses loopback whatever the grant, so the runtime is reached through the session's own proxy port at `/runtime/v1`: the Core relays each request to the runtime, only with the session's token (`Authorization: Bearer` or `x-api-key`), streams the answer back, and records it as an `egress.connect` event with `egress.scheme` `relay`. The session gets `HOUSTON_RUNTIME_URL` and `HOUSTON_RUNTIME_MODEL`.
+- **Agent CLIs.** A backend's manifest says how it uses one (`localModel`): Codex gets a provider of its own for the session (`model_providers.houston-local`, keyed by the session token) and needs the `responses` API, since Codex refuses `wire_api = "chat"` now; Claude Code gets `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL` and needs `messages`. A start whose runtime doesn't serve the backend's API is refused with why.
+
+Checked on 2026-11-13 by [`spikes/h6-runtimes.mjs`](../spikes/h6-runtimes.mjs) against Ollama 0.12.3: a contained session asked `llama3.2` through its relay and got `PONG`; the relay without the token answered 401 and the runtime's own port was unreachable from the container; the start without the grant was refused; and a Codex start was refused because Ollama 0.12.3 serves chat completions only. Codex and Claude Code need a runtime that serves their API (a newer Ollama does).
+
 ## 🧠 Profile memory
 
 [`memory.js`](memory.js) keeps what agents learn, per profile, with where it came from, and serves it only after the operator approves it (H6).
@@ -640,6 +651,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
 | `profile.create` | `id`, `displayName` | the new profile; its folder is made ([Profiles](#-profiles)) |
+| `runtime.list` | none | the local runtimes answering now: `id`, `name`, `port`, `baseUrl`, `models`, `apis` (`chat`, `responses`, `messages`) ([Local model runtimes](#️-local-model-runtimes)) |
 | `memory.list` | optional `profile`, `state` (`pending`, `approved`, `rejected`) | items, newest first: `id`, `profile`, `text`, `state`, `source` (`identity`, `session`), `createdAt`, `reviewedAt`, `reviewedBy`, `note` ([Profile memory](#-profile-memory)) |
 | `memory.add` | `text`; optional `profile` | the item, approved, its source the operator |
 | `memory.review` | `id`, `decision` (`approve` or `reject`); optional `note` | the item |
@@ -716,7 +728,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Profile memory is in, with its review queue ([Profile memory](#-profile-memory)). Next on the [roadmap](../docs/ROADMAP.md): local model runtimes. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Profile memory is in, with its review queue ([Profile memory](#-profile-memory)), and local model runtimes are found and relayed ([Local model runtimes](#️-local-model-runtimes)). Next on the [roadmap](../docs/ROADMAP.md): the Feed screen and the start-page cards. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 
