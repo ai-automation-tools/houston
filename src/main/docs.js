@@ -4,8 +4,8 @@
 //
 // acc://run/<task>/<run> is a Cronsole run's output, acc://git/<path>?area=… a file's
 // diff in the workspace's repo, acc://dev/<id> a dev server's log, acc://runlog/<id> a terminal_run
-// run's output, acc://transcript/<id> a contained session's transcript and acc://settings/ the
-// Settings page, on the same pages; the app opens those, never a web page (see serveAppPage).
+// run's output, acc://transcript/<id> a contained session's transcript, acc://settings/ the
+// Settings page and acc://identities/ the Identity Center, on the same pages; the app opens those, never a web page (see serveAppPage).
 //
 // Only ids in Project Hub's own index are served. Text comes from Hub's /api/file
 // (Hub renders Markdown and refuses paths outside its roots); images are read here,

@@ -2,6 +2,8 @@
 // what a session may do; this only shapes what the window shows and asks for. No Node imports:
 // the browser demo loads it too. The toolchain PATH rule is main's, in toolchain.js.
 
+import { reviewState } from './identities.js';
+
 /**
  * What an identity with no backend runs: a plain contained shell. Fixed here, so no IPC message
  * names a command (the same rule as shells.js).
@@ -9,10 +11,10 @@
 export const SHELL_COMMAND = 'cmd.exe /d /q /k';
 
 /**
- * @typedef {{ id: string, kind: string, displayName: string, backend: string | null, status: string, containment: string }} Identity
+ * @typedef {{ id: string, kind: string, displayName: string, backend: string | null, status: string, containment: string, reviewBy?: string | null }} Identity
  * @typedef {{ id: string, identity: string, workspace: string, startedAt: string }} Session
  * @typedef {{ name: string, displayName: string, installed: boolean, signIn: string }} Backend
- * @typedef {{ id: string, name: string, status: string, what: string, canStart: boolean, why: string, signIn: string, sessions: Session[] }} AgentRow
+ * @typedef {{ id: string, name: string, status: string, what: string, canStart: boolean, why: string, signIn: string, sessions: Session[], review: string, overdue: boolean }} AgentRow
  */
 
 /**
@@ -23,9 +25,10 @@ export const SHELL_COMMAND = 'cmd.exe /d /q /k';
  * @param {Identity[]} identities
  * @param {Session[]} sessions running now
  * @param {Backend[]} backends
+ * @param {number} [now]
  * @returns {AgentRow[]}
  */
-export function agentRows(identities, sessions, backends) {
+export function agentRows(identities, sessions, backends, now = Date.now()) {
   return identities
     .filter((i) => i.kind !== 'operator' && i.status !== 'retired')
     .map((i) => {
@@ -40,6 +43,7 @@ export function agentRows(identities, sessions, backends) {
         what: b ? b.displayName : i.backend ?? 'contained shell',
         canStart: !why, why, signIn: b?.signIn ?? '',
         sessions: sessions.filter((s) => s.identity === i.id),
+        review: reviewState(i, now).text, overdue: reviewState(i, now).state === 'overdue',
       };
     })
     .sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active') || a.name.localeCompare(b.name));

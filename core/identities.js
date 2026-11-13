@@ -8,10 +8,14 @@
 //   suspended -> active | retired
 //   retired: final, and the id is never reused (the database enforces both).
 // Only an active identity can start a session (the runner checks).
+//
+// Review (H5): the operator marks an identity reviewed, which sets when it's due again. reach()
+// says what its grants open now, for the Identity Center.
 
 import crypto from 'node:crypto';
 import { BACKENDS } from './backends.js';
-import { ACTIONS, compile, policyVersion } from './policy.js';
+import { ACTIONS, compile, decide, policyVersion } from './policy.js';
+import { compileGrants } from './runner.js';
 
 export const OPERATOR = 'local:operator';
 const ID = /^local:[a-z0-9][a-z0-9/_-]{0,62}$/;
@@ -91,7 +95,7 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
   const shape = (r) => ({
     id: r.id, kind: r.kind, displayName: r.display_name, owner: r.owner, parent: r.parent, purpose: r.purpose, backend: r.backend,
     status: r.status, containment: r.containment, createdAt: r.created_at, lastUsedAt: r.last_used_at,
-    expiresAt: r.expires_at, retiredAt: r.retired_at, tags: JSON.parse(r.tags),
+    expiresAt: r.expires_at, retiredAt: r.retired_at, reviewedAt: r.reviewed_at ?? null, reviewBy: r.review_by ?? null, tags: JSON.parse(r.tags),
     grants: /** @type {any[]} */ (db.prepare('SELECT * FROM grants WHERE identity_id = ? ORDER BY granted_at, id').all(r.id)).map((g) => ({
       id: g.id, resource: g.resource, permission: g.permission, effect: g.effect,
       grantedAt: g.granted_at, grantedBy: g.granted_by, expiresAt: g.expires_at, lastUsedAt: g.last_used_at,
@@ -152,6 +156,61 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
       event('identity.lifecycle', `identity.${to === 'active' ? 'activate' : to === 'suspended' ? 'suspend' : 'retire'}`, actor, { type: 'Identity', id },
         { lifecycle: { from: r.status, to, ...(reason ? { reason } : {}) } });
       return shape(row(id));
+    },
+
+    /**
+     * Mark an identity reviewed: its grants and purpose were looked at, and it's due again in `days`.
+     * @param {string} id @param {unknown} days 1 to 366, default 90 @param {string} actor
+     */
+    review(id, days, actor) {
+      const r = must(id);
+      if (r.kind === 'operator') throw bad("the operator isn't reviewed");
+      if (r.status === 'retired') throw new RegistryError('conflict', `${id} is retired`);
+      const n = days === undefined ? 90 : Number(days);
+      if (!Number.isInteger(n) || n < 1 || n > 366) throw bad('days is a whole number of days, 1 to 366');
+      const at = now();
+      const by = new Date(at.getTime() + n * 86_400_000).toISOString();
+      db.prepare('UPDATE identities SET reviewed_at = ?, review_by = ? WHERE id = ?').run(at.toISOString(), by, id);
+      event('identity.lifecycle', 'identity.review', actor, { type: 'Identity', id }, { lifecycle: { from: r.status, to: r.status }, review: { reviewedAt: at.toISOString(), reviewBy: by } });
+      return shape(row(id));
+    },
+
+    /**
+     * What an identity's grants open now, by resource type and effect, without the expired ones;
+     * the grants a container can't apply (runner.js compileGrants), the folders no grant opens, and
+     * the hosts its backend needs that no allow grant covers. An unconfined identity isn't held to
+     * any of it, and the answer says so.
+     * @param {string} id
+     */
+    reach(id) {
+      const r = must(id);
+      const at = now();
+      const grants = /** @type {any[]} */ (db.prepare('SELECT id, resource, permission, effect, expires_at FROM grants WHERE identity_id = ? ORDER BY resource').all(id));
+      const live = grants.filter((g) => g.expires_at == null || Date.parse(g.expires_at) > at.getTime());
+      /** @type {Record<string, { allow: { resource: string, permission: string }[], ask: { resource: string, permission: string }[], deny: { resource: string, permission: string }[] }>} */
+      const types = {};
+      for (const g of live) {
+        const type = g.resource.slice(0, g.resource.indexOf(':'));
+        (types[type] ??= { allow: [], ask: [], deny: [] })[/** @type {'allow' | 'ask' | 'deny'} */ (g.effect)].push({ resource: g.resource.slice(type.length + 1), permission: g.permission });
+      }
+      /** @type {{ resource: string | null, reason: string }[]} */
+      let notApplied = [];
+      if (r.containment === 'container') {
+        try {
+          notApplied = compileGrants(live, at).skipped.map((s) => ({ resource: grants.find((g) => g.id === s.id)?.resource ?? null, reason: s.reason }));
+        } catch (e) { notApplied = [{ resource: null, reason: /** @type {Error} */ (e).message }]; }
+      }
+      const m = r.backend && Object.hasOwn(BACKENDS, r.backend) ? BACKENDS[r.backend] : null;
+      const policy = { grants: live, globals, policyVersion: 'reach', now: at };
+      const host = (/** @type {string} */ h) => decide({ principal: { type: 'Identity', id }, action: 'net.connect', resource: { type: 'Host', id: h }, context: { session_id: null, attended: false } }, policy).decision;
+      return {
+        id, status: r.status, containment: r.containment, enforced: r.containment === 'container',
+        types, expired: grants.length - live.length, notApplied,
+        alwaysDenied: globals.map((g) => g.resource),
+        backend: m && { name: r.backend, displayName: m.displayName, hosts: m.hosts, missingHosts: m.hosts.filter((h) => host(h) !== 'allow') },
+        standing: /** @type {any[]} */ (db.prepare('SELECT id, status, expires_at FROM standing_grants WHERE identity_id = ? ORDER BY id').all(id))
+          .map((s) => ({ id: s.id, status: s.status, expiresAt: s.expires_at })),
+      };
     },
 
     /**

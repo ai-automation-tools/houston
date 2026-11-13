@@ -36,7 +36,7 @@ import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
-import { coreSettings, createAgents, integrations, transcriptPage } from './agents.js';
+import { coreSettings, createAgents, identitiesPage, integrations, transcriptPage } from './agents.js';
 import { settingsBody } from '../shared/scopes.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
@@ -316,6 +316,7 @@ async function createWindow() {
     runlog: { title: 'Run', render: async (url) => runLog(url) },
     transcript: { title: 'Transcript', render: transcriptPage },
     settings: { title: 'Settings', render: () => settingsPage() },
+    identities: { title: 'Identity Center', render: () => identitiesPage() },
   });
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
@@ -774,6 +775,7 @@ async function createWindow() {
   handle('agents:start', (identity) => agents.start(identity));
   handle('agents:open', (session) => agents.open(session));
   handle('agents:stop', (session) => agents.stop(session));
+  handle('agents:lifecycle', (identity, action) => agents.lifecycle(identity, action));
   handle('agents:stopAll', () => stopAllSessions());
   handle('logs:query', (filter) => agents.logs(filter));
   handle('integrations:info', () => integrations.info());

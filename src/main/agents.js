@@ -12,6 +12,7 @@ import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
 import { backendRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
 import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
+import { identitiesBody } from '../shared/identities.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { core } from './core.js';
 
@@ -36,6 +37,26 @@ export async function transcriptPage(url) {
   }
   return docPage({ title: `Transcript ${id.slice(0, 8)}`, trail: `Agents › Transcripts › ${id}`, body: transcriptBody(t, escapeHtml) });
 }
+
+/** The acc://identities/ page, the Identity Center (H5): every identity, what its grants open, its sessions. */
+export async function identitiesPage() {
+  if (process.platform !== 'win32') throw new Error('Identities live in the Core, which runs on Windows only.');
+  let identities, sessions, starts;
+  try {
+    [identities, sessions, starts] = await Promise.all([core.call('identity.list'), core.call('session.list'), core.call('audit.query', { type: 'session.start', limit: 500 })]);
+  } catch (e) { throw new Error(why(e)); }
+  /** @type {Record<string, any>} */
+  const reach = {};
+  await Promise.all(identities.filter((/** @type {any} */ i) => i.kind !== 'operator').map(async (/** @type {any} */ i) => {
+    // A Core from before H5 has no identity.reach.
+    reach[i.id] = await core.call('identity.reach', { id: i.id }).catch((e) => ({ error: e.code === 'unknown_method' ? 'it runs older code than the app; end and run the Houston Core task' : why(e) }));
+  }));
+  const body = identitiesBody({ identities, reach, sessions, starts: starts.events.slice().reverse(), now: Date.now() }, escapeHtml);
+  return docPage({ title: 'Identity Center', trail: 'Houston › Identity Center', body });
+}
+
+/** The lifecycle actions the Agents tab offers, and the Control API method each one is. */
+const LIFECYCLE = { activate: 'identity.activate', suspend: 'identity.suspend', retire: 'identity.retire', review: 'identity.review' };
 
 /**
  * The Core's part of the Settings page: its data folder, the limits it runs with, and how many
@@ -194,6 +215,18 @@ export function createAgents({ terminals, send, workspace }) {
 
     /** @param {unknown} session */
     open: (session) => open(id(session, 'session')),
+
+    /**
+     * Move an identity along its lifecycle, or mark it reviewed. The Core checks the move; suspending
+     * or retiring ends its sessions there. @param {unknown} identity @param {unknown} action
+     */
+    async lifecycle(identity, action) {
+      const who = id(identity, 'identity');
+      if (typeof action !== 'string' || !Object.hasOwn(LIFECYCLE, action)) throw new Error(`action is one of ${Object.keys(LIFECYCLE).join(', ')}`);
+      const r = await core.call(LIFECYCLE[/** @type {keyof typeof LIFECYCLE} */ (action)], { id: who });
+      changed();
+      return r;
+    },
 
     /** @param {unknown} session */
     async stop(session) {

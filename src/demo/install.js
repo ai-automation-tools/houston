@@ -14,7 +14,7 @@ const about = document.createElement('div');
 about.id = 'demo-about';
 about.hidden = true;
 about.innerHTML = ABOUT_HTML;
-// The app's own pages the demo can draw: Settings and a session's transcript (harness.js).
+// The app's own pages the demo can draw: Settings, the Identity Center and a session's transcript (harness.js).
 const appPage = document.createElement('div');
 appPage.id = 'demo-app-page';
 appPage.hidden = true;

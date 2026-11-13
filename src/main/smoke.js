@@ -989,6 +989,41 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         agentRun.integrations.grantStatus = (await ctl('standing.get', { id: 'smoke-nightly' })).status;
         agentRun.integrations.grantChanges = (await ctl('audit.query', { type: 'standing.change' })).events.map((/** @type {any} */ e) => e.action);
         await shot('integrations.png', wc);
+
+        // The Identity Center (H5): Reviewed, Suspend and Activate from the Agents tab change the Core;
+        // Identities opens the page, a script-free acc:// page with a section for the identity.
+        agentRun.lifecycle = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const until = async (ok) => { for (let i = 0; i < 100 && !ok(); i++) await pause(100); return ok(); };
+          document.querySelector('.side-tabs [data-panel="agents"]').click();
+          const row = () => [...document.querySelectorAll('#agents-list .dev-server')].find((r) => r.querySelector('.name')?.textContent === 'Smoke shell');
+          const buttons = () => [...(row()?.querySelectorAll('.acts button') ?? [])];
+          const press = (label) => buttons().find((b) => b.textContent === label)?.click();
+          await until(() => buttons().some((b) => b.textContent === 'Reviewed'));
+          const before = buttons().map((b) => b.textContent);
+          press('Reviewed');
+          await pause(800);
+          press('Suspend');
+          await until(() => buttons().some((b) => b.textContent === 'Activate'));
+          const suspended = { sub: row()?.querySelector('.sub')?.textContent ?? '', buttons: buttons().map((b) => b.textContent) };
+          press('Activate');
+          await until(() => buttons().some((b) => b.textContent === 'Suspend'));
+          document.getElementById('agents-identities').click();
+          return { before, suspended };
+        })()`);
+        for (let i = 0; i < 40 && !tabs.list().some((x) => x.url.startsWith('acc://identities/')); i++) await wait(250);
+        const iTab = tabs.list().find((x) => x.url.startsWith('acc://identities/'));
+        const iView = iTab && tabs.tabs.get(iTab.id);
+        if (iView) {
+          for (let i = 0; i < 40 && iView.view.webContents.isLoading(); i++) await wait(100);
+          agentRun.lifecycle.page = await iView.view.webContents.executeJavaScript(`({
+            h1: document.querySelector('h1')?.textContent, h2: [...document.querySelectorAll('h2')].map((h) => h.textContent),
+            h3: [...document.querySelectorAll('h3')].map((h) => h.textContent), text: document.body.innerText, scripts: document.scripts.length,
+          })`);
+          tabs.close(iTab.id);
+        }
+        const me = await ctl('identity.get', { id: 'local:smoke-shell' });
+        agentRun.lifecycle.core = { status: me.status, reviewBy: me.reviewBy, actions: (await ctl('audit.query', { type: 'identity.lifecycle' })).events.map((/** @type {any} */ e) => e.action) };
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -1035,6 +1070,13 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('the Integrations tab lists a standing grant with who it runs as, and Pause and Resume change it in the Core',
         Boolean(ig?.grantBefore?.sub === 'local:smoke-shell · up to 5 min' && ig.grantBefore.buttons.join() === 'Pause' && /^paused/.test(ig.grantPaused)
           && ig.grantStatus === 'active' && ig.grantChanges?.join() === 'standing.create,standing.pause,standing.resume'), ig);
+      const lc = agentRun?.lifecycle;
+      const due = lc?.core?.reviewBy ? Math.round((Date.parse(lc.core.reviewBy) - Date.now()) / 86_400_000) : null;
+      check('the Agents tab marks an identity reviewed, suspends and activates it in the Core, and opens the Identity Center with its grants and reach',
+        Boolean(lc?.before?.join() === 'Start,Suspend,Reviewed,Retire,Details' && lc.suspended.buttons[0] === 'Activate' && /suspended/.test(lc.suspended.sub)
+          && lc.core.status === 'active' && due === 90 && lc.core.actions.slice(-3).join() === 'identity.review,identity.suspend,identity.activate'
+          && lc.page?.h1 === 'Identity Center' && lc.page.scripts === 0 && lc.page.h2.includes('Smoke shell')
+          && lc.page.h3.includes('What it can reach') && lc.page.text.includes('due in 90 days')), lc && { ...lc, page: lc.page && { ...lc.page, text: lc.page.text.slice(0, 400) } });
       const tr = agentRun?.transcript;
       check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
         Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0

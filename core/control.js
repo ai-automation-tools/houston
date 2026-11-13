@@ -220,6 +220,8 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     // ponytail: a session.start already past the runner's status check still starts; stop it with session.stop.
     'identity.suspend': (p) => deactivate(str(p.id, 'id'), 'suspended', p.reason),
     'identity.retire': (p) => deactivate(str(p.id, 'id'), 'retired', p.reason),
+    'identity.review': (p) => registry.review(str(p.id, 'id'), p.days, OPERATOR),
+    'identity.reach': (p) => registry.reach(str(p.id, 'id')),
     'grant.add': (p) => registry.addGrant(p, OPERATOR),
     'grant.remove': (p) => registry.removeGrant(str(p.id, 'id'), OPERATOR),
 
