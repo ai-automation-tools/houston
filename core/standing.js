@@ -15,6 +15,7 @@
 import crypto from 'node:crypto';
 import { canonical } from './audit.js';
 import { BACKENDS } from './backends.js';
+import { quarantined } from './quarantine.js';
 import { OPERATOR } from './identities.js';
 import { PathError, canonicalPath, resolvePath } from './paths.js';
 import { RunnerError } from './runner.js';
@@ -113,6 +114,7 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
       if (!who) throw new StandingError('bad_request', 'identity is an identity id, e.g. local:nightly-docs');
       if (who.kind !== 'ai-agent' && who.kind !== 'service-account') throw new StandingError('bad_request', `a ${who.kind} identity can't hold a standing grant`);
       if (who.status === 'retired') throw new StandingError('bad_request', `${identity} is retired`);
+      if (quarantined(db, identity)) throw new StandingError('bad_request', `${identity} is in a quarantine profile, where nothing runs unattended`);
       if (who.containment === 'restricted-token') throw new StandingError('bad_request', `${identity} runs restricted-token, which isn't built yet`);
       if (who.containment === 'unconfined' && !who.standing_allowed) throw new StandingError('bad_request', `${identity} is a broad-access identity: it runs unconfined, and it holds standing grants only once the operator switches that on for it (identity.allowStanding)`);
       if (who.backend != null) {

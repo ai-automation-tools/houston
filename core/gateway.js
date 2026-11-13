@@ -32,6 +32,7 @@ import { OPERATOR } from './identities.js';
 import { DEFAULT_PROFILE, profileOf } from './profiles.js';
 import { DELEGATE_RESOURCE, DelegationError, TOOLS as HARNESS_TOOLS } from './delegate.js';
 import { MemoryError, TOOLS as MEMORY_TOOLS } from './memory.js';
+import { QUARANTINE, presetOf } from './quarantine.js';
 
 /** The gateway's own tools' server name (delegate.js); no registration may take it. */
 export const BUILTIN = 'harness';
@@ -654,6 +655,7 @@ export function createGateway({
       if (row(name)) throw new GatewayError('conflict', `${name} is registered`);
       if (name === BUILTIN) throw new GatewayError('bad_request', `${BUILTIN} is the gateway's own tools' name`);
       if (!TRANSPORTS.includes(transport)) throw new GatewayError('bad_request', `transport is one of ${TRANSPORTS.join(', ')}`);
+      if (transport !== 'container' && presetOf(db, spec.profile ?? DEFAULT_PROFILE) === QUARANTINE) throw new GatewayError('bad_request', 'in a quarantine profile an MCP server runs in its own container: no host or http transport');
       const http = transport === 'http';
       const command = http ? loopbackUrl(spec.url) : spec.command;
       if (typeof command !== 'string' || !command.trim() || /[\r\n\0]/.test(command) || command.length > 2000) throw new GatewayError('bad_request', 'command is the full command line, one line');

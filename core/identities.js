@@ -13,10 +13,12 @@
 // says what its grants open now, for the Identity Center.
 
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { BACKENDS } from './backends.js';
 import { ACTIONS, compile, decide, policyVersion } from './policy.js';
 import { compileGrants } from './runner.js';
 import { DEFAULT_PROFILE, profileOf } from './profiles.js';
+import { QUARANTINE, presetOf, quarantineGrantRefusal } from './quarantine.js';
 
 export const OPERATOR = 'local:operator';
 const ID = /^local:[a-z0-9][a-z0-9/_-]{0,62}$/;
@@ -76,7 +78,7 @@ export function ensureOperator(db, audit, now = () => new Date()) {
 /**
  * @param {{ db: import('node:sqlite').DatabaseSync, audit: ReturnType<typeof import('./audit.js').openAudit>, globals?: import('./policy.js').GlobalDeny[], now?: () => Date }} opts
  */
-export function createRegistry({ db, audit, globals = [], now = () => new Date() }) {
+export function createRegistry({ db, audit, globals = [], quarantineRoot = null, now = () => new Date() }) {
   /** @param {string} type @param {string} action @param {string} actor @param {{ type: string, id: string }} resource @param {object} extra */
   const event = (type, action, actor, resource, extra) => audit.append({
     type, action, identity: { subject: actor }, session_id: null, resource,
@@ -133,6 +135,7 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
       if (purpose !== null) text(purpose, 'purpose', 300);
       if (backend !== null && !Object.hasOwn(BACKENDS, backend)) throw bad(`backend is one of ${Object.keys(BACKENDS).join(', ')}, or null`);
       if (!CONTAINMENT.includes(containment)) throw bad(`containment is one of ${CONTAINMENT.join(', ')}`);
+      if (containment === 'unconfined' && presetOf(db, spec.profile ?? DEFAULT_PROFILE) === QUARANTINE) throw bad('a quarantine profile holds no broad-access (unconfined) identity');
       if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string' && t.length <= 40) || tags.length > 20) throw bad('tags is a list of up to 20 short strings');
       const expires = future(expiresAt, 'expiresAt', now());
       for (const [name, ref] of /** @type {const} */ ([['owner', owner], ['parent', parent]])) {
@@ -251,6 +254,10 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
       if (!PERMISSIONS[m[1]].has(permission)) throw bad(`a ${m[1]} grant's permission is ${[...PERMISSIONS[m[1]]].join(' or ')}`);
       if (!['allow', 'ask', 'deny'].includes(effect)) throw bad('effect is allow, ask or deny');
       try { compile(m[1], m[2]); } catch (e) { throw bad(`resource: ${/** @type {Error} */ (e).message}`); }
+      if (effect !== 'deny' && presetOf(db, r.profile_id) === QUARANTINE) {
+        const why = quarantineGrantRefusal(resource, quarantineRoot ? path.join(quarantineRoot, r.profile_id) : null);
+        if (why) throw bad(why);
+      }
       const expires = future(expiresAt, 'expiresAt', now());
       const id = crypto.randomUUID();
       db.prepare('INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
