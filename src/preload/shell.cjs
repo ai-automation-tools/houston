@@ -37,6 +37,13 @@ contextBridge.exposeInMainWorld('acc', {
     list: invoke('news:list'),
   },
 
+  /** The Feed (H6): the local index's categories and items, bookmarks, and adding an item's MCP server as discovered. */
+  feed: {
+    list: invoke('feed:list'),
+    bookmark: invoke('feed:bookmark'),
+    discover: invoke('feed:discover'),
+  },
+
   tabs: {
     create: invoke('tabs:create'),
     activate: invoke('tabs:activate'),

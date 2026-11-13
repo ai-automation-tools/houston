@@ -991,6 +991,34 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         agentRun.integrations.grantChanges = (await ctl('audit.query', { type: 'standing.change' })).events.map((/** @type {any} */ e) => e.action);
         await shot('integrations.png', wc);
 
+        // The Feed (H6): its categories, Add as discovered registers the item's server with the Core; the start page
+        // shows the advisory for smoke-stub (installed: registered just above) and not the one for a tool that isn't.
+        if (process.env.ACC_SMOKE_SEEDED) {
+          agentRun.feed = await wc.executeJavaScript(`(async () => {
+            const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+            document.querySelector('.side-tabs [data-panel="feed"]').click();
+            for (let i = 0; i < 50 && !document.querySelector('#feed-list .group-title'); i++) await pause(100);
+            const groups = [...document.querySelectorAll('#feed-list .group-title')].map((g) => g.textContent);
+            const row = [...document.querySelectorAll('#feed-list .row')].find((r) => r.querySelector('.name')?.textContent === 'Smoke MCP server');
+            [...(row?.querySelectorAll('.acts button') ?? [])].find((b) => b.textContent === 'Add as discovered')?.click();
+            await pause(1500);
+            document.getElementById('feed-start').click();
+            return { groups };
+          })()`);
+          agentRun.feed.discovered = await ctl('mcp.get', { name: 'smoke-feed-mcp' }).then((s) => s.state, (e) => e.message);
+          for (let i = 0; i < 60 && !tabs.list().some((x) => x.url.startsWith('acc://start/')); i++) await wait(250);
+          const stTab = tabs.list().find((x) => x.url.startsWith('acc://start/'));
+          const stView = stTab && tabs.tabs.get(stTab.id);
+          if (stView) {
+            for (let i = 0; i < 80 && stView.view.webContents.isLoading(); i++) await wait(100);
+            agentRun.feed.start = await stView.view.webContents.executeJavaScript(`({
+              h2: [...document.querySelectorAll('h2')].map((h) => h.textContent),
+              advisories: document.querySelector('.card')?.textContent ?? '', scripts: document.scripts.length,
+            })`);
+            tabs.close(stTab.id);
+          }
+        }
+
         // The Identity Center (H5): Reviewed, Suspend and Activate from the Agents tab change the Core;
         // Identities opens the page, a script-free acc:// page with a section for the identity.
         agentRun.lifecycle = await wc.executeJavaScript(`(async () => {
@@ -1079,6 +1107,13 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
           // Local models depend on the machine, so that group is left out of the comparison.
           && ig.sections.filter((x) => !x.startsWith('Local models')).join() === 'MCP servers (1),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends'), ig);
+      const fd = agentRun?.feed;
+      if (fd) {
+        check("the Feed tab shows each category, Add as discovered registers the item's MCP server as discovered, and the start page shows the advisory for an installed tool only",
+          Boolean(fd.groups?.join() === 'Advisories (2),MCP servers (1)' && fd.discovered === 'discovered' && fd.start?.scripts === 0
+            && fd.start.h2.length === 4 && fd.start.h2[0] === 'Advisories for installed tools' && fd.start.h2[3] === 'Feed highlights'
+            && fd.start.advisories.includes('smoke-stub') && !fd.start.advisories.includes('not-installed-tool')), fd);
+      }
       check('the Integrations tab lists a standing grant with who it runs as, and Pause and Resume change it in the Core',
         Boolean(ig?.grantBefore?.sub === 'local:smoke-shell · up to 5 min' && ig.grantBefore.buttons.join() === 'Pause' && /^paused/.test(ig.grantPaused)
           && ig.grantStatus === 'active' && ig.grantChanges?.join() === 'standing.create,standing.pause,standing.resume'), ig);

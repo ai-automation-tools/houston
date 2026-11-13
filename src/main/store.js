@@ -91,6 +91,17 @@ export const store = {
     writeJson('runs.json', list);
   },
 
+  /** The Feed's bookmarked item ids (H6). @returns {string[]} */
+  feedBookmarks() {
+    const d = readJson('feed-bookmarks.json', []);
+    return Array.isArray(d) ? d.filter((x) => typeof x === 'string').slice(0, 1000) : [];
+  },
+
+  /** @param {string[]} ids */
+  saveFeedBookmarks(ids) {
+    writeJson('feed-bookmarks.json', ids);
+  },
+
   /** workspaces.json; before it exists, a Default workspace holding the tabs layout.json saved. */
   workspaces() {
     const d = readJson('layout.json', {});

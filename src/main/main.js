@@ -39,6 +39,7 @@ import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSumma
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
 import { coreSettings, createAgents, identitiesPage, integrations, transcriptPage } from './agents.js';
+import { feed, startPage } from './feed.js';
 import { settingsBody } from '../shared/scopes.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
@@ -322,6 +323,7 @@ async function createWindow() {
     transcript: { title: 'Transcript', render: transcriptPage },
     settings: { title: 'Settings', render: () => settingsPage() },
     identities: { title: 'Identity Center', render: () => identitiesPage() },
+    start: { title: 'Start', render: () => startPage() },
   });
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
@@ -377,7 +379,7 @@ async function createWindow() {
     const layout = store.layout();
     const ws = current();
     const body = settingsBody({
-      hubUrl: hub.url, hubToken: hub.token, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, bookmarkSource: layout.bookmarkSource,
+      hubUrl: hub.url, hubToken: hub.token, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, feedIndex: settings.feedIndex, bookmarkSource: layout.bookmarkSource,
       adBlock: layout.adBlock, closeToTray: layout.closeToTray,
       chat: conversation.info(), cronsole: cron.info(), mcpUrl: mcp?.url ?? '',
       workspaces: spaces.list.length,
@@ -742,6 +744,9 @@ async function createWindow() {
   handle('hub:open', (id, how, label) => openInHub(String(id), how === 'reveal' ? 'reveal' : how === 'default' ? 'default' : 'code', String(label || id)));
 
   // The News tab: each source settings.json lists, fetched or read here, never named by the renderer.
+  handle('feed:list', () => feed.list());
+  handle('feed:bookmark', (id) => feed.bookmark(id));
+  handle('feed:discover', (id) => feed.discover(id));
   handle('news:list', async () => {
     const sources = store.settings().newsSources;
     const results = await Promise.all(sources.map(async (s) => {
@@ -774,6 +779,8 @@ async function createWindow() {
     if (restored) return;
     restored = true;
     openTabs(current());
+    // Nothing to restore: the start page (H6).
+    if (!current().tabs.length) tabs.create('acc://start/');
   });
   handle('tabs:openExternal', (url) => {
     const u = String(url);

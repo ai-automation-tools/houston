@@ -105,7 +105,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | FEED-02 | Top and popular AI GitHub repositories | Should | Next | A digest file written by a scheduled job |
 | FEED-03 | Top and popular skills | Could | Next | Same |
 | FEED-04 | Top and popular AI security tools | Could | Next | Same |
-| FEED-05 | Further categories where justified | Could | Next | Advisories for installed tools, new MCP registry entries, backend releases |
+| FEED-05 | Further categories where justified | Could | Feed tab and advisories for installed tools built (H6); the job that writes the index is Next | Advisories for installed tools, new MCP registry entries, backend releases |
 
 ### Settings and customisation
 
@@ -116,7 +116,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SET-03 | Custom themes | Could | Later | CSS variables |
 | SET-04 | Custom folder icons | Could | Next | Project Hub already stores them |
 | SET-05 | Customisable buttons and tabs | Could | Later | Extends quick links |
-| SET-06 | Customisable home page | Should | Next | Cards the operator can reorder or hide |
+| SET-06 | Customisable home page | Should | Start page with fixed cards built (H6); reorder and hide Next | Cards the operator can reorder or hide |
 | SET-07 | Clear scoping rules | Must | MVP; built (H2) | The scope table above, shown beside each setting |
 
 ### Logging

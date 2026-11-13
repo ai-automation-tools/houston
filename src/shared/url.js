@@ -11,7 +11,7 @@ export function toUrl(input) {
   if (!text) return 'about:blank';
 
   // Already a URL with a scheme we allow.
-  if (/^(https?|file|chrome-extension):\/\//i.test(text) || /^about:/i.test(text) || /^acc:\/\/(doc|run|runlog|git|dev|transcript|settings|identities)\//i.test(text)) return text;
+  if (/^(https?|file|chrome-extension):\/\//i.test(text) || /^about:/i.test(text) || /^acc:\/\/(doc|run|runlog|git|dev|transcript|settings|identities|start)\//i.test(text)) return text;
 
   // A Windows path: D:\x\y.html or D:/x/y.html
   if (/^[a-z]:[\\/]/i.test(text)) return `file:///${text.replace(/\\/g, '/')}`;
@@ -38,7 +38,7 @@ export function toUrl(input) {
  */
 export function isAllowedNavigation(url, from = '') {
   if (/^acc:\/\/doc\//i.test(url)) return !from || /^acc:\/\/doc\//i.test(from);
-  if (/^acc:\/\/(run|runlog|git|dev|transcript|settings|identities)\//i.test(url)) return !from;
+  if (/^acc:\/\/(run|runlog|git|dev|transcript|settings|identities|start)\//i.test(url)) return !from;
   if (/^file:/i.test(url)) return !from || /^file:/i.test(from);
   return /^(https?|chrome-extension|about):/i.test(url);
 }

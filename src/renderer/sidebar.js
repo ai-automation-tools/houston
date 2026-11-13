@@ -69,6 +69,9 @@ export class Sidebar {
       news: /** @type {HTMLElement} */ (document.getElementById('panel-news')),
       newsList: /** @type {HTMLElement} */ (document.getElementById('news-list')),
       newsSources: /** @type {HTMLElement} */ (document.getElementById('news-sources')),
+      feed: /** @type {HTMLElement} */ (document.getElementById('panel-feed')),
+      feedList: /** @type {HTMLElement} */ (document.getElementById('feed-list')),
+      feedWhen: /** @type {HTMLElement} */ (document.getElementById('feed-when')),
       mcp: /** @type {HTMLElement} */ (document.getElementById('panel-mcp')),
       mcpList: /** @type {HTMLElement} */ (document.getElementById('mcp-list')),
       runsSearch: /** @type {HTMLInputElement} */ (document.getElementById('runs-search')),
@@ -120,6 +123,8 @@ export class Sidebar {
     document.getElementById('git-refresh')?.addEventListener('click', () => this.loadGit());
     document.getElementById('news-refresh')?.addEventListener('click', () => this.loadNews());
     this.newsLoaded = false;
+    document.getElementById('feed-refresh')?.addEventListener('click', () => this.loadFeed());
+    document.getElementById('feed-start')?.addEventListener('click', () => this.openUrl('acc://start/'));
     document.getElementById('dev-refresh')?.addEventListener('click', () => this.loadDev());
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
     document.getElementById('agents-refresh')?.addEventListener('click', () => this.loadAgents());
@@ -493,6 +498,47 @@ export class Sidebar {
     }
   }
 
+  /**
+   * The Feed tab (H6): bookmarked items, then each category with what belongs in it and its items.
+   * ☆ bookmarks an item; an item naming an MCP server can be added to the Core as discovered.
+   */
+  async loadFeed() {
+    const host = this.el.feedList;
+    host.innerHTML = '';
+    try {
+      const f = /** @type {any} */ (await this.api.feed.list());
+      if (f.error) { host.append(note(f.error)); this.el.feedWhen.textContent = ''; return; }
+      this.el.feedWhen.textContent = f.generated ? `as of ${ago(Date.parse(f.generated))}` : '';
+      if (f.dropped) host.append(note(`${f.dropped} item${f.dropped === 1 ? '' : 's'} in the index had no title, URL or known category and ${f.dropped === 1 ? 'is' : 'are'} left out.`));
+      const item = (/** @type {any} */ i) => {
+        const row = line('idle', '18px', i.advisory ? '⚠' : '📄', i.title, [i.date ? ago(Date.parse(i.date)) : '', i.advisory ? `advisory for ${i.advisory.tool}` : ''].filter(Boolean).join(' · '),
+          [i.title, i.summary, i.url, i.advisory ? `Advisory (${i.advisory.severity}) for ${i.advisory.tool}: ${i.advisory.summary}` : '', i.mcp ? `MCP server ${i.mcp.name}: ${i.mcp.command}` : ''].filter(Boolean).join('\n'));
+        row.addEventListener('click', (e) => { if (!(/** @type {HTMLElement} */ (e.target)).closest('button')) this.openUrl(i.url); });
+        q(row, '.acts').append(button(i.bookmarked ? '★' : '☆', i.bookmarked ? 'Remove the bookmark' : 'Bookmark it', () => {
+          this.api.feed.bookmark(i.id).then(() => this.loadFeed(), (/** @type {unknown} */ err) => toast(errText(err)));
+        }));
+        if (i.mcp) {
+          q(row, '.acts').append(button('Add as discovered', `Register ${i.mcp.name} with the Core, discovered: nothing runs until you install and pin it in Integrations`, () => {
+            this.api.feed.discover(i.id).then((/** @type {string} */ name) => toast(`${name} is registered, discovered. Install and pin it in Integrations.`), (/** @type {unknown} */ err) => toast(errText(err)));
+          }));
+        }
+        return row;
+      };
+      if (f.bookmarked.length) {
+        host.append(groupTitle(`Bookmarked (${f.bookmarked.length})`));
+        for (const i of f.bookmarked) host.append(item(i));
+      }
+      for (const c of f.categories) {
+        host.append(groupTitle(`${c.name} (${c.items.length})`));
+        host.append(note(c.definition));
+        for (const i of c.items) host.append(item(i));
+      }
+    } catch (err) {
+      host.innerHTML = '';
+      host.append(note(errText(err), true));
+    }
+  }
+
   renderRecent() {
     const host = this.el.recent;
     host.innerHTML = '';
@@ -840,19 +886,6 @@ export class Sidebar {
     }
     host.innerHTML = '';
     if (info.error) { host.append(note(info.error, true)); return; }
-    /** @param {string} cls @param {string} pad @param {string} icon @param {string} name @param {string} sub @param {string} [title] */
-    const line = (cls, pad, icon, name, sub, title = '') => {
-      const row = document.createElement('div');
-      row.className = `row dev-server ${cls}`;
-      row.style.paddingLeft = pad;
-      row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
-      q(row, '.icon').textContent = icon;
-      q(row, '.name').textContent = name;
-      q(row, '.sub').textContent = sub;
-      row.title = title;
-      return row;
-    };
-
     host.append(groupTitle(`MCP servers (${info.servers.length})`));
     if (!info.servers.length) host.append(note('None registered. Add one with npm run ctl -- mcp.add (core/README.md, MCP gateway); Houston adds its own when the Core is running.'));
     for (const r of /** @type {import('./shared/integrations.js').ServerRow[]} */ (info.servers)) {
@@ -1098,6 +1131,7 @@ export class Sidebar {
     this.el.bookmarks.hidden = name !== 'bookmarks';
     this.el.recent.hidden = name !== 'recent';
     this.el.news.hidden = name !== 'news';
+    this.el.feed.hidden = name !== 'feed';
     this.el.mcp.hidden = name !== 'mcp';
     this.el.cron.hidden = name !== 'cron';
     this.el.git.hidden = name !== 'git';
@@ -1107,6 +1141,7 @@ export class Sidebar {
     this.el.integrations.hidden = name !== 'integrations';
     if (name === 'cron' && !this.cronLoaded) this.loadCron();
     if (name === 'news' && !this.newsLoaded) this.loadNews();
+    if (name === 'feed') this.loadFeed();
     if (name === 'git') this.loadGit();
     if (name === 'dev') this.loadDev();
     if (name === 'agents') this.loadAgents();
@@ -1127,7 +1162,7 @@ export class Sidebar {
       this.show(this.current);
       return;
     }
-    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = this.el.logs.hidden = this.el.integrations.hidden = true;
+    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.feed.hidden = this.el.agents.hidden = this.el.logs.hidden = this.el.integrations.hidden = true;
     res.hidden = false;
     res.innerHTML = '';
 
@@ -1180,6 +1215,19 @@ function baseName(p) { return p.split(/[\\/]/).filter(Boolean).pop() || p; }
 
 /** @param {HTMLElement} el @param {string} sel */
 function q(el, sel) { return /** @type {HTMLElement} */ (el.querySelector(sel)); }
+
+/** A row with an icon, name, note and a place for buttons (.acts). @param {string} cls @param {string} pad @param {string} icon @param {string} name @param {string} sub @param {string} [title] */
+function line(cls, pad, icon, name, sub, title = '') {
+  const row = document.createElement('div');
+  row.className = `row dev-server ${cls}`;
+  row.style.paddingLeft = pad;
+  row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
+  q(row, '.icon').textContent = icon;
+  q(row, '.name').textContent = name;
+  q(row, '.sub').textContent = sub;
+  row.title = title;
+  return row;
+}
 
 /** @param {string} text @param {boolean} [bad] */
 function note(text, bad = false) {
