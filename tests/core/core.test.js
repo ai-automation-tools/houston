@@ -34,9 +34,23 @@ const tables = (db) => db.prepare("SELECT name FROM sqlite_schema WHERE type = '
 test('migrate builds schema v1 on an empty database and does nothing the second time', () => {
   const db = openDb(':memory:');
   assert.deepEqual(migrate(db), { from: 0, to: MIGRATIONS.length });
-  assert.deepEqual(tables(db), ['grants', 'identities', 'mcp_servers', 'profiles', 'secrets', 'sessions', 'standing_grants']);
+  assert.deepEqual(tables(db), ['grants', 'identities', 'mcp_servers', 'profiles', 'secrets', 'sessions', 'skills', 'standing_grants']);
   assert.equal(version(db), MIGRATIONS.length);
   assert.deepEqual(migrate(db), { from: MIGRATIONS.length, to: MIGRATIONS.length });
+});
+
+test('v10 keeps every grant while the table is rebuilt to take skill: and memory: resources', () => {
+  const db = openDb(':memory:');
+  migrate(db, MIGRATIONS.slice(0, 9));
+  const at = '2026-11-13T00:00:00Z';
+  db.prepare("INSERT INTO identities (id, kind, display_name, status, containment, created_at, owner) VALUES ('local:a', 'ai-agent', 'A', 'active', 'container', ?, 'local:a')").run(at);
+  const add = db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES (?, 'local:a', ?, ?, 'allow', ?, 'local:operator')");
+  add.run('g1', 'file:D:/w/**', 'write', at);
+  assert.throws(() => add.run('g2', 'skill:x', 'use', at), /CHECK constraint/);
+  assert.deepEqual(migrate(db), { from: 9, to: MIGRATIONS.length });
+  add.run('g2', 'skill:x', 'use', at);
+  add.run('g3', 'memory:default', 'read', at);
+  assert.deepEqual(db.prepare('SELECT id FROM grants ORDER BY id').all().map((r) => r.id), ['g1', 'g2', 'g3']);
 });
 
 test('migrate applies only the steps a database is missing', () => {

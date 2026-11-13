@@ -17,6 +17,7 @@ import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
 import { createStanding } from './standing.js';
 import { createProfiles, profilesRoot } from './profiles.js';
+import { createSkills, skillsRoot } from './skills.js';
 import { createDelegation } from './delegate.js';
 import { createTranscripts } from './transcripts.js';
 import { openVault } from './vault.js';
@@ -134,7 +135,8 @@ if (import.meta.main) {
     const vault = win32 ? await openVault({ db: core.db, dir: core.dir, audit: core.audit }) : undefined;
     const where = { coreDir: core.dir, tempRoot: win32 ? sessionTemp() : '', agentsRoot: win32 ? agentsRoot(core.dir) : '' };
     const gateway = vault && registry ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
-    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway }) : null;
+    const skills = win32 ? createSkills({ db: core.db, audit: core.audit, root: skillsRoot(core.dir) }) : undefined;
+    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway, skills }) : null;
     const standing = runner ? createStanding({ db: core.db, audit: core.audit, runner }) : undefined;
     const profiles = createProfiles({ db: core.db, audit: core.audit, root: win32 ? profilesRoot(core.dir) : undefined });
     const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
@@ -143,7 +145,7 @@ if (import.meta.main) {
     /** @type {Awaited<ReturnType<typeof startControl>> | null} */
     let control = null;
     if (gateway && runner && registry) gateway.useDelegation(createDelegation({ db: core.db, registry, runner, transcripts, tap: (s) => control?.tap(s) }));
-    control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles }) : null;
+    control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing, profiles, skills }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));

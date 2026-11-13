@@ -18,6 +18,7 @@ import * as at05 from './tests/at05-loopback-apps.js';
 import * as at06 from './tests/at06-gateway-scope.js';
 import * as at07 from './tests/at07-vault-sweep.js';
 import * as at08 from './tests/at08-pinned-change.js';
+import * as at09 from './tests/at09-injected-result.js';
 import * as at10 from './tests/at10-delegation.js';
 import * as at11 from './tests/at11-scheduler.js';
 import * as at12 from './tests/at12-stop-all.js';
@@ -26,7 +27,7 @@ import * as at15 from './tests/at15-secret-in-output.js';
 import * as at16 from './tests/at16-core-killed.js';
 
 // AT-16 and AT-14 restart the Core, so they go last; AT-14 edits the log, so it is last of all.
-const TESTS = [at01, at02, at03, at04, at05, at06, at07, at08, at10, at11, at12, at15, at16, at14];
+const TESTS = [at01, at02, at03, at04, at05, at06, at07, at08, at09, at10, at11, at12, at15, at16, at14];
 
 if (process.platform !== 'win32' || !process.env.H1_ROOT || !process.env.LOCALAPPDATA) {
   console.error('Run on Windows from PowerShell, with H1_ROOT set to a scratch folder outside your user profile.');

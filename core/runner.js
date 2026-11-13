@@ -97,6 +97,7 @@ export function compileGrants(grants, now = new Date()) {
  * @property {import('./backends.js').Where} [where] the operator's folders, to find backend programs; defaults from the environment
  * @property {(p: string) => boolean} [isFile] for tests
  * @property {ReturnType<typeof import('./approvals.js').createApprovals>} [approvals] where an `ask` waits; without it, `ask` is deny
+ * @property {Pick<ReturnType<typeof import('./skills.js').createSkills>, 'forSession' | 'link'>} [skills] installed skills (H6); each attached one is mounted read-only
  * @property {{ forSession: ReturnType<typeof import('./gateway.js').createGateway>['forSession'] }} [gateway] the MCP gateway; every session then gets one on its proxy port
  * @property {{ spawnWithPty: Function }} [sdk] defaults to @microsoft/mxc-sdk/v1
  * @property {() => Date} [now]
@@ -123,7 +124,7 @@ export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */
 export function createRunner({
-  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals, gateway,
+  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals, gateway, skills,
   where = { home, appData: process.env.APPDATA ?? path.win32.join(home, 'AppData', 'Roaming'), PATH: process.env.PATH ?? '' },
 }) {
   const globals = globalDenies({ home, coreDir });
@@ -197,6 +198,8 @@ export function createRunner({
 
     let compiled;
     try { compiled = compileGrants(grants, now()); } catch (e) { throw refuse(/** @type {Error} */ (e).message); }
+    // Its attached skills, read-only; an agent CLI finds them in its home's skills folder (linked below).
+    const skillSet = skills?.forSession(who.profile_id, (name) => decide(request('skill.use', 'Skill', name), policy)) ?? { mounted: [], skipped: [] };
 
     // Hosts an `ask` grant names: the session gets a proxy for them too when someone can answer.
     const askHosts = approvals ? grants.filter((g) => g.resource.startsWith('net:') && g.effect === 'ask').map((g) => g.resource.slice(4)) : [];
@@ -219,6 +222,7 @@ export function createRunner({
       fs.mkdirSync(win(temp), { recursive: true });
       // Kept between sessions: the CLI's sign-in, settings and history for this identity.
       if (backend) fs.mkdirSync(backend.home, { recursive: true });
+      if (backend && skills) skillSet.skipped.push(...skills.link(backend.home, skillSet.mounted));
       if (compiled.net.length || askHosts.length || gw) {
         proxy = await startEgressProxy({
           fallback: gw?.handle,
@@ -250,10 +254,10 @@ export function createRunner({
         ...launchRequest({
           command, workspace: ws, temp, home, globals,
           readwrite: [...compiled.readwrite, ...(backend?.readwrite ?? [])],
-          readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? [])], denied: compiled.denied,
+          readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? []), ...skillSet.mounted.map((s) => s.folder)], denied: compiled.denied,
           pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
           // The manifest's variables win: a caller can't point the CLI at another home, or the session at another gateway.
-          env: { ...program.env, ...backend?.env, ...mcp }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
+          env: { ...program.env, ...backend?.env, ...mcp, ...(skillSet.mounted.length ? { HOUSTON_SKILLS: skillSet.mounted.map((s) => s.folder).join(';') } : {}) }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
           proxyPort: proxy?.port, timeoutMs: timeoutMs + 60_000,
         }),
         containerName: containerName(id),
@@ -269,6 +273,7 @@ export function createRunner({
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
       network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}), ...(gw ? { gateway: true } : {}) } : { proxy: false },
       skipped: compiled.skipped,
+      ...(skillSet.mounted.length || skillSet.skipped.length ? { skills: { mounted: skillSet.mounted.map((s) => s.name), skipped: skillSet.skipped } } : {}),
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
     };

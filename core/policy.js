@@ -22,6 +22,8 @@ export const ACTIONS = {
   'secret.use': ['secret', 'use', 'Secret'],
   'session.start': ['session', 'run', 'Session'],
   'session.spawn': ['session', 'spawn', 'Session'],
+  // A skill a session gets (skills.js), by its installed name.
+  'skill.use': ['skill', 'use', 'Skill'],
 };
 
 /**
@@ -72,7 +74,7 @@ const escape = (/** @type {string} */ s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$
  *   Case-insensitive, and compared in canonical form.
  * - net: `host:port`; `*` stands for any run of labels (`*.example.com` is not `example.com`)
  *   or any port. Case-insensitive.
- * - tool, secret, session: `*` is one `/`-separated part, `**` anything. Case-sensitive.
+ * - tool, secret, session, skill: `*` is one `/`-separated part, `**` anything. Case-sensitive.
  * - command: `*` is anything. Case-sensitive. A command grant is only as good as the
  *   checker that runs it, which is the gateway's job.
  *
@@ -96,7 +98,7 @@ export function compile(type, pattern) {
     flags = 'i';
   } else if (type === 'command') {
     wild = [['*', '.*']];
-  } else if (!['tool', 'secret', 'session'].includes(type)) {
+  } else if (!['tool', 'secret', 'session', 'skill'].includes(type)) {
     throw new Error(`unknown resource type '${type}'`);
   }
   if (!p) throw new Error('the pattern is empty');

@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H5-8B5CF6?style=for-the-badge" alt="Milestone: Harness H5">
-  <img src="https://img.shields.io/badge/schema-v9-2ea44f?style=for-the-badge" alt="Schema v9">
+  <img src="https://img.shields.io/badge/schema-v10-2ea44f?style=for-the-badge" alt="Schema v10">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**delegate.js**](delegate.js) | Sub-agents: the gateway's `harness.delegate` tool, the intersection of what a child asks for with what its parent holds, and the child's identity from start to retirement. |
+| [**skills.js**](skills.js) | Skills: installing a skill folder into a profile with its content hash, and the skills a session gets (its `skill:` grants, unchanged ones only), linked into an agent CLI's home. |
 | [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
@@ -78,15 +79,16 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v9
+## 🧱 Schema v10
 
 | Table | Holds |
 |:---|:---|
 | `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due; since v9, its profile. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
-| `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
+| `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`, and since v10 `skill:` and `memory:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
 | `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
 | `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. Since v9, its profile. |
+| `skills` | Skills installed in a profile (v10): profile, name, where it came from, its content hash at install, its file count and size, and when and by whom ([Skills](#-skills)). |
 | `profiles` | Each profile (v9): an id, a display name and when it was made. `default` always exists, and every row from before v9 is in it. |
 | `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
 
@@ -523,6 +525,26 @@ Then grant each agent `tool:roundtable/*` (permission `call`) and seed a convers
 
 AT-01 checks it: a file planted in a second profile's folder can't be read from a session, and a read grant on that folder is refused at `session.start`.
 
+## 🧩 Skills
+
+[`skills.js`](skills.js) gives sessions skills in three steps, each its own (CORE-10, INT-03, H6):
+
+- **Discover.** A catalogue, read-only. Promptbook's MCP server runs behind the gateway in its own container with `READ_ONLY=true`, so its write tools aren't even listed, and a deny grant keeps its `.env` out. An agent granted `tool:promptbook/*` can search it and read a skill; nothing is copied.
+- **Install.** The operator copies one skill folder (it holds a `SKILL.md`) into the profile's skills folder, `houston-skills\<profile>\<name>` beside the data folder: `skill.install from=<folder> source=promptbook:<id>`. No links of any kind, at most 200 files and 5 MB. Its content hash is recorded, and every change is a `skill.change` event.
+- **Attach.** A grant: `skill:<name>` with permission `use`, on each identity that should have it.
+
+At each session start, every installed skill of the identity's profile that its grants allow is added to the container's read-only paths, listed in `HOUSTON_SKILLS`, and, for an agent CLI, linked into its home's `skills` folder (`<home>\skills\<name>`), where Claude Code and Codex look. Houston replaces only its own links there, so a detached skill disappears and anything the agent keeps in that folder stays. A skill whose files changed since install isn't mounted (the `session.start` event's `launch.skills` lists what was mounted and what was skipped, with why); install it again. A sub-agent may ask for a `skill:` grant its parent holds.
+
+```powershell
+npm run ctl -- mcp.add name=promptbook command='"C:\Program Files\nodejs\node.exe" --import file:///D:/path/to/promptbook/site/node_modules/tsx/dist/loader.mjs D:\path\to\promptbook\site\mcp\server.ts' env='{"READ_ONLY":"true"}' pathDirs='["C:\\Program Files\\nodejs"]'
+npm run ctl -- grant.add identity=local:mcp/promptbook resource=file:D:/path/to/promptbook/site/** permission=read
+npm run ctl -- grant.add identity=local:mcp/promptbook resource=file:D:/path/to/promptbook/site/.env permission=read effect=deny
+npm run ctl -- skill.install from=D:\path\to\promptbook\site\library\3_Skills\Development\Git\git-pushing source=promptbook:3_Skills/Development/Git/git-pushing/SKILL.md
+npm run ctl -- grant.add identity=local:claude-runner resource=skill:git-pushing permission=use
+```
+
+Checked on 2026-11-13 by [`spikes/h6-skills.mjs`](../spikes/h6-skills.mjs): a contained agent searched contained, read-only Promptbook for "git" and read `git-pushing` (its write tool was refused as not pinned); the operator installed it; and Claude Code, unattended in a container, asked for the skill's first heading, answered `NO-SKILL` without the grant and `SKILL-SEEN Git Push Workflow` with it.
+
 ## 🧬 Sub-agents
 
 [`delegate.js`](delegate.js) lets a running session start a child for part of its work (CORE-08, H5). Only the Core makes the child; a session can't mint its own token.
@@ -601,6 +623,9 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
 | `profile.create` | `id`, `displayName` | the new profile; its folder is made ([Profiles](#-profiles)) |
+| `skill.list` | optional `profile` | installed skills: `name`, `profile`, `source`, `hash`, `files`, `bytes`, `installedAt`, `installedBy`, `folder` ([Skills](#-skills)) |
+| `skill.install` | `from` (an absolute folder with a `SKILL.md`); optional `name` (the folder's, lower-cased), `profile`, `source` | the installed skill; a name already installed in the profile is a conflict |
+| `skill.remove` | `name`; optional `profile` | `{ removed }`; its folder goes, and its links go at the next session start |
 | `identity.list` | optional `status`, `profile` | identities with their grants and profile; with `profile`, that profile's and the operator |
 | `identity.get` | `id` | one identity with its grants |
 | `identity.create` | `id`, `kind`, `displayName`; optional `profile` (default `default`), `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
@@ -670,7 +695,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Next on the [roadmap](../docs/ROADMAP.md): Promptbook as the discovery catalogue. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Next on the [roadmap](../docs/ROADMAP.md): profile memory with a review queue. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 
