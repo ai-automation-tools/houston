@@ -66,7 +66,8 @@ function fakeSdk() {
 
 /** @param {import('node:test').TestContext} t */
 async function setup(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-gw-'));
+  // The long spelling, as the Core uses: CI's TEMP has 8.3 names, which the path rules refuse.
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'houston-gw-')));
   fs.mkdirSync(SCRATCH, { recursive: true });
   const scratch = fs.mkdtempSync(path.join(SCRATCH, 'gw-'));
   const db = openDb(':memory:');
