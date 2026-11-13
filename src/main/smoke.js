@@ -767,6 +767,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         const ctl = (/** @type {string} */ m, /** @type {object} */ p) => callControl(coreDir, m, p);
         await ctl('identity.create', { id: 'local:smoke-shell', kind: 'ai-agent', displayName: 'Smoke shell' });
         await ctl('grant.add', { identity: 'local:smoke-shell', resource: `file:${ws.replaceAll('\\', '/')}/**`, permission: 'write' });
+        // Two hosts the operator is asked about: one gets Deny, the other Allow for this session.
+        for (const host of ['example.org:443', 'example.com:443']) await ctl('grant.add', { identity: 'local:smoke-shell', resource: `net:${host}`, permission: 'connect', effect: 'ask' });
         await ctl('identity.activate', { id: 'local:smoke-shell' });
         agentRun = await wc.executeJavaScript(`(async () => {
           const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -794,6 +796,34 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         for (let i = 0; i < 100 && !fs.existsSync(proof); i++) await wait(100);
         await wait(200);
         agentRun.wrote = fs.existsSync(proof) ? fs.readFileSync(proof, 'utf8').trim() : null;
+
+        // The approval inbox: a request to an `ask` host waits on a card in the bar.
+        /** @param {string} button @returns {Promise<any>} what the card said, after clicking */
+        const answerCard = (button) => wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const bar = document.getElementById('approval-bar');
+          for (let i = 0; i < 100 && bar.hidden; i++) await pause(100);
+          const card = { shown: !bar.hidden, who: document.getElementById('approval-who').textContent, what: document.getElementById('approval-what').textContent,
+            where: document.getElementById('approval-where').textContent, left: document.getElementById('approval-left').textContent, focus: document.activeElement?.id };
+          document.getElementById(${JSON.stringify(button)}).click();
+          return card;
+        })()`);
+        const fileText = async (/** @type {string} */ f) => {
+          for (let i = 0; i < 150 && !fs.existsSync(path.join(ws, f)); i++) await wait(100);
+          await wait(200);
+          return fs.existsSync(path.join(ws, f)) ? fs.readFileSync(path.join(ws, f), 'utf8').trim() : null;
+        };
+        terminals.write(t.id, 'curl.exe -s -o NUL -w "%{http_connect}" https://example.org/ > deny.txt\r');
+        agentRun.denyCard = await answerCard('approval-deny');
+        agentRun.denied = await fileText('deny.txt');
+        // Two identical requests: the first asks, the second goes on the session allow.
+        terminals.write(t.id, 'curl.exe -s -o NUL https://example.com/ & curl.exe -s -o NUL https://example.com/ & echo done> allow.txt\r');
+        agentRun.allowCard = await answerCard('approval-session');
+        agentRun.allowed = await fileText('allow.txt');
+        const asked = (await ctl('audit.query', { type: 'approval.requested' })).events;
+        const decided = (await ctl('audit.query', { type: 'approval.decided' })).events;
+        agentRun.approvals = { asked: asked.map((/** @type {any} */ e) => e.resource.id), decided: decided.map((/** @type {any} */ e) => `${e.resource.id} ${e.approval.answer} ${e.decision.result}`) };
+        agentRun.barAfter = await wc.executeJavaScript(`document.getElementById('approval-bar').hidden`);
         // The folder the Core started it in, as main recorded it from session.list.
         agentRun.cwd = t.cwd;
         agentRun.after = await wc.executeJavaScript(`(async () => {
@@ -825,6 +855,12 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         Boolean(agentRun?.before?.name === 'Smoke shell' && agentRun.before.buttons.includes('Start') && /Smoke shell/.test(agentRun.tab ?? '')
           && agentRun.prompt && agentRun.wrote === 'agent-smoke-ok' && agentRun.cwd?.toLowerCase() === ws.toLowerCase()
           && agentRun.after?.sessions === 0 && agentRun.after.exited && agentRun.ended?.includes('stopped')), agentRun);
+      check('the approval bar shows the exact request, identity and workspace; Deny refuses it, Allow for this session lets the same request through again without asking',
+        Boolean(agentRun?.denyCard?.shown && agentRun.denyCard.who === 'local:smoke-shell' && agentRun.denyCard.what === 'connect to example.org:443'
+          && agentRun.denyCard.where?.toLowerCase().includes(ws.toLowerCase()) && /^denies in \d+ s$/.test(agentRun.denyCard.left) && agentRun.denyCard.focus === 'approval-deny'
+          && agentRun.denied === '403' && agentRun.allowCard?.what === 'connect to example.com:443' && agentRun.allowed === 'done'
+          && agentRun.approvals?.asked.join() === 'example.org:443,example.com:443'
+          && agentRun.approvals.decided.join() === 'example.org:443 deny deny,example.com:443 session allow' && agentRun.barAfter === true), agentRun);
     }
     // Last, so it shows terminal_run's output in the terminal.
     await wait(1500);

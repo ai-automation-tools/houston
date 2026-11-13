@@ -254,6 +254,15 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 #confirm-bar button { background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 12px; cursor: pointer; }
 #confirm-run { border-color: var(--warn) !important; color: var(--warn); }
 #confirm-bar button:focus-visible { outline: 2px solid var(--accent); }
+/* The Core's approval inbox: the same bar, one card at a time, oldest first. */
+#approval-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel-2); border-bottom: 1px solid var(--warn); }
+#approval-bar[hidden] { display: none; }
+#approval-label { color: var(--text-2); white-space: nowrap; }
+#approval-what { flex: 1; min-width: 12ch; overflow-wrap: anywhere; font-family: "Cascadia Mono", Consolas, monospace; color: var(--text); }
+.approval-meta { color: var(--text-3); white-space: nowrap; }
+#approval-bar button { background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 12px; cursor: pointer; }
+#approval-once, #approval-session { border-color: var(--warn) !important; color: var(--warn); }
+#approval-bar button:focus-visible { outline: 2px solid var(--accent); }
 
 /* ---- light theme ------------------------------------------------------ */
 /* Follows Windows' app mode, like document pages (src/shared/docs.js). The terminal keeps its

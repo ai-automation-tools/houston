@@ -533,6 +533,11 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       stop: async () => { throw new Error('This is the demo, so there is no session to stop.'); },
       onChanged: listen('agents'),
     },
+    approvals: {
+      list: async () => [],
+      decide: async () => { throw new Error('This is the demo, so nothing waits for an answer.'); },
+      onChanged: listen('approvals'),
+    },
 
     // Made-up states: what a machine with Hub up, Git Bash missing and no chat key would show.
     connections: {

@@ -31,6 +31,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
+| [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
 | [**client.js**](client.js) | The client side: `dataDir()`, `callControl()` and `attachSession()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
@@ -145,7 +146,7 @@ An unattended run (`attended: false`) turns every `ask` into `deny`. An expired 
 
 The permission must match the action exactly: `file.read` needs a `read` grant, and `write` does not imply `read`.
 
-`policy_version` is a hash of every grant row and the global denies, so any change gives a new version. An `ask` has no `approval_id` yet; the approval inbox (H2) adds it.
+`policy_version` is a hash of every grant row and the global denies, so any change gives a new version. `check` itself never waits: an `ask` comes back as `ask` (with `approval_id` null), and the caller that can hold the request puts it in the [approval inbox](#-approval-inbox).
 
 ### Paths
 
@@ -212,7 +213,7 @@ launchRequest({ ...spec, proxyPort: proxy.port });
 - **One proxy per session.** A connection's identity is the port it arrived on, so there is no header, token or client name to trust. The gateway (H3) will serve its MCP endpoint on the same port: every origin-form request (`POST /mcp`) goes to `fallback`.
 - **HTTPS through `CONNECT`; plain HTTP only as `GET` or `HEAD`.** A plain request goes to the checked address with hop-by-hop headers (`Proxy-Authorization` among them) dropped both ways, no body, and a 64 MB cap on the response. `POST`, `PUT` and the rest get a 405, so a listed plain-HTTP host can't be sent data.
 - **The list is by name; the address is checked too.** After the policy allows `host:port`, the proxy resolves the name and refuses the tunnel if any address is loopback, private, link-local, multicast, documentation, CGNAT or IPv4-mapped. The tunnel goes to the address it checked. Without this the proxy, which runs outside the container, would be the way round the container's loopback and LAN block.
-- **Only `allow` lets traffic through.** `ask`, a thrown check or an odd answer is a 403: nobody can answer an approval card in the middle of a TLS handshake.
+- **Only `allow` lets traffic through.** A thrown check or an odd answer is a 403. An `ask` never reaches the proxy as one: the runner holds the `CONNECT` (or plain `GET`) in the [approval inbox](#-approval-inbox) before any TLS starts, and passes on the operator's allow or deny. Without an inbox, `ask` is a 403.
 - **One event per decision**, of type `egress.connect`, with the host, port, scheme (`https` or `http`), method for plain HTTP, decision, reason and, when allowed, the address. Wiring it to the audit log comes with the runner.
 
 Listens on `127.0.0.1` only. `close()` ends open tunnels too.
@@ -390,6 +391,24 @@ identity.get                                 retired, lastUsedAt set, retiredAt 
 
 Every step, refusals included, is in the audit log: 16 events.
 
+## ✋ Approval inbox
+
+[`approvals.js`](approvals.js) is where a policy `ask` waits for the operator (SEC-05). The Core holds the request; Houston shows it as a card and sends back an answer, so nothing a session does can answer for the operator, and a closed window means the card times out as a deny.
+
+| Answer | Does |
+|:---|:---|
+| `once` | Allows this one request |
+| `session` | Allows it, and every identical request (same action and resource) until the session ends |
+| `deny` | Refuses it |
+| no answer in 120 s | Denies it (`timeout`) |
+| the session ends | Denies whatever it still had waiting, and forgets its session allows |
+
+Each ask is an `approval.requested` audit event (decision `ask`, the approval id and when it expires) and each outcome an `approval.decided` (allow or deny, the answer, and who gave it: `local:operator`, or `local:core` for a timeout or a session's end). An unattended session never gets here: `check` turns its `ask` into `deny`.
+
+**Who asks today.** The egress proxy: an identity with an `ask` grant on `net:<host>:<port>` gets a proxy even with no `allow` grant, and a `CONNECT` or plain `GET` to that host is held, before any TLS, until the answer. `session.start`'s `launch.network.ask` lists those hosts. The MCP gateway (H3) will ask the same way for tools and commands.
+
+Checked by `npm run smoke` against a throwaway Core on 2026-11-12: a contained `curl.exe` to an `ask` host showed a card with the identity, `connect to example.org:443` and the workspace; **Deny** gave curl a `403`. Two identical requests to another `ask` host asked once; **Allow for this session** let both through.
+
 ## 🎛️ Control API
 
 [`control.js`](control.js) is how the operator's client drives the Core. The client side is [`client.js`](client.js): Houston's main process uses it through [`src/main/core.js`](../src/main/core.js), and tests, scripts and `ctl.js` call it directly.
@@ -409,6 +428,8 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
 | `session.attach` | `id` | `{ attached: id }`, then the connection streams the terminal ([below](#a-sessions-terminal)) |
 | `session.stop` | `id` | `{ reason, exitCode }` |
+| `approval.list` | none | the asks waiting, oldest first: `id`, `identity`, `session_id`, `workspace`, `action`, `resource`, `createdAt`, `expiresAt` |
+| `approval.decide` | `id`, `answer` (`once`, `session` or `deny`) | `{ result }`; `not_found` once it was answered, timed out or its session ended |
 | `session.list` | none | the running sessions |
 | `stop.all` | none | `{ stopped }`, the number stopped |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
@@ -465,7 +486,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done and H2 is under way: backends and the window's Agents tab are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (approvals, the logs screen, transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done and H2 is under way: backends, the window's Agents tab and the approval inbox are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (Stop All, the logs screen, transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

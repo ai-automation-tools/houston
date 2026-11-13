@@ -15,13 +15,14 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { ApprovalError } from './approvals.js';
 import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
-  'grant.add', 'grant.remove', 'backend.list', 'session.attach',
+  'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide',
 ];
 const MAX_LINE = 1024 * 1024;
 /** How much of a session's recent output an attach replays first. */
@@ -85,11 +86,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0 }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -162,6 +163,12 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
       return { id: s.id, identity: s.identity, workspace: s.workspace, startedAt: s.startedAt };
     },
     'backend.list': () => runner.backends(),
+    // The approval inbox: what waits for the operator, and their answer (approvals.js).
+    'approval.list': () => approvals?.list() ?? [],
+    'approval.decide': (p) => {
+      if (!approvals) throw new ControlError('not_found', 'this Core has no approval inbox');
+      return approvals.decide(str(p.id, 'id'), p.answer);
+    },
     'session.stop': async (p) => {
       const s = runner.get(str(p.id, 'id'));
       if (!s) throw new ControlError('not_found', 'no running session has that id');
@@ -233,7 +240,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError || e instanceof RegistryError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }
