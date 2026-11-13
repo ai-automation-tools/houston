@@ -217,7 +217,7 @@ const proxy = await startEgressProxy({
 launchRequest({ ...spec, proxyPort: proxy.port });
 ```
 
-- **One proxy per session.** A connection's identity is the port it arrived on, so there is no header, token or client name to trust. The gateway (H3) will serve its MCP endpoint on the same port: every origin-form request (`POST /mcp`) goes to `fallback`.
+- **One proxy per session.** A connection's identity is the port it arrived on, so there is no header, token or client name to trust. The gateway serves its MCP endpoint on the same port: every origin-form request (`POST /mcp`) goes to `fallback`, and so do an absolute-form request and a `CONNECT` to the proxy's own port ([MCP gateway](#-mcp-gateway)).
 - **HTTPS through `CONNECT`; plain HTTP only as `GET` or `HEAD`.** A plain request goes to the checked address with hop-by-hop headers (`Proxy-Authorization` among them) dropped both ways, no body, and a 64 MB cap on the response. `POST`, `PUT` and the rest get a 405, so a listed plain-HTTP host can't be sent data.
 - **The list is by name; the address is checked too.** After the policy allows `host:port`, the proxy resolves the name and refuses the tunnel if any address is loopback, private, link-local, multicast, documentation, CGNAT or IPv4-mapped. The tunnel goes to the address it checked. Without this the proxy, which runs outside the container, would be the way round the container's loopback and LAN block.
 - **Only `allow` lets traffic through.** A thrown check or an odd answer is a 403. An `ask` never reaches the proxy as one: the runner holds the `CONNECT` (or plain `GET`) in the [approval inbox](#-approval-inbox) before any TLS starts, and passes on the operator's allow or deny. Without an inbox, `ask` is a 403.

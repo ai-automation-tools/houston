@@ -1,6 +1,6 @@
 // AT-15: a secret appears in what the session is shown, and the stored transcript must hold the
-// marker, never the value. Until the gateway (H3) there are no tool results, so the result here
-// is a command's: the session prints a planted file of made-up credentials (an .env, a key
+// marker, never the value. The result here is a command's (a tool result's redaction is AT-07's):
+// the session prints a planted file of made-up credentials (an .env, a key
 // block, a token pasted on its own line), and the test reads the transcript twice, through
 // transcript.get and straight from the Core's transcripts folder. The values are random per
 // run and never printed; the test only checks whether they appear.
@@ -48,7 +48,7 @@ export async function run(h) {
     id, title, attempts,
     notes: [
       control ? `The transcript holds the session's output, with these markers: ${markers.join(', ') || 'none'}.` : 'THE CONTROL FAILED: the plain marker line is not in the transcript, so a missing secret proves nothing. Not a pass.',
-      'Until the gateway (H3) a tool result is a command\'s output in the terminal; AT-15 runs again on tool results then.',
+      'This checks a command\'s output; a tool result from the gateway is checked by AT-07, where the server prints a vault value and the agent gets only the marker.',
     ],
     pass: control && !attempts.some((a) => a.result === 'got through'),
   };

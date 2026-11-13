@@ -238,6 +238,8 @@ Container (exit 0):
 
 **Follow-up in H2 (2026-11-12).** 6: built as [`core/backends.js`](../../../core/backends.js), with one change: the credential folder is not the operator's `~/.claude` or `~/.codex` but a home of each identity's own, where it signs in. The operator's folders hold their MCP list with tokens in its env blocks, and Codex's `-c mcp_servers={}` adds to that list rather than replacing it.
 
+**Follow-up in H3 (2026-11-12).** 5: built as [`core/vault.js`](../../../core/vault.js): DPAPI with 32 bytes of entropy in `vault.key` in the Core's data folder; abuse test AT-07 finds no vault value in a session's environment or any file it can read. 1: the gateway serves each session on its egress proxy port, as planned.
+
 Smaller notes: start containers with a clean `PATH` that puts `System32` first, since the SDK shells out to `whoami`; a same-container dev server is unreachable over loopback under the default policy.
 
 ## Owner decisions

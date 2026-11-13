@@ -92,6 +92,7 @@ The **Agents** tab is the harness's: it lists the agent identities in the [Houst
 - Sessions belong to the Core. Closing Houston closes their tabs, which stops them; one started elsewhere (`npm run ctl`) and never opened in a tab keeps running and shows here.
 - **Approvals.** When a grant says *ask* (`effect=ask`), the session's request waits and a card shows above the terminals: which identity, exactly what it wants (`connect to example.com:443`), in which workspace, and how long until it's denied on its own (2 minutes). **Allow once** lets that request through, **Allow for this session** lets it and the same request again until the session ends, and **Deny** refuses it; Deny has the focus, so a stray Enter can't allow anything. Several waiting show one at a time, oldest first, with a count. The Core holds them, so closing Houston just lets them time out as denied.
 - **Stop All.** The red **⏹ Stop All** button at the right end of the address bar, **Ctrl+Shift+Backspace**, or **Stop all agent sessions** in the tray menu ends every session the Core is running, at once and without asking (it's the emergency stop). A note in the corner says how many it stopped. Your own terminals, dev servers and browser tabs are left alone. If the window itself hangs, the tray menu still works: it goes straight to the Core. So does `npm run ctl -- stop.all`.
+- **MCP tools.** Each session has the Core's MCP gateway, and Claude Code and Codex are pointed at it when they start. An agent sees the tools of the MCP servers you pinned that its grants allow (`tool:<server>/<tool>`), named `<server>.<tool>`; a tool under an *ask* grant shows its card with the tool and its arguments. Servers and the secrets they use are added with `npm run ctl` for now ([MCP gateway](../../core/README.md#-mcp-gateway), [Vault](../../core/README.md#-vault)); the Integrations screen comes next.
 - Identities and grants are made with `npm run ctl` for now ([Backends](../../core/README.md#-backends)); the Identity Center comes later on the [roadmap](../ROADMAP.md).
 
 ## 📜 Logs
@@ -111,7 +112,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 | Scope | What it means | Examples |
 |:---|:---|:---|
 | Global | One per install; nothing overrides it | Hard denies, Stop All, the audit log, transcript limits, the approval timeout |
-| Profile | Belongs to a profile; there's one until profiles arrive | Agent identities and grants, Project Hub, workspaces, quick links, news sources, chat |
+| Profile | Belongs to a profile; there's one until profiles arrive | Agent identities and grants, MCP servers, secrets (how many, never a value), Project Hub, workspaces, quick links, news sources, chat |
 | Workspace | Saved with the active workspace | Its folder, tabs, terminals and conversations |
 | Session | Lives as long as one agent session | Allow once and allow for this session; running sessions |
 
