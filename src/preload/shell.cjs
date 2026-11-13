@@ -138,6 +138,9 @@ contextBridge.exposeInMainWorld('acc', {
     onStopped: listen('agents:stopped'),
   },
 
+  /** The Core's audit log, filtered by identity, session and decision. */
+  logs: { query: invoke('logs:query') },
+
   /** The Core's approval inbox: cards waiting for the operator, and their answers. */
   approvals: {
     list: invoke('approvals:list'),

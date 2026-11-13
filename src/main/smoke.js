@@ -856,6 +856,32 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         })()`);
         agentRun.stopAll.audit = (await ctl('audit.query', { type: 'stop.all' })).events.map((/** @type {any} */ e) => `${e.identity.subject} ${e.decision.reasons[0]}`);
         agentRun.stopAll.key = Menu.getApplicationMenu()?.getMenuItemById('stop-all')?.accelerator ?? null;
+
+        // The Logs tab over what all of the above wrote: every event, then only denials, then one session.
+        agentRun.logs = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const names = () => [...document.querySelectorAll('#logs-list .row.log .name')].map((n) => n.textContent);
+          const settle = async (before) => { for (let i = 0; i < 50 && names().join() === before; i++) await pause(100); await pause(200); return names(); };
+          document.querySelector('.side-tabs [data-panel="logs"]').click();
+          const all = await settle('');
+          const sel = (f) => document.getElementById('logs-' + f);
+          const identities = [...sel('identity').options].map((o) => o.value);
+          const sessions = sel('session').options.length - 1;
+          sel('result').value = 'deny';
+          sel('result').dispatchEvent(new Event('change'));
+          const denied = await settle(all.join());
+          const deniedClasses = [...document.querySelectorAll('#logs-list .row.log')].map((r) => r.className);
+          sel('result').value = '';
+          sel('result').dispatchEvent(new Event('change'));
+          await settle(denied.join());
+          const only = [...document.querySelectorAll('#logs-list .row.log .acts button')].find((b) => b.textContent === 'Only this session');
+          only?.click();
+          const one = await settle(all.join());
+          const first = document.querySelector('#logs-list .row.log');
+          first?.click();
+          const detail = document.querySelector('#logs-list .log-detail')?.textContent ?? '';
+          return { all: all.length, stopAll: all.includes('stop.all sessions') && all[0] === 'session.end', identities, sessions, denied, deniedClasses, oneSession: sel('session').value !== '' && one.length > 0 && one.length < all.length, detail: detail.includes('"event_id"') };
+        })()`);
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -883,6 +909,11 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         Boolean(agentRun?.stopAll?.running === 2 && agentRun.stopAll.left === 0 && agentRun.stopAll.ms < 5000
           && agentRun.stopAll.toast === 'Stop All: stopped 2 agent sessions' && agentRun.stopAll.audit?.join() === 'local:operator 2 running'
           && agentRun.stopAll.key === 'CmdOrCtrl+Shift+Backspace'), agentRun?.stopAll);
+      const lg = agentRun?.logs;
+      check('the Logs tab lists the audit log newest first, filters by decision and by session, and shows an event whole on a click',
+        Boolean(lg?.all > 5 && lg.stopAll && lg.identities.includes('local:smoke-shell') && lg.sessions === 3
+          && lg.denied.includes('egress.connect example.org:443') && lg.deniedClasses.every((/** @type {string} */ c) => c.endsWith(' deny'))
+          && lg.oneSession && lg.detail), lg);
     }
     // Last, so it shows terminal_run's output in the terminal.
     await wait(1500);

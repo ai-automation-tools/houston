@@ -535,6 +535,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       onChanged: listen('agents'),
       onStopped: listen('agents-stopped'),
     },
+    logs: { query: async () => ({ error: 'This is the demo, so there is no Core and no audit log.' }) },
     approvals: {
       list: async () => [],
       decide: async () => { throw new Error('This is the demo, so nothing waits for an answer.'); },

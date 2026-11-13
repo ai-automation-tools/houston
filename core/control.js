@@ -179,7 +179,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'stop.all': async () => {
       const running = runner.list().length;
       audit.append({
-        type: 'stop.all', action: 'stop.all', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'Sessions', id: 'all' },
+        type: 'stop.all', action: 'stop.all', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'Core', id: 'sessions' },
         decision: { result: 'allow', policy_version: 'none', reasons: [`${running} running`] },
       });
       return { stopped: (await runner.stopAll()).length };

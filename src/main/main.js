@@ -733,6 +733,7 @@ async function createWindow() {
   handle('agents:open', (session) => agents.open(session));
   handle('agents:stop', (session) => agents.stop(session));
   handle('agents:stopAll', () => stopAllSessions());
+  handle('logs:query', (filter) => agents.logs(filter));
   // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
   const approvals = watchApprovals(send);
   handle('approvals:list', () => approvals.list());

@@ -9,7 +9,14 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows, toolchainPath } from '../shared/agents.js';
+import { logFilter, sessionChoices } from '../shared/logs.js';
 import { core } from './core.js';
+
+/** Why a call to the Core failed, in words for the tab. @param {unknown} e */
+function why(e) {
+  const err = /** @type {Error & { code?: string }} */ (e);
+  return err.code === 'ENOENT' ? 'The Houston Core is not running. Start it: see docs/guide/core-at-logon.md.' : err.message;
+}
 
 /**
  * @param {{
@@ -67,8 +74,28 @@ export function createAgents({ terminals, send, workspace }) {
         for (const r of rows) for (const s of /** @type {any[]} */ (r.sessions)) s.shown = terminals.bySession(s.id) !== undefined;
         return { folder: workspace().folder, rows };
       } catch (e) {
-        const err = /** @type {Error & { code?: string }} */ (e);
-        return { error: err.code === 'ENOENT' ? 'The Houston Core is not running. Start it: see docs/guide/core-at-logon.md.' : err.message };
+        return { error: why(e) };
+      }
+    },
+
+    /**
+     * The Logs tab: the Core's audit events, newest first, filtered by identity, session and
+     * decision, with the choices for those filters. @param {unknown} filter
+     */
+    async logs(filter) {
+      if (process.platform !== 'win32') return { error: "The audit log is the Core's, and the Core runs on Windows only." };
+      const f = logFilter(filter);
+      try {
+        const [found, identities, starts] = await Promise.all([
+          core.call('audit.query', f), core.call('identity.list'), core.call('audit.query', { type: 'session.start', limit: 50 }),
+        ]);
+        return {
+          events: found.events.reverse(), truncated: found.truncated,
+          identities: identities.map((/** @type {any} */ i) => ({ id: i.id, name: i.displayName })),
+          sessions: sessionChoices(starts.events),
+        };
+      } catch (e) {
+        return { error: why(e) };
       }
     },
 

@@ -9,6 +9,7 @@ import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
+import { logRow } from './shared/logs.js';
 import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
 
 const ICONS = {
@@ -81,6 +82,8 @@ export class Sidebar {
       agents: /** @type {HTMLElement} */ (document.getElementById('panel-agents')),
       agentsList: /** @type {HTMLElement} */ (document.getElementById('agents-list')),
       agentsFolder: /** @type {HTMLElement} */ (document.getElementById('agents-folder')),
+      logs: /** @type {HTMLElement} */ (document.getElementById('panel-logs')),
+      logsList: /** @type {HTMLElement} */ (document.getElementById('logs-list')),
       results: /** @type {HTMLElement} */ (document.getElementById('panel-search')),
       search: /** @type {HTMLInputElement} */ (document.getElementById('search')),
       status: /** @type {HTMLElement} */ (document.getElementById('hub-status')),
@@ -118,6 +121,8 @@ export class Sidebar {
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
     document.getElementById('agents-refresh')?.addEventListener('click', () => this.loadAgents());
     api.agents.onChanged(() => { if (this.current === 'agents') this.loadAgents(); });
+    document.getElementById('logs-refresh')?.addEventListener('click', () => this.loadLogs());
+    for (const f of ['identity', 'session', 'result']) document.getElementById(`logs-${f}`)?.addEventListener('change', () => this.loadLogs());
     api.recent.onChanged((/** @type {any[]} */ list) => { this.recent = list; this.renderRecent(); });
     /** @type {import('./shared/mcplog.js').LogEntry[]} */
     this.calls = [];
@@ -788,6 +793,66 @@ export class Sidebar {
     }
   }
 
+  /**
+   * The Logs tab: the Core's audit events, newest first, for the identity, session and decision
+   * picked. A click shows an event whole; Only this session filters to its session.
+   */
+  async loadLogs() {
+    const host = this.el.logsList;
+    const pick = (/** @type {string} */ f) => /** @type {HTMLSelectElement} */ (document.getElementById(`logs-${f}`));
+    const filter = { identity: pick('identity').value, session: pick('session').value, result: pick('result').value };
+    let r;
+    try {
+      r = await this.api.logs.query(filter);
+    } catch (err) {
+      r = { error: errText(err) };
+    }
+    host.innerHTML = '';
+    if (r.error) { host.append(note(r.error, true)); return; }
+    // The choices come back with every answer; keep what's picked, even if it scrolled out.
+    /** @param {HTMLSelectElement} sel @param {{ id: string, label: string }[]} options */
+    const fill = (sel, options) => {
+      const keep = sel.value;
+      sel.replaceChildren(sel.options[0]);
+      for (const o of options) sel.append(new Option(o.label, o.id));
+      if (keep && !options.some((o) => o.id === keep)) sel.append(new Option(keep, keep));
+      sel.value = keep;
+    };
+    fill(pick('identity'), r.identities.map((/** @type {any} */ i) => ({ id: i.id, label: i.name ? `${i.name} (${i.id})` : i.id })));
+    fill(pick('session'), r.sessions);
+    if (!r.events.length) { host.append(note('Nothing in the audit log matches.')); return; }
+    if (r.truncated) host.append(note(`The newest ${r.events.length}; narrow the filters for older ones.`));
+    for (const e of r.events) {
+      const v = logRow(e);
+      const row = document.createElement('div');
+      row.className = `row log ${v.result}`;
+      row.tabIndex = 0;
+      row.style.paddingLeft = '10px';
+      row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
+      q(row, '.icon').textContent = v.icon;
+      q(row, '.name').textContent = v.name;
+      q(row, '.sub').textContent = v.sub;
+      row.title = v.title;
+      if (e.session_id && !filter.session) {
+        const b = document.createElement('button');
+        b.textContent = 'Only this session';
+        b.addEventListener('click', (ev) => { ev.stopPropagation(); pick('session').value = e.session_id; this.loadLogs(); });
+        q(row, '.acts').append(b);
+      }
+      /** @type {HTMLElement | null} */
+      let detail = null;
+      row.addEventListener('click', () => {
+        if (detail) { detail.remove(); detail = null; return; }
+        detail = document.createElement('pre');
+        detail.className = 'log-detail';
+        detail.textContent = JSON.stringify(e, null, 2);
+        row.after(detail);
+      });
+      row.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target === row) row.click(); });
+      host.append(row);
+    }
+  }
+
   // Cronsole's tasks, asked for when the tab is first opened and on Refresh.
   async loadCron() {
     this.cronLoaded = true;
@@ -890,11 +955,13 @@ export class Sidebar {
     this.el.git.hidden = name !== 'git';
     this.el.dev.hidden = name !== 'dev';
     this.el.agents.hidden = name !== 'agents';
+    this.el.logs.hidden = name !== 'logs';
     if (name === 'cron' && !this.cronLoaded) this.loadCron();
     if (name === 'news' && !this.newsLoaded) this.loadNews();
     if (name === 'git') this.loadGit();
     if (name === 'dev') this.loadDev();
     if (name === 'agents') this.loadAgents();
+    if (name === 'logs') this.loadLogs();
   }
 
   focusSearch() {
@@ -910,7 +977,7 @@ export class Sidebar {
       this.show(this.current);
       return;
     }
-    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = true;
+    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = this.el.logs.hidden = true;
     res.hidden = false;
     res.innerHTML = '';
 
