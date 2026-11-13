@@ -89,11 +89,11 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SEC-01 | MCP proxy and gateway | Must | MVP; gateway built (H3) | Core gateway: discovery, validation, policy, credential injection, audit |
 | SEC-02 | Identity Center: agents as identities with attributes, access, permissions and lifecycle | Must | Registry MVP; Identity Center screen built (H5) | Core identity registry |
 | SEC-03 | Permissions | Must | MVP | Default-deny grants over files, commands, network, tools, secrets |
-| SEC-04 | Sandboxing | Must | MVP | An OS container per session (ADR-004) |
+| SEC-04 | Sandboxing | Must | MVP; broad-access (unconfined) identities marked everywhere, quarantine profiles (H5) | An OS container per session (ADR-004) |
 | SEC-05 | Approvals | Must | MVP; inbox built (H2) | An approval inbox (`core/approvals.js`); decided in the shell, executed by the Core |
 | SEC-06 | Secrets management | Must | MVP; vault built (H3) | A Core vault; credentials reach MCP servers, never an agent |
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
-| SEC-08 | Governance | Should | Next | Policy versions, expiry, grant review, lifecycle states, export |
+| SEC-08 | Governance | Should | Expiry, lifecycle states and review dates built (H5); export Next | Policy versions, expiry, grant review, lifecycle states, export |
 | SEC-09 | Controls enforced at execution boundaries | Must | MVP | Container policy and gateway checks. A prompt or a UI toggle is never the control |
 | SEC-10 | Emergency stop | Must | MVP; sessions (H2), gateway tokens (H3) and pausing standing grants (H4) built | Stop All: end every session tree, revoke tokens, pause standing grants |
 
@@ -112,7 +112,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
 | SET-01 | Per-profile settings, bookmarks and folders | Must | Built (H5) | A profile directory |
-| SET-02 | Per-profile agents, skills and MCP configuration | Must | Agents and MCP configuration built in the Core (H5); skills Next | Profile-scoped rows in the Core |
+| SET-02 | Per-profile agents, skills and MCP configuration | Must | Built: agents and MCP configuration (H5), skills (H6) | Profile-scoped rows in the Core |
 | SET-03 | Custom themes | Could | Later | CSS variables |
 | SET-04 | Custom folder icons | Could | Next | Project Hub already stores them |
 | SET-05 | Customisable buttons and tabs | Could | Later | Extends quick links |
