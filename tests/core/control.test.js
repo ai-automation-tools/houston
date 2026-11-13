@@ -8,6 +8,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
+import { attachSession } from '../../core/client.js';
 import { METHODS, callControl, queryAudit, startControl } from '../../core/control.js';
 import { migrate, openDb } from '../../core/db.js';
 import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
@@ -27,10 +28,14 @@ function fakeRunner() {
       starts.push(spec);
       if (spec.identity === 'local:refused') throw new RunnerError('the identity is suspended');
       const id = `s${starts.length}`;
+      let settle;
+      const done = new Promise((r) => { settle = r; });
       const s = {
         id, identity: spec.identity, workspace: spec.workspace, startedAt: '2026-11-12T00:00:00.000Z',
-        input: new PassThrough(), output: new PassThrough(),
-        stop: async () => { live.delete(id); return { reason: 'stopped', exitCode: null }; },
+        input: new PassThrough(), output: new PassThrough(), sizes: [], done,
+        resize: (size) => s.sizes.push(size),
+        exit: (code) => { live.delete(id); settle({ reason: `exit ${code}`, exitCode: code }); },
+        stop: async () => { live.delete(id); const end = { reason: 'stopped', exitCode: null }; settle(end); return end; },
       };
       live.set(id, s);
       return s;
@@ -131,6 +136,48 @@ test('session.start validates, passes the spec to the runner, drains the termina
 test('backend.list returns the runner\'s manifests', async (t) => {
   const s = await setup(t);
   assert.deepEqual((await s.call('backend.list')).map((b) => [b.name, b.installed]), [['codex', true]]);
+});
+
+test('session.attach: replays recent output, streams the rest, types and resizes, and ends with the session', async (t) => {
+  const s = await setup(t);
+  await assert.rejects(attachSession(s.dir, 'nope', { onData() {}, onEnd() {} }), (e) => e.code === 'not_found');
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+  const live = s.runner.live.get('s1');
+  // Split inside a multi-byte character: the Core decodes across chunks.
+  const euro = Buffer.from('€');
+  live.output.write(Buffer.concat([Buffer.from('before '), euro.subarray(0, 1)]));
+  live.output.write(euro.subarray(1));
+  await new Promise((r) => setImmediate(r));
+
+  const seen = [];
+  let ended;
+  const gotEnd = new Promise((r) => { ended = r; });
+  const a = await attachSession(s.dir, 's1', { onData: (d) => seen.push(d), onEnd: ended });
+  const typed = new Promise((r) => live.input.once('data', (d) => r(String(d))));
+  a.write('dir\r');
+  assert.equal(await typed, 'dir\r');
+  a.resize(40, 9999);
+  live.output.write('after');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(live.sizes, [{ rows: 40, columns: 500 }]);
+  assert.equal(seen.join(''), 'before €after');
+
+  // A second viewer gets the same tail; detaching it leaves the session running.
+  const b = await attachSession(s.dir, 's1', { onData() {}, onEnd() {} });
+  b.close();
+  live.exit(0);
+  assert.deepEqual(await gotEnd, { reason: 'exit 0', exitCode: 0 });
+  await assert.rejects(attachSession(s.dir, 's1', { onData() {}, onEnd() {} }), (e) => e.code === 'not_found');
+});
+
+test('an attached connection that sends anything else is closed, and the session runs on', async (t) => {
+  const s = await setup(t);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+  const { pipe, token } = JSON.parse(fs.readFileSync(path.join(s.dir, 'control.json'), 'utf8'));
+  const lines = await raw(pipe, [{ id: 1, token, method: 'session.attach', params: { id: 's1' } }, { method: 'stop.all', token }].map((m) => JSON.stringify(m)));
+  assert.deepEqual(lines[0], { id: 1, result: { attached: 's1' } });
+  assert.equal(lines.at(-1).error.code, 'bad_request');
+  assert.deepEqual((await s.call('session.list')).map((x) => x.id), ['s1']);
 });
 
 test('session.stop, stop.all', async (t) => {

@@ -14,15 +14,18 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
-  'grant.add', 'grant.remove', 'backend.list',
+  'grant.add', 'grant.remove', 'backend.list', 'session.attach',
 ];
 const MAX_LINE = 1024 * 1024;
+/** How much of a session's recent output an attach replays first. */
+const TAIL = 256 * 1024;
 
 export class ControlError extends Error {
   /** @param {string} code @param {string} message */
@@ -92,6 +95,54 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
   /** @type {Set<net.Socket>} */
   const sockets = new Set();
+  /**
+   * Each running session's terminal: its recent output, and the connections attached to it.
+   * @type {Map<string, { tail: string, subs: Set<net.Socket> }>}
+   */
+  const terms = new Map();
+  /** @type {WeakMap<net.Socket, string>} the session an attached connection streams */
+  const attachedTo = new WeakMap();
+
+  /**
+   * Keep a session's output: the newest TAIL characters for the next attach, and every chunk to
+   * the connections attached now. Read whether or not anyone is attached, so the session never
+   * stalls on a full buffer. When it ends, each attached connection gets `{ end }` and is closed.
+   * @param {{ id: string, output: import('node:stream').Readable, done: Promise<{ reason: string, exitCode: number | null }> }} s
+   */
+  function tap(s) {
+    const t = { tail: '', subs: new Set() };
+    terms.set(s.id, t);
+    const decoder = new StringDecoder('utf8');
+    s.output.on('data', (chunk) => {
+      const data = decoder.write(chunk);
+      if (!data) return;
+      t.tail = (t.tail + data).slice(-TAIL);
+      for (const sub of t.subs) send(sub, { data });
+    });
+    void s.done.then((end) => {
+      terms.delete(s.id);
+      for (const sub of t.subs) { send(sub, { end }); sub.end(); }
+    });
+  }
+
+  /**
+   * One line from an attached connection: `{ input }` is typed into the terminal, `{ resize }`
+   * resizes it. Anything else closes the connection; the session runs on.
+   * @param {net.Socket} sock @param {string} id @param {string} line
+   */
+  function stream(sock, id, line) {
+    let m;
+    try { m = JSON.parse(line); } catch { /* closed below */ }
+    const s = runner.get(id);
+    if (!s) return sock.end();
+    if (typeof m?.input === 'string' && m.input.length <= 64 * 1024) return void s.input.write(m.input);
+    const r = m?.resize;
+    if (r && Number.isInteger(r.rows) && Number.isInteger(r.columns)) {
+      return void s.resize({ rows: Math.min(200, Math.max(5, r.rows)), columns: Math.min(500, Math.max(20, r.columns)) });
+    }
+    send(sock, { error: { code: 'bad_request', message: 'an attached connection sends { input } or { resize: { rows, columns } }' } });
+    sock.end();
+  }
 
   /** @type {Record<string, (p: any) => unknown>} */
   const handlers = {
@@ -107,8 +158,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
         attended: p.attended, size: p.size,
         program: { readonly: strings(program.readonly, 'program.readonly'), pathDirs: strings(program.pathDirs, 'program.pathDirs'), env: program.env },
       });
-      // Nothing reads the terminal over the pipe until H2, so drain it or the session stalls on a full buffer.
-      s.output.resume();
+      tap(s);
       return { id: s.id, identity: s.identity, workspace: s.workspace, startedAt: s.startedAt };
     },
     'backend.list': () => runner.backends(),
@@ -163,6 +213,18 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
       send(sock, { id, error: { code: 'unauthorized', message: 'bad or missing token' } });
       return sock.end();
     }
+    // Synchronous on purpose: lines after this one in the same chunk are already stream lines.
+    if (req.method === 'session.attach') {
+      const sid = req.params?.id;
+      const t = typeof sid === 'string' ? terms.get(sid) : undefined;
+      if (!t) return send(sock, { id, error: { code: 'not_found', message: 'no running session has that id' } });
+      attachedTo.set(sock, sid);
+      t.subs.add(sock);
+      sock.on('close', () => t.subs.delete(sock));
+      send(sock, { id, result: { attached: sid } });
+      if (t.tail) send(sock, { data: t.tail });
+      return;
+    }
     const fn = typeof req.method === 'string' && Object.hasOwn(handlers, req.method) ? handlers[req.method] : null;
     if (!fn) return send(sock, { id, error: { code: 'unknown_method', message: `methods: ${METHODS.join(', ')}` } });
     const params = req.params ?? {};
@@ -194,7 +256,9 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
         if (i > MAX_LINE) return tooBig();
         const line = buf.slice(0, i);
         buf = buf.slice(i + 1);
-        if (line.trim()) void handle(sock, line);
+        const sid = attachedTo.get(sock);
+        if (sid) stream(sock, sid, line);
+        else if (line.trim()) void handle(sock, line);
       }
       if (buf.length > MAX_LINE) tooBig();
     });

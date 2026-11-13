@@ -32,7 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
-| [**client.js**](client.js) | The client side: `dataDir()` and `callControl()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
+| [**client.js**](client.js) | The client side: `dataDir()`, `callControl()` and `attachSession()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
@@ -407,6 +407,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `core.status` | none | `{ pid, startedAt, schema, containment, sessions }`: `containment` is the rung sessions run on (`container`) and `sessions` how many run. Houston's Connections row shows it |
 | `session.start` | `identity`, `workspace`; `command` unless the identity has a backend; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
 | `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
+| `session.attach` | `id` | `{ attached: id }`, then the connection streams the terminal ([below](#a-sessions-terminal)) |
 | `session.stop` | `id` | `{ reason, exitCode }` |
 | `session.list` | none | the running sessions |
 | `stop.all` | none | `{ stopped }`, the number stopped |
@@ -421,7 +422,15 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 
 Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `conflict` (the lifecycle doesn't allow it, or the id exists), `refused` (the runner said no, with its reason), `internal`. Every call acts as the operator: only the operator holds the token.
 
-Until the window can show a terminal (H2), nothing reads a session's output over the pipe, so the Core drains it; a session started this way is for commands whose result is their exit code, which `audit.query` returns in `session.end`.
+### A session's terminal
+
+The Core reads every session's output whether or not anyone watches, so a session never stalls on a full buffer, and keeps the newest 256 KB of it. `session.attach` turns its connection into that session's terminal, on a connection of its own:
+
+1. The answer `{ id, result: { attached } }`, then `{ "data": "..." }` with the kept output, then one `{ "data" }` line per chunk as it comes, decoded as UTF-8 across chunk edges.
+2. The client sends `{ "input": "..." }` (up to 64 KB a line) to type and `{ "resize": { "rows", "columns" } }` to resize (clamped to 5 to 200 rows and 20 to 500 columns). Anything else gets a `bad_request` and the connection closes; the session runs on.
+3. When the session ends, `{ "end": { reason, exitCode } }` and the Core closes the connection.
+
+Several connections can attach to one session; closing one detaches it and leaves the session running. Only the `session.attach` request carries the token. The client side is `attachSession()` in [`client.js`](client.js); Houston's Agents tab uses it ([`src/main/agents.js`](../src/main/agents.js)).
 
 **Who can call it.** Three layers:
 

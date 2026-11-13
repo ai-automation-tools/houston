@@ -28,6 +28,7 @@
         <button role="tab" data-panel="cron" aria-selected="false" title="Cronsole's scheduled tasks">Cron</button>
         <button role="tab" data-panel="git" aria-selected="false" title="The workspace repo's branch and changes">Git</button>
         <button role="tab" data-panel="dev" aria-selected="false" title="Dev servers from the workspace's package.json">Dev</button>
+        <button role="tab" data-panel="agents" aria-selected="false" title="Agent identities and their contained sessions, from the Houston Core">Agents</button>
       </nav>
       <section id="panel-files" class="panel" role="tabpanel"></section>
       <section id="panel-bookmarks" class="panel" role="tabpanel" hidden>
@@ -71,6 +72,13 @@
           <button id="dev-refresh" title="Read package.json again">Refresh</button>
         </div>
         <div id="dev-list"></div>
+      </section>
+      <section id="panel-agents" class="panel" role="tabpanel" aria-live="polite" hidden>
+        <div class="panel-tools git-tools">
+          <span id="agents-folder" class="git-branch"></span>
+          <button id="agents-refresh" title="Ask the Core again">Refresh</button>
+        </div>
+        <div id="agents-list"></div>
       </section>
       <section id="panel-search" class="panel" role="region" aria-label="Search results" hidden></section>
     </aside>

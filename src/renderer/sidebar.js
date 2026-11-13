@@ -33,10 +33,12 @@ export class Sidebar {
    *   openTerminal: (cwd: string) => void,
    *   viewDoc: (id: string, opts?: { newTab?: boolean }) => void,
    *   openCronsole: () => void,
+   *   focusTerminal: (id: number) => void,
    * }} opts
    */
-  constructor({ api, layout, openUrl, openTerminal, viewDoc, openCronsole }) {
+  constructor({ api, layout, openUrl, openTerminal, viewDoc, openCronsole, focusTerminal }) {
     this.api = api;
+    this.focusTerminal = focusTerminal;
     this.openCronsole = openCronsole;
     this.cronLoaded = false;
     /** @type {import('./shared/cronsole.js').CronTask[] | null} The last list Cronsole gave, for the Docs filter. */
@@ -76,6 +78,9 @@ export class Sidebar {
       dev: /** @type {HTMLElement} */ (document.getElementById('panel-dev')),
       devList: /** @type {HTMLElement} */ (document.getElementById('dev-list')),
       devFolder: /** @type {HTMLElement} */ (document.getElementById('dev-folder')),
+      agents: /** @type {HTMLElement} */ (document.getElementById('panel-agents')),
+      agentsList: /** @type {HTMLElement} */ (document.getElementById('agents-list')),
+      agentsFolder: /** @type {HTMLElement} */ (document.getElementById('agents-folder')),
       results: /** @type {HTMLElement} */ (document.getElementById('panel-search')),
       search: /** @type {HTMLInputElement} */ (document.getElementById('search')),
       status: /** @type {HTMLElement} */ (document.getElementById('hub-status')),
@@ -111,6 +116,8 @@ export class Sidebar {
     this.newsLoaded = false;
     document.getElementById('dev-refresh')?.addEventListener('click', () => this.loadDev());
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
+    document.getElementById('agents-refresh')?.addEventListener('click', () => this.loadAgents());
+    api.agents.onChanged(() => { if (this.current === 'agents') this.loadAgents(); });
     api.recent.onChanged((/** @type {any[]} */ list) => { this.recent = list; this.renderRecent(); });
     /** @type {import('./shared/mcplog.js').LogEntry[]} */
     this.calls = [];
@@ -719,6 +726,68 @@ export class Sidebar {
     return row;
   }
 
+  /**
+   * The Agents tab: each identity that could run, what it runs, and its sessions. Start opens a
+   * contained session in the workspace's folder as a terminal tab; the Core says yes or why not.
+   */
+  async loadAgents() {
+    const host = this.el.agentsList;
+    let info;
+    try {
+      info = await this.api.agents.info();
+    } catch (err) {
+      info = { error: errText(err) };
+    }
+    host.innerHTML = '';
+    this.el.agentsFolder.textContent = info.folder ? baseName(info.folder) : '';
+    this.el.agentsFolder.title = info.folder ? `Sessions start in ${info.folder}` : '';
+    if (info.error) { host.append(note(info.error, true)); return; }
+    if (!info.rows.length) {
+      host.append(note('No agent identities yet. Make one with npm run ctl -- identity.create (see core/README.md, Backends), give it a write grant on this folder, and activate it.'));
+      return;
+    }
+    if (!info.folder) host.append(note('This workspace has no folder, so no session can start here.'));
+    /** @param {Promise<unknown>} p */
+    const act = (p) => p.catch((err) => toast(errText(err)));
+    const open = (/** @type {Promise<{ terminal: number }>} */ p) => act(p.then((r) => this.focusTerminal(r.terminal)));
+    for (const r of /** @type {import('./shared/agents.js').AgentRow[]} */ (info.rows)) {
+      const row = document.createElement('div');
+      row.className = `row dev-server ${r.sessions.length ? 'ready' : r.canStart ? 'idle' : 'exited'}`;
+      row.style.paddingLeft = '10px';
+      row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
+      q(row, '.icon').textContent = r.sessions.length ? '●' : r.canStart ? '▷' : '■';
+      q(row, '.name').textContent = r.name;
+      q(row, '.sub').textContent = r.why || r.what;
+      row.title = [r.id, r.what, r.why, r.signIn && `First time: ${r.signIn}`].filter(Boolean).join('\n');
+      if (r.canStart && info.folder) {
+        const b = document.createElement('button');
+        b.textContent = 'Start';
+        b.title = `Start ${r.name} in a container, in ${info.folder}`;
+        b.addEventListener('click', () => { b.disabled = true; open(this.api.agents.start(r.id)).finally(() => { b.disabled = false; }); });
+        q(row, '.acts').append(b);
+      }
+      host.append(row);
+      for (const s of r.sessions) {
+        const sub = document.createElement('div');
+        sub.className = 'row dev-server ready';
+        sub.style.paddingLeft = '26px';
+        sub.innerHTML = '<span class="icon">↳</span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
+        q(sub, '.name').textContent = baseName(s.workspace);
+        q(sub, '.sub').textContent = `since ${new Date(s.startedAt).toLocaleTimeString()}`;
+        sub.title = [s.id, s.workspace, `Started ${new Date(s.startedAt).toLocaleString()}`].join('\n');
+        /** @type {[string, () => void][]} */
+        const buttons = [[s.shown ? 'Show' : 'Open', () => open(this.api.agents.open(s.id))], ['Stop', () => act(this.api.agents.stop(s.id))]];
+        for (const [label, fn] of buttons) {
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.addEventListener('click', fn);
+          q(sub, '.acts').append(b);
+        }
+        host.append(sub);
+      }
+    }
+  }
+
   // Cronsole's tasks, asked for when the tab is first opened and on Refresh.
   async loadCron() {
     this.cronLoaded = true;
@@ -820,10 +889,12 @@ export class Sidebar {
     this.el.cron.hidden = name !== 'cron';
     this.el.git.hidden = name !== 'git';
     this.el.dev.hidden = name !== 'dev';
+    this.el.agents.hidden = name !== 'agents';
     if (name === 'cron' && !this.cronLoaded) this.loadCron();
     if (name === 'news' && !this.newsLoaded) this.loadNews();
     if (name === 'git') this.loadGit();
     if (name === 'dev') this.loadDev();
+    if (name === 'agents') this.loadAgents();
   }
 
   focusSearch() {
@@ -839,7 +910,7 @@ export class Sidebar {
       this.show(this.current);
       return;
     }
-    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = true;
+    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = true;
     res.hidden = false;
     res.innerHTML = '';
 
@@ -886,6 +957,9 @@ export function rememberFavicon(pageUrl, icon) {
   known[entry[0]] = entry[1];
   try { localStorage.setItem(FAVICONS_KEY, JSON.stringify(known)); } catch { /* storage full or off: bookmarks fall back to /favicon.ico */ }
 }
+
+/** A folder's last name. @param {string} p */
+function baseName(p) { return p.split(/[\\/]/).filter(Boolean).pop() || p; }
 
 /** @param {HTMLElement} el @param {string} sel */
 function q(el, sel) { return /** @type {HTMLElement} */ (el.querySelector(sel)); }
