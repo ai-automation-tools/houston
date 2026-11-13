@@ -158,4 +158,18 @@ export const MIGRATIONS = [
   ALTER TABLE identities ADD COLUMN reviewed_at TEXT;
   ALTER TABLE identities ADD COLUMN review_by TEXT;
   `,
+
+  // v9 (H5): profiles. Every identity and secret belongs to one; an MCP server belongs to its
+  // identity's. Existing rows go to 'default', which always exists. No foreign key on the new
+  // columns (SQLite adds a REFERENCES column only with a NULL default): profiles.js checks.
+  `
+  CREATE TABLE profiles (
+    id            TEXT PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 40 AND id NOT GLOB '*[^a-z0-9_-]*'),
+    display_name  TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 80),
+    created_at    TEXT NOT NULL
+  ) STRICT;
+  INSERT INTO profiles (id, display_name, created_at) VALUES ('default', 'Default', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+  ALTER TABLE identities ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default';
+  ALTER TABLE secrets ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default';
+  `,
 ];

@@ -9,6 +9,7 @@
   "properties": {
     "id": { "description": "Stable and never reused: 'local:<slug>', e.g. 'local:dev-codex', 'local:mcp/github'.", "type": "string", "pattern": "^local:[a-z0-9][a-z0-9/_-]{0,62}$" },
     "kind": { "enum": ["operator", "ai-agent", "sub-agent", "service-account", "mcp-server"] },
+    "profile": { "description": "The profile it belongs to (H5); 'default' unless made in another. The operator acts in every profile.", "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$" },
     "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
     "owner": { "description": "The accountable identity id. Every identity but the operator has one.", "type": ["string", "null"] },
     "parent": { "description": "For a sub-agent: the identity that may start it.", "type": ["string", "null"] },

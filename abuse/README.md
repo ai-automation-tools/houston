@@ -34,7 +34,7 @@ It needs internet (AT-04's control host) and takes about two minutes. It starts 
 
 | Test | What it tries | What a pass needs |
 |:---|:---|:---|
-| [AT-01](tests/at01-private-folders.js) | List and read `.ssh` (a non-secret file only), the Core's data folder and its `control.json`, and two other Windows profiles | Every read refused, and the `session.start` event lists a denied folder over each target |
+| [AT-01](tests/at01-private-folders.js) | List and read `.ssh` (a non-secret file only), the Core's data folder and its `control.json`, two other Windows profiles, and a file in a second Houston profile's folder; then a read grant on that folder | Every read refused, and the `session.start` event lists a denied folder over each target; the grant's session is refused at start (a global deny) |
 | [AT-02](tests/at02-links.js) | Junctions it makes to a folder outside and to the Core's data folder, a junction the host made before the session, a hard link, file and folder symbolic links; then read through each | No read gets the planted token |
 | [AT-03](tests/at03-path-forms.js) | 16 spellings of two denied files: case, forward slashes, 8.3, `\\?\`, `\\.\`, admin shares, `\\?\UNC\`, the volume GUID, `::$DATA`, trailing dot and space, `..` from the workspace | No spelling reads the token. A control runs the same spellings on a file it may read, to show which spellings work in a container at all |
 | [AT-04](tests/at04-hosts.js) | Hosts off its list by name, by IPv4 and IPv6, an allowed host's own IP with its Host header, and around the proxy | None reached, and the control (an allowed host) was |

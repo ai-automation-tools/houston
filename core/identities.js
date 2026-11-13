@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { BACKENDS } from './backends.js';
 import { ACTIONS, compile, decide, policyVersion } from './policy.js';
 import { compileGrants } from './runner.js';
+import { DEFAULT_PROFILE, profileOf } from './profiles.js';
 
 export const OPERATOR = 'local:operator';
 const ID = /^local:[a-z0-9][a-z0-9/_-]{0,62}$/;
@@ -93,7 +94,7 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
 
   /** The identity as identity.schema.json shapes it, with its grants. @param {any} r */
   const shape = (r) => ({
-    id: r.id, kind: r.kind, displayName: r.display_name, owner: r.owner, parent: r.parent, purpose: r.purpose, backend: r.backend,
+    id: r.id, kind: r.kind, profile: r.profile_id ?? DEFAULT_PROFILE, displayName: r.display_name, owner: r.owner, parent: r.parent, purpose: r.purpose, backend: r.backend,
     status: r.status, containment: r.containment, createdAt: r.created_at, lastUsedAt: r.last_used_at,
     expiresAt: r.expires_at, retiredAt: r.retired_at, reviewedAt: r.reviewed_at ?? null, reviewBy: r.review_by ?? null, tags: JSON.parse(r.tags),
     grants: /** @type {any[]} */ (db.prepare('SELECT * FROM grants WHERE identity_id = ? ORDER BY granted_at, id').all(r.id)).map((g) => ({
@@ -106,21 +107,25 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
     /** @param {string} id */
     get: (id) => shape(must(id)),
 
-    /** @param {{ status?: string }} [filter] */
-    list({ status } = {}) {
+    /**
+     * @param {{ status?: string, profile?: string }} [filter] profile: that profile's identities, and the operator, who acts in every profile
+     */
+    list({ status, profile } = {}) {
       if (status !== undefined && !(status in NEXT)) throw bad(`status is one of ${Object.keys(NEXT).join(', ')}`);
-      const rows = status ? db.prepare('SELECT * FROM identities WHERE status = ? ORDER BY id').all(status) : db.prepare('SELECT * FROM identities ORDER BY id').all();
-      return rows.map(shape);
+      const p = profile === undefined ? null : profileOf(db, profile, (c, m) => new RegistryError(c, m));
+      return /** @type {any[]} */ (db.prepare('SELECT * FROM identities ORDER BY id').all())
+        .filter((r) => (!status || r.status === status) && (!p || r.profile_id === p || r.kind === 'operator')).map(shape);
     },
 
     /**
      * A new identity, in draft: it can't start a session until it is activated.
-     * @param {any} spec id, kind, displayName; optional owner (default: the caller), parent, purpose, backend, containment (default container), expiresAt, tags
+     * @param {any} spec id, kind, displayName; optional profile (default 'default'), owner (default: the caller), parent, purpose, backend, containment (default container), expiresAt, tags
      * @param {string} actor who asked
      */
     create(spec, actor) {
       if (!spec || typeof spec !== 'object') throw bad('the identity is an object');
       const { id, kind, displayName, owner = actor, parent = null, purpose = null, backend = null, containment = 'container', expiresAt, tags = [] } = spec;
+      const profile = profileOf(db, spec.profile, (c, m) => new RegistryError(c, m));
       if (typeof id !== 'string' || !ID.test(id)) throw bad("id is 'local:' then a lowercase name: letters, digits, / _ -");
       if (!KINDS.includes(kind)) throw bad(`kind is one of ${KINDS.join(', ')} (there is one operator, made by the Core)`);
       text(displayName, 'displayName', 80);
@@ -134,12 +139,14 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
         const r = typeof ref === 'string' ? row(ref) : null;
         if (!r) throw bad(`${name} ${String(ref)} is not an identity`);
         if (r.status === 'retired') throw bad(`${name} ${ref} is retired`);
+        // Nothing crosses profiles: an owner or parent is in the same one, except the operator, who is in all of them.
+        if (r.kind !== 'operator' && (r.profile_id ?? DEFAULT_PROFILE) !== profile) throw bad(`${name} ${ref} is in profile ${r.profile_id}, not ${profile}`);
       }
       if (kind === 'sub-agent' && parent === null) throw bad('a sub-agent names its parent');
       if (row(id)) throw new RegistryError('conflict', `${id} exists${row(id).status === 'retired' ? ' (retired: ids are never reused)' : ''}`);
-      db.prepare(`INSERT INTO identities (id, kind, display_name, owner, parent, purpose, backend, status, containment, created_at, expires_at, tags)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`).run(id, kind, displayName, owner, parent, purpose, backend, containment, now().toISOString(), expires, JSON.stringify(tags));
-      event('identity.lifecycle', 'identity.create', actor, { type: 'Identity', id }, { lifecycle: { from: null, to: 'draft' } });
+      db.prepare(`INSERT INTO identities (id, kind, display_name, owner, parent, purpose, backend, status, containment, created_at, expires_at, tags, profile_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`).run(id, kind, displayName, owner, parent, purpose, backend, containment, now().toISOString(), expires, JSON.stringify(tags), profile);
+      event('identity.lifecycle', 'identity.create', actor, { type: 'Identity', id }, { lifecycle: { from: null, to: 'draft' }, profile });
       return shape(row(id));
     },
 

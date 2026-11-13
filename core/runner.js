@@ -151,7 +151,7 @@ export function createRunner({
       return new RunnerError(reason);
     };
 
-    const who = /** @type {any} */ (db.prepare('SELECT status, containment, expires_at, backend FROM identities WHERE id = ?').get(identity));
+    const who = /** @type {any} */ (db.prepare('SELECT status, containment, expires_at, backend, profile_id FROM identities WHERE id = ?').get(identity));
     if (!who) throw refuse('unknown identity');
     if (who.status !== 'active') throw refuse(`the identity is ${who.status}`);
     if (who.expires_at != null && !(Date.parse(who.expires_at) > now().getTime())) throw refuse('the identity has expired');
@@ -188,7 +188,7 @@ export function createRunner({
     /** @type {Awaited<ReturnType<typeof startEgressProxy>> | null} */
     let proxy = null;
     // The session's view of the MCP gateway, served on its proxy port; its token dies with it.
-    const gw = gateway?.forSession({ id, identity, workspace: ws, attended, policy });
+    const gw = gateway?.forSession({ id, identity, profile: who.profile_id, workspace: ws, attended, policy });
     const cleanup = async () => {
       await gw?.close();
       if (proxy) await proxy.close();

@@ -92,7 +92,9 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
   };
 
   return {
-    list: () => /** @type {any[]} */ (db.prepare('SELECT * FROM standing_grants ORDER BY id').all()).map(shape),
+    /** @param {string} [profile] only grants for that profile's identities */
+    list: (profile) => /** @type {any[]} */ (profile === undefined ? db.prepare('SELECT * FROM standing_grants ORDER BY id').all()
+      : db.prepare('SELECT s.* FROM standing_grants s JOIN identities i ON i.id = s.identity_id WHERE i.profile_id = ? ORDER BY s.id').all(String(profile))).map(shape),
     /** @param {unknown} id */
     get: (id) => shape(must(id)),
 

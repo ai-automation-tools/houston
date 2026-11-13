@@ -6,6 +6,7 @@ import path from 'node:path';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
 import { OPERATOR, RegistryError, createRegistry, ensureOperator } from '../../core/identities.js';
+import { createProfiles } from '../../core/profiles.js';
 
 const NOW = new Date('2026-11-12T12:00:00Z');
 
@@ -39,7 +40,7 @@ test('create makes a draft owned by the caller, audited, in the schema\'s shape'
   const s = setup(t);
   const id = s.agent('local:dev-shell', { purpose: 'Try the harness', backend: 'codex', tags: ['h1'], expiresAt: '2027-01-01T00:00:00Z' });
   assert.deepEqual(id, {
-    id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell', owner: OPERATOR, parent: null, purpose: 'Try the harness', backend: 'codex',
+    id: 'local:dev-shell', kind: 'ai-agent', profile: 'default', displayName: 'Dev shell', owner: OPERATOR, parent: null, purpose: 'Try the harness', backend: 'codex',
     status: 'draft', containment: 'container', createdAt: NOW.toISOString(), lastUsedAt: null, expiresAt: '2027-01-01T00:00:00.000Z', retiredAt: null,
     reviewedAt: null, reviewBy: null, tags: ['h1'], grants: [],
   });
@@ -154,4 +155,20 @@ test('reach groups live grants by type and effect, leaves out expired ones, and 
   assert.deepEqual([r.enforced, r.backend.name, r.backend.missingHosts], [true, 'codex', ['auth.openai.com:443', 'api.openai.com:443']]);
   assert.deepEqual(r.standing, []);
   assert.throws(() => s.reg.reach('local:nobody'), fails('not_found'));
+});
+
+test('an identity belongs to one profile: made there, listed there with the operator, and owned only within it', (t) => {
+  const s = setup(t);
+  createProfiles({ db: s.db, audit: s.audit }).create({ id: 'lab', displayName: 'Lab' });
+  s.agent('local:home-agent');
+  const lab = s.agent('local:lab-agent', { profile: 'lab' });
+  assert.equal(lab.profile, 'lab');
+  assert.equal(s.events().at(-1).profile, 'lab');
+  assert.deepEqual(s.reg.list({ profile: 'lab' }).map((i) => i.id), ['local:lab-agent', OPERATOR]);
+  assert.deepEqual(s.reg.list({ profile: 'default' }).map((i) => i.id), ['local:home-agent', OPERATOR]);
+  assert.throws(() => s.agent('local:x', { profile: 'nope' }), fails('bad_request', /profile nope/));
+  assert.throws(() => s.reg.list({ profile: 'nope' }), fails('bad_request'));
+  assert.throws(() => s.agent('local:y', { profile: 'lab', owner: 'local:home-agent' }), fails('bad_request', /in profile default, not lab/));
+  assert.throws(() => s.reg.create({ id: 'local:sub', kind: 'sub-agent', displayName: 'S', parent: 'local:home-agent', profile: 'lab' }, OPERATOR), fails('bad_request', /not lab/));
+  assert.equal(s.agent('local:z', { profile: 'lab', owner: OPERATOR }).profile, 'lab', 'the operator owns in every profile');
 });

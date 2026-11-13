@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H5-8B5CF6?style=for-the-badge" alt="Milestone: Harness H5">
-  <img src="https://img.shields.io/badge/schema-v8-2ea44f?style=for-the-badge" alt="Schema v8">
+  <img src="https://img.shields.io/badge/schema-v9-2ea44f?style=for-the-badge" alt="Schema v9">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -31,6 +31,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
+| [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
 | [**vault.js**](vault.js) | The vault: named secrets sealed with DPAPI and entropy only the Core holds. Set, list and delete from the Control API; values go only to the gateway, for an MCP server's environment. |
@@ -66,6 +67,8 @@ It sits under the user profile on purpose. A session container is denied the pro
 
 The folder holds `core.db` (plus its `-wal` file while the Core runs), `vault.key` (the vault's entropy), the `audit\` folder, the `transcripts\` folder and, while the Core runs, `control.json`.
 
+Beside it are `houston-agents\` (each identity's CLI home, where it signs in) and `houston-profiles\` (a folder per [profile](#-profiles)). The profiles folder is a global deny: no grant opens it for any session. The CLI homes can't be one: every launch opens its own home there, and a launch refuses any folder that overlaps a global deny.
+
 **Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on the folder are kept: one you chose with `HOUSTON_CORE_DATA` may have some on purpose, and a folder made by an elevated process carries one for Administrators, who are outside the threat model anyway ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)).
 
 ## 🔒 Single-instance lock
@@ -74,15 +77,16 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v8
+## 🧱 Schema v9
 
 | Table | Holds |
 |:---|:---|
-| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
+| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due; since v9, its profile. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
 | `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
-| `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. |
+| `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. Since v9, its profile. |
+| `profiles` | Each profile (v9): an id, a display name and when it was made. `default` always exists, and every row from before v9 is in it. |
 | `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
 
 The enums are `CHECK` constraints, so a bad row is refused by the database whatever code wrote it. Audit events are not in the database: they go to JSON-lines files, described below.
@@ -140,7 +144,7 @@ check(db, {
 The order, from the [scope rules](../docs/product/harness-requirements.md#scope-rules):
 
 1. **The identity** must exist, be `active` and not have expired.
-2. **A global deny** wins over every grant. `globalDenies()` lists them: the Core's data folder, other profiles' folders, and credential stores under the profile (`.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, the GitHub CLI's folder, `.git-credentials`, `_netrc`, DPAPI keys, Credential Manager and the Windows vault).
+2. **A global deny** wins over every grant. `globalDenies()` lists them: the Core's data folder, every profile's folder (`houston-profiles`), and credential stores under the profile (`.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, the GitHub CLI's folder, `.git-credentials`, `_netrc`, DPAPI keys, Credential Manager and the Windows vault).
 3. **An explicit deny grant** wins over any allow or ask, however narrow.
 4. **The narrowest allow or ask** decides: the pattern with the most literal characters. On a tie, `ask` beats `allow`.
 5. **Nothing matches:** deny.
@@ -447,6 +451,7 @@ A disk error stops that transcript, not the session. Checked by `npm run smoke` 
 - **Sealed twice.** Each value is a DPAPI blob for the operator's account, made with 32 bytes of entropy kept in `vault.key` in the data folder. Spike S5 found that a contained process, running as the same Windows user, can decrypt a plain DPAPI blob it is handed, but not one made with entropy it never sees. The blob and the key both sit in the data folder, which every session is denied. Off Windows (Linux CI) the same key seals values with AES-256-GCM.
 - **In, never out.** `secret.set`, `secret.list` (names and dates) and `secret.delete`. There is no `secret.get`: a value leaves the vault only through `reveal`, which the gateway calls to put it into a server's environment. Each change is a `secret.change` audit event with the name, never the value or a hash of it.
 - **Setting one.** `ctl` reads the value from stdin, so it isn't in shell history or a process list: `Get-Content token.txt | npm run ctl -- secret.set name=github-token`, or run it with no pipe and type it (not echoed).
+- **Per profile** (H5). A secret belongs to the profile it was set in (`secret.set ... profile=lab`; `default` otherwise), `secret.list profile=` lists one profile's, and `reveal` gives a value only to a server in the same profile: another profile's secret is as good as missing. A name is unique across profiles, so setting one that exists in another profile is refused rather than moved.
 - **Redaction by value.** `vault.redact` replaces every stored value of 8 characters or more with `[REDACTED:secret:<name>]`. Tool results, the approval card's argument preview and transcripts all go through it.
 
 ## 🚪 MCP gateway
@@ -495,6 +500,17 @@ Checked on 2026-11-13 by [`spikes/h3-host-servers.mjs`](../spikes/h3-host-server
 **A call.** Tools are `<server>.<tool>` to the agent and `tool:<server>/<tool>` in a grant. `tools/list` shows a pinned server's tools that the identity isn't denied. `tools/call` is one policy check: `deny` is refused without the server hearing of it, `ask` waits on a card, `allow` goes through. Every call is an `mcp.tool_call` event with the arguments as a clipped, redacted preview and a SHA-256, the decision, and the outcome. A refused call comes back as a tool error (`isError`) that says why.
 
 **A result.** Every vault value is redacted, the first content block says it is untrusted content from that server, `_meta["houston/untrusted-content"]` says the same, and anything over 1 MB is cut block by block. Checked in real containers by [`spikes/h3-gateway.mjs`](../spikes/h3-gateway.mjs) on 2026-11-12: a contained agent listed and called the stub server's tools through its proxy and straight at the port, the ungranted tool was refused, and the server's injected token came back only as its marker; the value was in neither the agent's environment nor the audit log.
+
+## 👥 Profiles
+
+[`profiles.js`](profiles.js) is the isolation unit for a workstream (CORE-06, H5): nothing crosses profiles unless the operator copies it.
+
+- **What belongs to one.** Each identity (`identity.create ... profile=lab`), so its grants, sessions and standing grants; each MCP server, through its identity (`mcp.add ... profile=lab`); and each secret. Without `profile`, it's `default`, which always exists and holds everything from before schema v9. The operator acts in every profile.
+- **What the Core enforces.** A session's gateway lists and calls only its own profile's servers: another profile's server answers as if it didn't exist. A server gets only its own profile's secrets. An identity's owner and parent are in its profile. A profile's folder (`houston-profiles\<id>`, beside the data folder) is a global deny, like every other profile's, so no grant opens it.
+- **Making one.** `npm run ctl -- profile.create id=lab displayName=Lab` makes the row and its folder, with a `profile.change` event. Ids are lower-case letters, digits, `-` and `_`, up to 40, and are never reused: there's no delete.
+- **Listing by profile.** `identity.list`, `mcp.list`, `secret.list` and `standing.list` take an optional `profile`; without it they list every profile, and each row says its profile. The window's profile switcher comes with H5's window half.
+
+AT-01 checks it: a file planted in a second profile's folder can't be read from a session, and a read grant on that folder is refused at `session.start`.
 
 ## ⏰ Standing grants
 
@@ -559,25 +575,27 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `transcript.get` | `id` | `{ id, text, bytes, truncated }`: the session's transcript, its newest 1 MB, already redacted; `not_found` when there is none ([Transcripts](#-transcripts)) |
 | `stop.all` | none | `{ stopped, paused }`: the sessions stopped and the standing grants paused (first, so no scheduled run starts in between). One `stop.all` audit event (resource `Core` / `sessions`) by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
-| `identity.list` | optional `status` | identities with their grants |
+| `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
+| `profile.create` | `id`, `displayName` | the new profile; its folder is made ([Profiles](#-profiles)) |
+| `identity.list` | optional `status`, `profile` | identities with their grants and profile; with `profile`, that profile's and the operator |
 | `identity.get` | `id` | one identity with its grants |
-| `identity.create` | `id`, `kind`, `displayName`; optional `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
+| `identity.create` | `id`, `kind`, `displayName`; optional `profile` (default `default`), `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
 | `identity.activate` | `id`; optional `reason` | the identity |
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
 | `identity.review` | `id`; optional `days` (1 to 366, default 90) | the identity, with `reviewedAt` now and `reviewBy` that many days on |
 | `identity.reach` | `id` | what its grants open now: `types` (live grants by type and effect), `expired`, `notApplied`, `alwaysDenied`, `backend` (with `missingHosts`), `standing`, `enforced` ([Identity registry](#-identity-registry)) |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
 | `grant.remove` | `id` | the grant removed |
-| `mcp.list`, `mcp.get` | `name` for get | registrations: `name`, `identity`, `transport`, `command` (or `url` for http), `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
-| `mcp.add` | `name`, then `command`, or `transport=http` and `url`; optional `transport` (`container`, the default, or `host`), `env` (an http server's request headers), `pathDirs` | the registration, `discovered`, with the full command; its identity `local:mcp/<name>` is made active with no grants, `unconfined` unless it runs in a container |
+| `mcp.list`, `mcp.get` | `name` for get; optional `profile` for list | registrations: `name`, `identity`, `transport`, `command` (or `url` for http), `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
+| `mcp.add` | `name`, then `command`, or `transport=http` and `url`; optional `profile` (its identity's; default `default`), `transport` (`container`, the default, or `host`), `env` (an http server's request headers), `pathDirs` | the registration, `discovered`, with the full command; its identity `local:mcp/<name>` is made active with no grants, `unconfined` unless it runs in a container |
 | `mcp.update` | `name`, `url` | an http server at its new address; its state stays, and its tools are still checked against the pin at every start |
 | `mcp.install` | `name` | runs it once (in its container, on the host, or over http) and reads its tools: `installed` (or `needs_review` if it was pinned and the list changed) |
 | `mcp.pin` | `name`, `hash` (the `toolsHash` the operator read) | `pinned`: sessions get its tools. `conflict` when the hash isn't the list as last read |
 | `mcp.disable` | `name` | `disabled`: calls are refused at once; `mcp.pin` enables it again |
-| `secret.set` | `name`, `value` | `{ name, created_at, updated_at, last_used_at }`, never the value. `ctl` reads the value from stdin ([Vault](#-vault)) |
-| `secret.list` | none | names and dates |
+| `secret.set` | `name`, `value`; optional `profile` | `{ name, profile, created_at, updated_at, last_used_at }`, never the value. `ctl` reads the value from stdin ([Vault](#-vault)) |
+| `secret.list` | optional `profile` | names, profiles and dates |
 | `secret.delete` | `name` | `{ name, deleted }` |
-| `standing.list`, `standing.get` | `id` for get | standing grants: `id`, `identity`, `workspace`, `command`, `pathDirs`, `maxMinutes`, `expiresAt`, `status`, `lastRunAt`, `grantsChanged` (a run is refused until it is approved again), `running` (its live session) ([Standing grants](#-standing-grants)) |
+| `standing.list`, `standing.get` | `id` for get; optional `profile` for list | standing grants: `id`, `identity`, `workspace`, `command`, `pathDirs`, `maxMinutes`, `expiresAt`, `status`, `lastRunAt`, `grantsChanged` (a run is refused until it is approved again), `running` (its live session) ([Standing grants](#-standing-grants)) |
 | `standing.create` | `id`, `identity`, `workspace`, `command` (or `prompt`, for a Claude Code identity), `maxMinutes`, `expiresAt`; optional `pathDirs` | the standing grant, active, approving the identity's grants as they are now |
 | `standing.update` | `id`; optional `maxMinutes`, `expiresAt` | approved again with the identity's grants as they are now |
 | `standing.pause`, `standing.resume`, `standing.revoke` | `id` | the standing grant; revoked is for good |

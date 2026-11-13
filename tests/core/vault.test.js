@@ -7,6 +7,7 @@ import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
 import { ensureOperator } from '../../core/identities.js';
 import { VaultError, openVault } from '../../core/vault.js';
+import { createProfiles } from '../../core/profiles.js';
 
 /** @param {import('node:test').TestContext} t */
 function setup(t) {
@@ -25,7 +26,7 @@ test('the vault stores a value sealed, lists names only, and never writes the va
   const { dir, db, audit } = setup(t);
   const vault = await openVault({ db, dir, audit });
   const row = vault.set('github-token', VALUE);
-  assert.deepEqual(Object.keys(row).sort(), ['created_at', 'last_used_at', 'name', 'updated_at']);
+  assert.deepEqual(Object.keys(row).sort(), ['created_at', 'last_used_at', 'name', 'profile', 'updated_at']);
   assert.deepEqual(vault.list().map((s) => s.name), ['github-token']);
   // Sealed in the database: the bytes don't hold the value.
   const blob = Buffer.from(/** @type {any} */ (db.prepare('SELECT blob FROM secrets').get()).blob);
@@ -75,4 +76,17 @@ test('redact replaces every stored value, longest first, and leaves short ones',
   // A change is seen at once.
   vault.remove('short');
   assert.equal(vault.redact(VALUE), VALUE);
+});
+
+test('a secret belongs to one profile: listed there, revealed only to a server there, and its name not reused in another', async (t) => {
+  const { dir, db, audit } = setup(t);
+  createProfiles({ db, audit }).create({ id: 'lab', displayName: 'Lab' });
+  const vault = await openVault({ db, dir, audit });
+  vault.set('lab-token', VALUE, undefined, 'lab');
+  assert.deepEqual(vault.list('lab').map((s) => [s.name, s.profile]), [['lab-token', 'lab']]);
+  assert.deepEqual(vault.list('default'), []);
+  assert.equal(vault.reveal('lab-token', 'lab'), VALUE);
+  assert.throws(() => vault.reveal('lab-token'), (e) => e instanceof VaultError && e.code === 'not_found' && /in profile default/.test(e.message));
+  assert.throws(() => vault.set('lab-token', 'other-value-x'), (e) => e instanceof VaultError && e.code === 'conflict');
+  assert.throws(() => vault.set('x-token', VALUE, undefined, 'nope'), (e) => e instanceof VaultError && e.code === 'bad_request');
 });
