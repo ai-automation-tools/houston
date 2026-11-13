@@ -554,6 +554,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       onStopped: listen('agents-stopped'),
     },
     logs: harness.logs,
+    integrations: harness.integrations,
     approvals: {
       ...harness.approvals,
       onChanged: listen('approvals'),

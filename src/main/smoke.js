@@ -953,6 +953,29 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           tabs.close(sTab.id);
         }
         agentRun.settingsKey = Menu.getApplicationMenu()?.items.flatMap((m) => m.submenu?.items ?? []).find((m) => m.label === 'Settings')?.accelerator ?? null;
+
+        // The Integrations tab over this Core: a server registered with ctl (after Settings, which counts identities), then Install and Pin pressed in the tab.
+        const stub = fileURLToPath(new URL('../../tests/core/stub-mcp-server.js', import.meta.url));
+        await ctl('mcp.add', { name: 'smoke-stub', transport: 'host', command: `"${node}" "${stub}"` });
+        agentRun.integrations = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const until = async (ok) => { for (let i = 0; i < 300 && !ok(); i++) await pause(100); return ok(); };
+          const row = () => [...document.querySelectorAll('#integrations-list .row')].find((r) => r.querySelector('.name')?.textContent === 'smoke-stub');
+          const buttons = () => [...(row()?.querySelectorAll('.acts button') ?? [])];
+          const press = (start) => buttons().find((b) => b.textContent.startsWith(start))?.click();
+          document.querySelector('.side-tabs [data-panel="integrations"]').click();
+          await until(row);
+          const before = { buttons: buttons().map((b) => b.textContent), runs: row()?.nextElementSibling?.querySelector('.sub')?.textContent ?? '' };
+          press('Install');
+          await until(() => buttons().some((b) => b.textContent.startsWith('Pin')));
+          const names = [...document.querySelectorAll('#integrations-list .row .name')].map((n) => n.textContent);
+          const read = { buttons: buttons().map((b) => b.textContent), tools: names.filter((n) => ['echo', 'env', 'big'].includes(n)).sort() };
+          press('Pin');
+          await until(() => /tools served/.test(row()?.querySelector('.sub')?.textContent ?? ''));
+          return { before, read, pinned: row()?.querySelector('.sub')?.textContent ?? '', sections: [...document.querySelectorAll('#integrations-list .group-title')].map((g) => g.textContent) };
+        })()`);
+        agentRun.integrations.state = (await ctl('mcp.get', { name: 'smoke-stub' })).state;
+        await shot('integrations.png', wc);
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -991,6 +1014,11 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
           && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
           && agentRun.settingsKey === 'CmdOrCtrl+,'), { ...st, key: agentRun?.settingsKey });
+      const ig = agentRun?.integrations;
+      check('the Integrations tab shows a registered server\'s command before it runs, installs it, lists the tools a pin would serve, and pins them',
+        Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'
+          && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
+          && ig.sections.join() === 'MCP servers (1),Secrets (0),Agent backends'), ig);
       const tr = agentRun?.transcript;
       check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
         Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0

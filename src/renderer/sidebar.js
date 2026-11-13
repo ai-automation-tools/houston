@@ -84,6 +84,8 @@ export class Sidebar {
       agentsFolder: /** @type {HTMLElement} */ (document.getElementById('agents-folder')),
       logs: /** @type {HTMLElement} */ (document.getElementById('panel-logs')),
       logsList: /** @type {HTMLElement} */ (document.getElementById('logs-list')),
+      integrations: /** @type {HTMLElement} */ (document.getElementById('panel-integrations')),
+      integrationsList: /** @type {HTMLElement} */ (document.getElementById('integrations-list')),
       results: /** @type {HTMLElement} */ (document.getElementById('panel-search')),
       search: /** @type {HTMLInputElement} */ (document.getElementById('search')),
       status: /** @type {HTMLElement} */ (document.getElementById('hub-status')),
@@ -122,6 +124,7 @@ export class Sidebar {
     document.getElementById('agents-refresh')?.addEventListener('click', () => this.loadAgents());
     api.agents.onChanged(() => { if (this.current === 'agents') this.loadAgents(); });
     document.getElementById('logs-refresh')?.addEventListener('click', () => this.loadLogs());
+    document.getElementById('integrations-refresh')?.addEventListener('click', () => this.loadIntegrations());
     for (const f of ['identity', 'session', 'result']) document.getElementById(`logs-${f}`)?.addEventListener('change', () => this.loadLogs());
     api.recent.onChanged((/** @type {any[]} */ list) => { this.recent = list; this.renderRecent(); });
     /** @type {import('./shared/mcplog.js').LogEntry[]} */
@@ -794,6 +797,61 @@ export class Sidebar {
   }
 
   /**
+   * The Integrations tab: the gateway's MCP servers, with the full command or address and the
+   * tools a pin would serve; the vault's secret names; the agent backends. Install, pin and
+   * disable go to the Core by name. Registering a server and setting a secret are `ctl`'s.
+   */
+  async loadIntegrations() {
+    const host = this.el.integrationsList;
+    let info;
+    try {
+      info = await this.api.integrations.info();
+    } catch (err) {
+      info = { error: errText(err) };
+    }
+    host.innerHTML = '';
+    if (info.error) { host.append(note(info.error, true)); return; }
+    /** @param {string} cls @param {string} pad @param {string} icon @param {string} name @param {string} sub @param {string} [title] */
+    const line = (cls, pad, icon, name, sub, title = '') => {
+      const row = document.createElement('div');
+      row.className = `row dev-server ${cls}`;
+      row.style.paddingLeft = pad;
+      row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
+      q(row, '.icon').textContent = icon;
+      q(row, '.name').textContent = name;
+      q(row, '.sub').textContent = sub;
+      row.title = title;
+      return row;
+    };
+
+    host.append(groupTitle(`MCP servers (${info.servers.length})`));
+    if (!info.servers.length) host.append(note('None registered. Add one with npm run ctl -- mcp.add (core/README.md, MCP gateway); Houston adds its own when the Core is running.'));
+    for (const r of /** @type {import('./shared/integrations.js').ServerRow[]} */ (info.servers)) {
+      const row = line(r.tone, '10px', r.icon, r.name, r.sub, [`${r.name} · ${r.where} · ${r.state.replace('_', ' ')}`, `Runs: ${r.runs}`, ...r.env].join('\n'));
+      for (const a of r.actions) {
+        q(row, '.acts').append(button(a.label, a.title, () => {
+          const all = [...row.querySelectorAll('button')];
+          all.forEach((b) => { b.disabled = true; });
+          if (a.act === 'install') toast(`Reading ${r.name}'s tools…`);
+          const call = a.act === 'pin' ? this.api.integrations.pin(r.name, r.hash) : this.api.integrations[a.act](r.name);
+          call.then(() => this.loadIntegrations(), (/** @type {unknown} */ err) => { toast(errText(err)); all.forEach((b) => { b.disabled = false; }); });
+        }));
+      }
+      host.append(row);
+      // What it runs, always in view before it first runs.
+      host.append(line('idle', '26px', '›', r.where, r.runs, [r.runs, ...r.env].join('\n')));
+      if (r.showTools) for (const t of r.tools) host.append(line('idle', '26px', '·', t.name, (t.description ?? '').split('\n')[0], t.description ?? ''));
+    }
+
+    host.append(groupTitle(`Secrets (${info.secrets.length})`));
+    if (!info.secrets.length) host.append(note('The vault is empty. Set one with npm run ctl -- secret.set name=<name>, which reads the value from stdin. Values never come back out.'));
+    for (const s of info.secrets) host.append(line('idle', '10px', '🔑', s.name, s.sub, `${s.name}\nA server gets it only with a secret:${s.name} use grant.`));
+
+    host.append(groupTitle('Agent backends'));
+    for (const b of info.backends) host.append(line(b.installed ? 'ready' : 'exited', '10px', b.installed ? '●' : '○', b.name, b.sub, b.title));
+  }
+
+  /**
    * The Logs tab: the Core's audit events, newest first, for the identity, session and decision
    * picked. A click shows an event whole; Only this session filters to its session.
    */
@@ -963,12 +1021,14 @@ export class Sidebar {
     this.el.dev.hidden = name !== 'dev';
     this.el.agents.hidden = name !== 'agents';
     this.el.logs.hidden = name !== 'logs';
+    this.el.integrations.hidden = name !== 'integrations';
     if (name === 'cron' && !this.cronLoaded) this.loadCron();
     if (name === 'news' && !this.newsLoaded) this.loadNews();
     if (name === 'git') this.loadGit();
     if (name === 'dev') this.loadDev();
     if (name === 'agents') this.loadAgents();
     if (name === 'logs') this.loadLogs();
+    if (name === 'integrations') this.loadIntegrations();
   }
 
   focusSearch() {
@@ -984,7 +1044,7 @@ export class Sidebar {
       this.show(this.current);
       return;
     }
-    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = this.el.logs.hidden = true;
+    this.el.files.hidden = this.el.bookmarks.hidden = this.el.recent.hidden = this.el.mcp.hidden = this.el.cron.hidden = this.el.git.hidden = this.el.dev.hidden = this.el.news.hidden = this.el.agents.hidden = this.el.logs.hidden = this.el.integrations.hidden = true;
     res.hidden = false;
     res.innerHTML = '';
 

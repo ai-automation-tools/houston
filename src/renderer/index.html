@@ -30,6 +30,7 @@
         <button role="tab" data-panel="dev" aria-selected="false" title="Dev servers from the workspace's package.json">Dev</button>
         <button role="tab" data-panel="agents" aria-selected="false" title="Agent identities and their contained sessions, from the Houston Core">Agents</button>
         <button role="tab" data-panel="logs" aria-selected="false" title="The Houston Core's audit log: what each agent did and what was decided">Logs</button>
+        <button role="tab" data-panel="integrations" aria-selected="false" title="MCP servers behind the Core's gateway, the vault's secret names, and agent backends">Integrations</button>
       </nav>
       <section id="panel-files" class="panel" role="tabpanel"></section>
       <section id="panel-bookmarks" class="panel" role="tabpanel" hidden>
@@ -89,6 +90,13 @@
           <button id="logs-refresh" title="Read the audit log again">Refresh</button>
         </div>
         <div id="logs-list" aria-live="polite"></div>
+      </section>
+      <section id="panel-integrations" class="panel" role="tabpanel" aria-live="polite" hidden>
+        <div class="panel-tools git-tools">
+          <span class="git-branch">Core gateway</span>
+          <button id="integrations-refresh" title="Ask the Core again">Refresh</button>
+        </div>
+        <div id="integrations-list"></div>
       </section>
       <section id="panel-search" class="panel" role="region" aria-label="Search results" hidden></section>
     </aside>

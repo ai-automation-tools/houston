@@ -92,8 +92,17 @@ The **Agents** tab is the harness's: it lists the agent identities in the [Houst
 - Sessions belong to the Core. Closing Houston closes their tabs, which stops them; one started elsewhere (`npm run ctl`) and never opened in a tab keeps running and shows here.
 - **Approvals.** When a grant says *ask* (`effect=ask`), the session's request waits and a card shows above the terminals: which identity, exactly what it wants (`connect to example.com:443`), in which workspace, and how long until it's denied on its own (2 minutes). **Allow once** lets that request through, **Allow for this session** lets it and the same request again until the session ends, and **Deny** refuses it; Deny has the focus, so a stray Enter can't allow anything. Several waiting show one at a time, oldest first, with a count. The Core holds them, so closing Houston just lets them time out as denied.
 - **Stop All.** The red **⏹ Stop All** button at the right end of the address bar, **Ctrl+Shift+Backspace**, or **Stop all agent sessions** in the tray menu ends every session the Core is running, at once and without asking (it's the emergency stop). A note in the corner says how many it stopped. Your own terminals, dev servers and browser tabs are left alone. If the window itself hangs, the tray menu still works: it goes straight to the Core. So does `npm run ctl -- stop.all`.
-- **MCP tools.** Each session has the Core's MCP gateway, and Claude Code and Codex are pointed at it when they start. An agent sees the tools of the MCP servers you pinned that its grants allow (`tool:<server>/<tool>`), named `<server>.<tool>`; a tool under an *ask* grant shows its card with the tool and its arguments. Servers and the secrets they use are added with `npm run ctl` for now ([MCP gateway](../../core/README.md#-mcp-gateway), [Vault](../../core/README.md#-vault)); the Integrations screen comes next.
+- **MCP tools.** Each session has the Core's MCP gateway, and Claude Code and Codex are pointed at it when they start. An agent sees the tools of the MCP servers you pinned that its grants allow (`tool:<server>/<tool>`), named `<server>.<tool>`; a tool under an *ask* grant shows its card with the tool and its arguments. Servers and the secrets they use are added with `npm run ctl` ([MCP gateway](../../core/README.md#-mcp-gateway), [Vault](../../core/README.md#-vault)) and installed and pinned from the Integrations tab (below).
 - Identities and grants are made with `npm run ctl` for now ([Backends](../../core/README.md#-backends)); the Identity Center comes later on the [roadmap](../ROADMAP.md).
+
+## 🔌 Integrations
+
+The **Integrations** tab is what the Core's gateway serves. It needs the Core running.
+
+- **MCP servers.** Each one with how it runs (contained; on the host or over http, both marked unconfined), its full command or address, and its state. Servers that need a decision come first. **Install** runs a new one once and reads its tools; the tools it read are listed under it, and **Pin N tools** serves them to sessions whose identities are granted them. A pinned server whose tools change is held for review until you pin it again. **Read again** checks a pinned one, **Disable** stops serving it at once and **Enable** brings it back. Houston adds its own MCP server here whenever the Core is running.
+- **Secrets.** The vault's names, when each was set, and when a server last got it. Values never come back out.
+- **Agent backends.** Claude Code and Codex, and whether each is installed. Hover for the hosts it reaches and how to sign in the first time.
+- Adding a server or setting a secret is `npm run ctl`'s, so no command line or secret value goes through the window.
 
 ## 📜 Logs
 
