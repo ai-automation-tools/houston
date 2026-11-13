@@ -1,4 +1,4 @@
-// Call the running Core's Control API by hand, until the window does it (H2).
+// Call the running Core's Control API from a terminal. The window calls it through src/main/core.js.
 //   node core/ctl.js <method> [key=value ...]       or   node core/ctl.js <method> '<JSON params>'
 //   npm run ctl -- identity.create id=local:dev-shell kind=ai-agent displayName="Dev shell"
 // A value that parses as JSON (a number, true, ["a","b"]) is taken as JSON, anything else as text.
