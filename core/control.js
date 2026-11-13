@@ -23,12 +23,13 @@ import { StandingError } from './standing.js';
 import { ProfileError } from './profiles.js';
 import { SkillError } from './skills.js';
 import { MemoryError } from './memory.js';
+import { discover } from './runtimes.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'profile.list', 'profile.create', 'skill.list', 'skill.install', 'skill.remove',
-  'memory.list', 'memory.add', 'memory.review', 'memory.remove',
+  'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
@@ -176,10 +177,11 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       const program = p.program ?? {};
       if (typeof program !== 'object' || Array.isArray(program)) throw new ControlError('bad_request', 'program is an object');
       if (p.attended !== undefined && typeof p.attended !== 'boolean') throw new ControlError('bad_request', 'attended is true or false');
+      const runtime = p.runtime === undefined ? undefined : await localRuntime(p.runtime, p.model);
       const s = await runner.start({
         // No command for an identity with a backend: its manifest sets it.
         identity: str(p.identity, 'identity'), workspace: str(p.workspace, 'workspace'), command: p.command === undefined ? undefined : str(p.command, 'command'),
-        attended: p.attended, size: p.size,
+        attended: p.attended, size: p.size, ...(runtime ? { runtime } : {}),
         program: { readonly: strings(program.readonly, 'program.readonly'), pathDirs: strings(program.pathDirs, 'program.pathDirs'), env: program.env },
       });
       tap(s);
@@ -219,6 +221,8 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
     'profile.list': () => need(profiles, 'profiles').list(),
     'profile.create': (p) => need(profiles, 'profiles').create(p),
+    // Local model runtimes answering on this machine now (runtimes.js).
+    'runtime.list': () => discover(),
     'skill.list': (p) => need(skills, 'skills').list(p.profile),
     'skill.install': (p) => need(skills, 'skills').install(p),
     'skill.remove': (p) => need(skills, 'skills').remove(p.name, p.profile),
@@ -269,6 +273,14 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
   };
 
   /** @template T @param {T | undefined} part @param {string} what @returns {T} */
+  /** A runtime by id, answering now, with one of its models. @param {unknown} id @param {unknown} model */
+  async function localRuntime(id, model) {
+    const r = (await discover()).find((x) => x.id === id);
+    if (!r) throw new ControlError('not_found', `no local runtime ${String(id)} is answering; runtime.list shows the ones that are`);
+    if (typeof model !== 'string' || !r.models.includes(model)) throw new ControlError('bad_request', `model is one of ${r.name}'s: ${r.models.slice(0, 20).join(', ')}`);
+    return { id: r.id, name: r.name, port: r.port, model, apis: r.apis };
+  }
+
   function need(part, what) {
     if (!part) throw new ControlError('not_found', `this Core has no ${what}`);
     return part;

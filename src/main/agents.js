@@ -9,7 +9,7 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
-import { backendRows, memoryDecision, memoryId, memoryRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
+import { backendRows, memoryDecision, memoryId, memoryRows, runtimeRows, secretRows, serverName, serverRows, standingId, standingRows, toolsHashArg } from '../shared/integrations.js';
 import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
 import { identitiesBody } from '../shared/identities.js';
@@ -104,7 +104,8 @@ export const integrations = {
       const standing = await core.call('standing.list', { profile }).catch(() => null);
       // And none from before H6's memory.
       const memory = await core.call('memory.list', { profile }).catch(() => null);
-      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()), memory: memory && memoryRows(memory) };
+      const runtimes = await core.call('runtime.list', {}, 15_000).catch(() => null);
+      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()), memory: memory && memoryRows(memory), runtimes: runtimes && runtimeRows(runtimes) };
     } catch (e) {
       return { error: /** @type {any} */ (e).code === 'unknown_method' ? 'The Core runs older code than the app: end and run the Houston Core task.' : why(e) };
     }

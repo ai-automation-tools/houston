@@ -9,8 +9,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { BackendError, gatewayArgs, listBackends, resolveBackend } from './backends.js';
+import { BACKENDS, BackendError, gatewayArgs, listBackends, quote, resolveBackend } from './backends.js';
+
+/** A backend's way to use a local runtime, if it has one. @param {string} name */
+const BACKEND_LOCAL = (name) => (Object.hasOwn(BACKENDS, name) ? BACKENDS[/** @type {keyof typeof BACKENDS} */ (name)].localModel ?? null : null);
 import { startEgressProxy } from './egress.js';
+import { RELAY, relay } from './runtimes.js';
 import { LaunchError, launchRequest } from './launch.js';
 import { PathError, canonicalPath, pathKey, resolvePath } from './paths.js';
 import { decide, globalDenies, policyVersion } from './policy.js';
@@ -112,6 +116,8 @@ export function compileGrants(grants, now = new Date()) {
  * @property {number} [timeoutMs]  the container is ended after this long (a standing grant's budget); a day by default
  * @property {string} [standingGrant]  the standing grant it runs under (standing.js), recorded on the session
  * @property {string} [prompt]  for a backend identity: run this prompt unattended (the manifest's headless start) instead of the CLI
+ * @property {{ id: string, name: string, port: number, model: string, apis: Record<string, boolean> }} [runtime]  a local model runtime (runtimes.js)
+ *   for its agent CLI, reached through the session's proxy at /runtime/; the identity needs a net:127.0.0.1:<port> connect grant
  * @property {string} [parentSession]  a sub-agent's parent (delegate.js): it must be running; the child gets the parent's program
  *   folders and its CLI home, ends no later than the parent, and is stopped when the parent ends. Depth is capped at MAX_DEPTH
  */
@@ -148,7 +154,7 @@ export function createRunner({
    * @returns {Promise<Session>}
    * @throws {RunnerError} with a session.start deny event written first
    */
-  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant, prompt, parentSession }) {
+  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant, prompt, parentSession, runtime }) {
     if (typeof identity !== 'string' || !identity) throw new RunnerError('identity is an id like local:dev-codex');
     const id = crypto.randomUUID();
     const version = policyVersion(db, globals);
@@ -195,6 +201,14 @@ export function createRunner({
       ({ principal: { type: 'Identity', id: identity }, action, resource: { type, id: rid }, context: { session_id: id, attended } });
     const onWs = decide(request('file.write', 'File', ws), policy);
     if (onWs.decision !== 'allow') throw refuse(`the identity has no write grant on the workspace (${onWs.reasons.join('; ')})`);
+    // A local model runtime: granted by its port, spoken by the CLI, and relayed through the gateway's port.
+    const local = runtime ? backend ? BACKEND_LOCAL(/** @type {string} */ (who.backend)) : null : null;
+    if (runtime) {
+      if (!gateway) throw refuse('a local runtime is reached through the session\'s gateway, and this runner has none');
+      if (decide(request('net.connect', 'Host', `127.0.0.1:${runtime.port}`), policy).decision !== 'allow') throw refuse(`using ${runtime.name} needs an allow grant on net:127.0.0.1:${runtime.port} (connect)`);
+      if (backend && !local) throw refuse(`${who.backend} has no way to use a local runtime`);
+      if (local && !runtime.apis[local.api]) throw refuse(`${runtime.name} here doesn't serve the ${local.api} API ${who.backend} needs; a newer ${runtime.name} may`);
+    }
 
     let compiled;
     try { compiled = compileGrants(grants, now()); } catch (e) { throw refuse(/** @type {Error} */ (e).message); }
@@ -224,8 +238,17 @@ export function createRunner({
       if (backend) fs.mkdirSync(backend.home, { recursive: true });
       if (backend && skills) skillSet.skipped.push(...skills.link(backend.home, skillSet.mounted));
       if (compiled.net.length || askHosts.length || gw) {
+        const toRuntime = runtime && gw ? relay({
+          port: runtime.port, token: gw.token,
+          onEvent: (e) => audit.append({
+            type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: 'container' }, session_id: id,
+            resource: { type: 'Host', id: `127.0.0.1:${runtime.port}` },
+            decision: { result: e.status === 401 ? 'deny' : 'allow', policy_version: version, policy_ids: [], reasons: [e.reason] },
+            egress: { scheme: 'relay', method: e.method, path: e.path, status: e.status, runtime: runtime.id },
+          }),
+        }) : null;
         proxy = await startEgressProxy({
-          fallback: gw?.handle,
+          fallback: gw && (toRuntime ? (req, res) => (req.url?.startsWith(`${RELAY}/`) ? toRuntime(req, res) : gw.handle(req, res)) : gw.handle),
           // An `ask` waits in the approval inbox, holding the request, until the operator answers or it times out.
           check: async ({ host, port }) => {
             const d = decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() });
@@ -250,6 +273,12 @@ export function createRunner({
         // Before the unattended start's arguments: Codex's prompt follows a `--`.
         if (extra) command = [backend.command, extra, backend.tail].filter(Boolean).join(' ');
       }
+      const runtimeUrl = runtime && proxy ? `http://127.0.0.1:${proxy.port}${RELAY}/v1` : null;
+      if (local && runtimeUrl && backend) {
+        const more = local.args(runtimeUrl, /** @type {any} */ (runtime).model).map(quote).join(' ');
+        if (more) command = [command.slice(0, command.length - backend.tail.length).trimEnd(), more, backend.tail].filter(Boolean).join(' ');
+      }
+      const runtimeEnv = runtimeUrl && runtime ? { HOUSTON_RUNTIME_URL: runtimeUrl, HOUSTON_RUNTIME_MODEL: runtime.model, ...(local ? local.env(runtimeUrl, runtime.model, /** @type {any} */ (gw).token) : {}) } : {};
       req = {
         ...launchRequest({
           command, workspace: ws, temp, home, globals,
@@ -257,7 +286,7 @@ export function createRunner({
           readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? []), ...skillSet.mounted.map((s) => s.folder)], denied: compiled.denied,
           pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
           // The manifest's variables win: a caller can't point the CLI at another home, or the session at another gateway.
-          env: { ...program.env, ...backend?.env, ...mcp, ...(skillSet.mounted.length ? { HOUSTON_SKILLS: skillSet.mounted.map((s) => s.folder).join(';') } : {}) }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
+          env: { ...program.env, ...backend?.env, ...mcp, ...runtimeEnv, ...(skillSet.mounted.length ? { HOUSTON_SKILLS: skillSet.mounted.map((s) => s.folder).join(';') } : {}) }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
           proxyPort: proxy?.port, timeoutMs: timeoutMs + 60_000,
         }),
         containerName: containerName(id),
@@ -273,6 +302,7 @@ export function createRunner({
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
       network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}), ...(gw ? { gateway: true } : {}) } : { proxy: false },
       skipped: compiled.skipped,
+      ...(runtime ? { runtime: { id: runtime.id, port: runtime.port, model: runtime.model } } : {}),
       ...(skillSet.mounted.length || skillSet.skipped.length ? { skills: { mounted: skillSet.mounted.map((s) => s.name), skipped: skillSet.skipped } } : {}),
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),

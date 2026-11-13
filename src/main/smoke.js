@@ -1077,7 +1077,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('the Integrations tab shows a registered server\'s command before it runs, installs it, lists the tools a pin would serve, and pins them',
         Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'
           && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
-          && ig.sections.join() === 'MCP servers (1),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends'), ig);
+          // Local models depend on the machine, so that group is left out of the comparison.
+          && ig.sections.filter((x) => !x.startsWith('Local models')).join() === 'MCP servers (1),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends'), ig);
       check('the Integrations tab lists a standing grant with who it runs as, and Pause and Resume change it in the Core',
         Boolean(ig?.grantBefore?.sub === 'local:smoke-shell · up to 5 min' && ig.grantBefore.buttons.join() === 'Pause' && /^paused/.test(ig.grantPaused)
           && ig.grantStatus === 'active' && ig.grantChanges?.join() === 'standing.create,standing.pause,standing.resume'), ig);

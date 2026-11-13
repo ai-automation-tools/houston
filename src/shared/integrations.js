@@ -115,6 +115,25 @@ export function memoryRows(list) {
   };
 }
 
+/**
+ * The local model runtimes answering now (runtime.list, H6): what each serves, and which agent CLI can use it.
+ * @param {{ id: string, name: string, port: number, models: string[], apis: Record<string, boolean> }[]} list
+ */
+export function runtimeRows(list) {
+  const NEEDS = /** @type {const} */ ([['Codex', 'responses'], ['Claude Code', 'messages']]);
+  return list.map((r) => {
+    const can = NEEDS.filter(([, api]) => r.apis[api]).map(([cli]) => cli);
+    return {
+      id: r.id, name: `${r.name} :${r.port}`,
+      sub: `${r.models.length} model${r.models.length === 1 ? '' : 's'} · ${can.length ? `for ${can.join(' and ')}` : 'no agent CLI can use it yet'}`,
+      title: [`${r.name} on 127.0.0.1:${r.port}. APIs: ${Object.entries(r.apis).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none'}.`,
+        `Models: ${r.models.slice(0, 30).join(', ')}${r.models.length > 30 ? ', …' : ''}`,
+        `A session uses it with session.start runtime=${r.id} model=<model>; its identity needs net:127.0.0.1:${r.port} (connect).`,
+        can.length < NEEDS.length ? `${NEEDS.filter(([, api]) => !r.apis[api]).map(([cli, api]) => `${cli} needs the ${api} API`).join('; ')}: a newer ${r.name} may serve it.` : ''].filter(Boolean).join('\n'),
+    };
+  });
+}
+
 /** A standing grant's id, as core/standing.js STANDING_ID. */
 const STANDING = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 

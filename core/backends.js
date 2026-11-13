@@ -40,6 +40,9 @@ export class BackendError extends Error {
  *   grant's, H4), last on the command line, after the gateway's: no prompts of the CLI's own, since nobody is there
  *   to answer them; the container and the identity's grants are the boundary (ADR-004). A backend without it can't
  *   run unattended.
+ * @property {{ api: 'chat' | 'responses' | 'messages', args: (url: string, model: string) => string[], env: (url: string, model: string, token: string) => Record<string, string> }} [localModel]
+ *   how it uses a local runtime (runtimes.js, H6): the API it speaks, and the arguments and variables that point it at
+ *   the session's relay `url` (ending /v1) with `model`; the session's token is its key
  */
 
 /** @type {Record<string, Manifest>} */
@@ -59,6 +62,11 @@ export const BACKENDS = {
     signIn: 'Run /login in the session and paste the code from the browser.',
     // Print mode, one prompt and out; its permission prompts off (the operator's choice, 2026-11-13).
     headless: (prompt) => ['-p', prompt, '--dangerously-skip-permissions'],
+    // Anthropic's Messages API at the runtime (Ollama 0.14 and later serve it); the token as its key.
+    localModel: {
+      api: 'messages', args: () => [],
+      env: (url, model, token) => ({ ANTHROPIC_BASE_URL: url.replace(/\/v1$/, ''), ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_MODEL: model, ANTHROPIC_SMALL_FAST_MODEL: model }),
+    },
   },
   codex: {
     displayName: 'Codex',
@@ -78,6 +86,13 @@ export const BACKENDS = {
     // exec: one prompt and out, never asking (its approval policy is "never"); the options before it carry over, the
     // sandbox among them. A workspace needn't be a git repo; `--` so a prompt starting with - is still the prompt.
     headless: (prompt) => ['exec', '--skip-git-repo-check', '--', prompt],
+    // A provider of its own for the session: Codex speaks only the Responses API now (`wire_api = "chat"` is refused).
+    localModel: {
+      api: 'responses',
+      args: (url, model) => ['model_provider=houston-local', 'model_providers.houston-local.name=Houston local runtime', `model_providers.houston-local.base_url=${url}`,
+        'model_providers.houston-local.env_key=HOUSTON_MCP_TOKEN', 'model_providers.houston-local.wire_api=responses'].flatMap((c) => ['-c', c]).concat(['-m', model]),
+      env: () => ({}),
+    },
   },
 };
 
