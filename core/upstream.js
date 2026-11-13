@@ -1,6 +1,7 @@
-// One MCP server over stdio, from the gateway's side: newline-delimited JSON-RPC both ways
-// (MCP's stdio transport). The gateway is the only client a server has; the server can't
-// reach an agent, and what it asks of its client (sampling, roots, elicitation) is refused.
+// One MCP server from the gateway's side: over stdio, newline-delimited JSON-RPC both ways
+// (MCP's stdio transport), or over HTTP to one already listening on loopback. The gateway is
+// the only client a server has; the server can't reach an agent, and what it asks of its
+// client (sampling, roots, elicitation) is refused.
 
 import { StringDecoder } from 'node:string_decoder';
 import { LEGACY_VERSIONS, isObject } from './mcp-protocol.js';
@@ -110,8 +111,74 @@ export function connectStdio({ input, output, timeoutMs = 120_000 }) {
 }
 
 /**
+ * One MCP server already listening on loopback (Houston's own), over Streamable HTTP: a POST
+ * per message and a JSON answer. The session id and protocol version it gives at initialize go
+ * back on every later request. Same shape as connectStdio's client.
+ * ponytail: JSON answers only; a server that answers with an event stream is refused, add an
+ * SSE reader when one is registered.
+ * @param {{ url: string, headers?: Record<string, string>, timeoutMs?: number }} o
+ *   headers: what the registration's env resolved to (its Authorization, say)
+ */
+export function connectHttp({ url, headers = {}, timeoutMs = 120_000 }) {
+  /** @type {Error | null} */
+  let closed = null;
+  let next = 1;
+  /** @type {Record<string, string>} */
+  const session = {};
+  const all = new AbortController();
+
+  /** @param {object} body @param {AbortSignal | undefined} signal @param {number} ms */
+  async function post(body, signal, ms) {
+    if (closed) throw closed;
+    const timeout = AbortSignal.timeout(ms);
+    let r;
+    try {
+      r = await fetch(url, {
+        method: 'POST', redirect: 'error',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers, ...session },
+        body: JSON.stringify(body),
+        signal: AbortSignal.any([all.signal, timeout, ...(signal ? [signal] : [])]),
+      });
+    } catch (e) {
+      if (closed) throw closed;
+      if (timeout.aborted) throw new UpstreamError(`no answer in ${Math.round(ms / 1000)} s`);
+      if (signal?.aborted) throw new UpstreamError('cancelled');
+      throw new UpstreamError(`the server can't be reached: ${/** @type {Error} */ (e).message}`);
+    }
+    const text = await r.text();
+    if (r.status === 202 && !text) return null;
+    if (!r.ok) throw new UpstreamError(`the server answered HTTP ${r.status}`);
+    if (!/^application\/json\b/i.test(r.headers.get('content-type') ?? '')) throw new UpstreamError('the server answered with something other than JSON (an event stream is not read yet)');
+    if (text.length > MAX_LINE) throw new UpstreamError('the server sent a message over 32 MB');
+    const sid = r.headers.get('mcp-session-id');
+    if (sid) session['mcp-session-id'] = sid;
+    try { return JSON.parse(text); } catch { throw new UpstreamError('the server answered with JSON that does not parse'); }
+  }
+
+  return {
+    /**
+     * @param {string} method @param {object} [params] @param {{ signal?: AbortSignal, timeoutMs?: number }} [opts]
+     * @returns {Promise<any>} the result; rejects with UpstreamError
+     */
+    async request(method, params = {}, { signal, timeoutMs: ms = timeoutMs } = {}) {
+      const id = next++;
+      const msg = await post({ jsonrpc: '2.0', id, method, params }, signal, ms);
+      if (!isObject(msg) || msg.id !== id) throw new UpstreamError('the server answered with no response to the request');
+      if (isObject(msg.error)) throw new UpstreamError(String(msg.error.message ?? 'error').slice(0, 500), { code: msg.error.code, data: msg.error.data });
+      if (method === 'initialize' && isObject(msg.result) && typeof msg.result.protocolVersion === 'string') session['mcp-protocol-version'] = msg.result.protocolVersion;
+      return msg.result;
+    },
+    /** @param {string} method @param {object} [params] */
+    notify: (method, params = {}) => { post({ jsonrpc: '2.0', method, params }, undefined, timeoutMs).catch(() => {}); },
+    /** @param {string} [why] */
+    close: (why = 'closed by the gateway') => { if (!closed) { closed = new UpstreamError(why); all.abort(); } },
+    get closed() { return closed !== null; },
+  };
+}
+
+/**
  * The legacy handshake, which every stdio server speaks.
- * @param {ReturnType<typeof connectStdio>} client
+ * @param {ReturnType<typeof connectStdio> | ReturnType<typeof connectHttp>} client
  * @param {string} version the gateway's version, for clientInfo
  * @param {number} [timeoutMs] a cold `npx` start can take a while
  * @returns {Promise<{ protocolVersion: string, serverInfo?: { name?: string, version?: string } }>}
@@ -125,7 +192,7 @@ export async function initialize(client, version, timeoutMs = 120_000) {
 
 /**
  * Every tool, following `nextCursor`.
- * @param {ReturnType<typeof connectStdio>} client
+ * @param {ReturnType<typeof connectStdio> | ReturnType<typeof connectHttp>} client
  * @returns {Promise<any[]>}
  */
 export async function listTools(client) {

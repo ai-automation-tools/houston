@@ -18,6 +18,31 @@ export const core = {
    * where the Core serves no Control API (sessions are Windows containers).
    * @returns {Promise<{ pid: number, startedAt: string, schema: number, containment: string, sessions: number } | { error: string, code?: string } | null>}
    */
+  /**
+   * Put this app's own MCP server behind the Core's gateway (H3): registered once as the http
+   * server `houston`. Its address and token change at every start, so both are refreshed here;
+   * the token goes to the vault as `houston-mcp`, never into the registration. The operator
+   * still installs and pins it before a session sees its tools. A smoke run's throwaway app
+   * stays out of it. True once the Core has it.
+   * @param {{ url: string, token: string }} m
+   */
+  async offerMcp(m) {
+    if (process.platform !== 'win32' || process.env.ACC_SMOKE_DIR) return false;
+    try {
+      const reg = await core.call('mcp.get', { name: 'houston' }).catch((e) => { if (e.code === 'not_found') return null; throw e; });
+      await core.call('secret.set', { name: 'houston-mcp', value: m.token });
+      if (!reg) {
+        await core.call('mcp.add', { name: 'houston', transport: 'http', url: m.url, env: { Authorization: 'Bearer secret:houston-mcp' } });
+        await core.call('grant.add', { identity: 'local:mcp/houston', resource: 'secret:houston-mcp', permission: 'use' });
+      } else if (reg.url !== m.url) {
+        await core.call('mcp.update', { name: 'houston', url: m.url });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   async status() {
     if (process.platform !== 'win32') return null;
     try {

@@ -25,7 +25,7 @@ export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
-  'mcp.list', 'mcp.get', 'mcp.add', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
+  'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
 ];
 const MAX_LINE = 1024 * 1024;
 /** How much of a session's recent output an attach replays first. */
@@ -224,6 +224,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'mcp.list': () => need(gateway, 'gateway').list(),
     'mcp.get': (p) => need(gateway, 'gateway').get(p.name),
     'mcp.add': (p) => need(gateway, 'gateway').add(p),
+    'mcp.update': (p) => need(gateway, 'gateway').update(p.name, p.url),
     'mcp.install': (p) => need(gateway, 'gateway').install(p.name),
     'mcp.pin': (p) => need(gateway, 'gateway').pin(p.name, p.hash),
     'mcp.disable': (p) => need(gateway, 'gateway').disable(p.name),

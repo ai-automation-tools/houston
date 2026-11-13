@@ -21,6 +21,7 @@
 // calling the server, ask holds it in the approval inbox, bound to this one request. Results
 // have every vault value redacted, are marked as untrusted content, and are capped.
 
+import { spawn as spawnHost } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -33,7 +34,7 @@ import { LEGACY_VERSIONS, META, PROTOCOL_VERSIONS, bearerMatches, checkRequest, 
 import { PathError, canonicalPath, pathKey } from './paths.js';
 import { decide, globalDenies, policyVersion } from './policy.js';
 import { compileGrants } from './runner.js';
-import { UpstreamError, connectStdio, initialize, listTools } from './upstream.js';
+import { UpstreamError, connectHttp, connectStdio, initialize, listTools } from './upstream.js';
 
 export class GatewayError extends Error {
   /** @param {string} code @param {string} message */
@@ -47,6 +48,26 @@ export class GatewayError extends Error {
 /** A server's name: tools are `<name>.<tool>` to an agent and `tool:<name>/<tool>` in a grant. */
 export const SERVER_NAME = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 export const STATES = ['discovered', 'installed', 'pinned', 'needs_review', 'disabled'];
+/** container: its own container (the default); host: started unconfined on the host; http: already listening on loopback. */
+export const TRANSPORTS = ['container', 'host', 'http'];
+/** An env or header value that names a vault secret: the whole value, or after "Bearer ". */
+const SECRET_REF = /^(Bearer )?secret:([a-z0-9][a-z0-9_-]{0,62})$/;
+/** What a host server keeps of the Core's environment: what Windows programs expect, nothing of the operator's. */
+const HOST_ENV = ['SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'PATHEXT', 'OS', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'USERNAME', 'USERDOMAIN', 'COMPUTERNAME'];
+
+/**
+ * An http server's address: plain http to loopback only, no credentials in it.
+ * ponytail: loopback only; a remote server needs its traffic under the server identity's net grants first.
+ * @param {unknown} url
+ */
+export function loopbackUrl(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { throw new GatewayError('bad_request', "url is the server's address, e.g. http://127.0.0.1:4100/mcp"); }
+  if (u.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname) || u.username || u.password || String(url).length > 500) {
+    throw new GatewayError('bad_request', 'url is plain http on loopback (127.0.0.1, localhost or [::1]), with no credentials in it');
+  }
+  return u.href;
+}
 const MAX_BODY = 4 * 1024 * 1024;
 /** A tool result over this is cut, block by block. */
 export const MAX_RESULT = 1024 * 1024;
@@ -134,7 +155,8 @@ export function createGateway({
   };
   /** What the Control API shows: never a secret value (env holds only names). @param {any} r */
   const shape = (r) => ({
-    name: r.name, identity: r.identity_id, command: r.command, env: JSON.parse(r.env), pathDirs: JSON.parse(r.path_dirs), state: r.state,
+    name: r.name, identity: r.identity_id, transport: r.transport, ...(r.transport === 'http' ? { url: r.command, command: null } : { command: r.command }),
+    env: JSON.parse(r.env), pathDirs: JSON.parse(r.path_dirs), state: r.state,
     tools: r.tools ? JSON.parse(r.tools).map((/** @type {any} */ t) => ({ name: t.name, description: t.description ?? '', annotations: t.annotations })) : null,
     toolsHash: r.tools_hash, pinnedHash: r.pinned_hash, addedAt: r.added_at, updatedAt: r.updated_at,
   });
@@ -145,14 +167,16 @@ export function createGateway({
   };
   /** @param {string} type @param {string} action @param {string} subject @param {string | null} session @param {object} resource @param {object} decision @param {object} [extra] */
   const event = (type, action, subject, session, resource, decision, extra = {}) => audit.append({
-    type, action, identity: { subject, containment: subject === OPERATOR ? 'unconfined' : 'container' }, session_id: session, resource, decision, ...extra,
+    type, action, identity: { subject, containment: containmentOf(subject) }, session_id: session, resource, decision, ...extra,
   });
+  /** @param {string} id */
+  const containmentOf = (id) => /** @type {any} */ (db.prepare('SELECT containment FROM identities WHERE id = ?').get(id))?.containment ?? 'container';
 
   /**
-   * Start a pinned or installing server in its own container and read its tools.
+   * Start a pinned or installing server, by its transport, and read its tools.
    * @param {any} reg its row
    * @param {string | null} sessionId the session it serves; null for install
-   * @returns {Promise<{ client: ReturnType<typeof connectStdio>, tools: any[], hash: string, close: () => Promise<void> }>}
+   * @returns {Promise<{ client: Conn['client'], tools: any[], hash: string, close: () => Promise<void> }>}
    */
   async function launch(reg, sessionId) {
     const who = /** @type {any} */ (db.prepare('SELECT status FROM identities WHERE id = ?').get(reg.identity_id));
@@ -167,40 +191,109 @@ export function createGateway({
     /** @type {Record<string, string>} */
     const env = {};
     for (const [k, v] of Object.entries(/** @type {Record<string, string>} */ (JSON.parse(reg.env)))) {
-      if (!v.startsWith('secret:')) { env[k] = v; continue; }
-      const name = v.slice(7);
+      const ref = SECRET_REF.exec(v);
+      if (!ref) { env[k] = v; continue; }
+      const name = ref[2];
       const d = ask('secret.use', 'Secret', name);
       const ok = d.decision === 'allow';
       let reason = ok ? `into ${k}` : `no use grant on secret:${name} (${d.reasons.join('; ')})`;
       if (ok) {
-        try { env[k] = vault.reveal(name); } catch (e) { reason = /** @type {Error} */ (e).message; }
+        try { env[k] = (ref[1] ?? '') + vault.reveal(name); } catch (e) { reason = /** @type {Error} */ (e).message; }
       }
       event('credential.inject', 'secret.use', reg.identity_id, sessionId, { type: 'Secret', id: name },
         { result: env[k] !== undefined ? 'allow' : 'deny', policy_version: pv, policy_ids: d.determining_policies, reasons: [reason] }, { server: reg.name });
       if (env[k] === undefined) throw new GatewayError('refused', `${reg.name} can't start: ${reason}`);
     }
 
+    /** @type {Conn} */
+    let conn;
+    if (reg.transport === 'http') {
+      // Its env is its request headers (an Authorization, say), secrets resolved above.
+      const client = connectHttp({ url: reg.command, headers: env, timeoutMs: callTimeoutMs });
+      conn = { client, close: async () => client.close(), stderr: () => '' };
+    } else if (reg.transport === 'host') {
+      conn = startOnHost(reg, env);
+    } else {
+      conn = await startContained(reg, env, grants, ask, pv, sessionId);
+    }
+
+    try {
+      await initialize(conn.client, version, startTimeoutMs);
+      const tools = await listTools(conn.client);
+      const hash = toolsHash(tools);
+      event('mcp.list_tools', 'tool.list', reg.identity_id, sessionId, { type: 'McpServer', id: reg.name },
+        { result: 'allow', policy_version: pv, reasons: [`${tools.length} tools`] }, { server: reg.name, tools_hash: hash });
+      return { client: conn.client, tools, hash, close: conn.close };
+    } catch (e) {
+      await conn.close();
+      const why = /** @type {Error} */ (e).message;
+      const err = conn.stderr().trim();
+      throw new GatewayError('refused', `${reg.name} did not start as an MCP server: ${why}${err ? ` (stderr: ${err.slice(-500)})` : ''}`);
+    }
+  }
+
+  /**
+   * @typedef {{ client: ReturnType<typeof connectStdio> | ReturnType<typeof connectHttp>, close: () => Promise<void>, stderr: () => string }} Conn
+   */
+
+  /** A server's home: its caches and sign-in, under agentsRoot. @param {any} reg */
+  const homeOf = (reg) => path.win32.join(agentsRoot, reg.identity_id.replace(/^local:/, '').replaceAll('/', '+'));
+  /** Its profile folders are its own home, so caches (npm's, for an npx server) land there and not in the operator's profile. @param {string} h */
+  const profileEnv = (h) => ({
+    USERPROFILE: h, HOME: h, APPDATA: path.win32.join(h, 'AppData', 'Roaming'),
+    LOCALAPPDATA: path.win32.join(h, 'AppData', 'Local'), npm_config_cache: path.win32.join(h, 'npm-cache'),
+  });
+  /** Its working and temp folders, removed when it stops. */
+  function scratchDirs() {
+    const mine = path.join(win(root), crypto.randomUUID());
+    const remove = () => { if (pathKey(mine).startsWith(`${pathKey(root)}/`)) fs.rmSync(mine, { recursive: true, force: true }); };
+    return { mine, work: path.join(mine, 'work'), temp: path.join(mine, 'tmp'), remove };
+  }
+
+  /**
+   * The stdio client over a started process, and how to stop it.
+   * @param {{ input: import('node:stream').Writable, output: import('node:stream').Readable, errors?: import('node:stream').Readable | null, exited: Promise<unknown>, kill: () => void, cleanup: () => Promise<void> | void }} p
+   * @returns {Conn}
+   */
+  function stdioConn({ input, output, errors, exited, kill, cleanup }) {
+    // Kept for the error message when it dies at start.
+    let stderr = '';
+    errors?.on('data', (/** @type {Buffer} */ c) => { stderr = (stderr + c.toString('utf8')).slice(-2000); });
+    const client = connectStdio({ input, output, timeoutMs: callTimeoutMs });
+    let stopped = false;
+    const done = exited.catch(() => null).finally(async () => { client.close('the server exited'); await cleanup(); });
+    return {
+      client,
+      stderr: () => stderr,
+      async close() {
+        if (!stopped) { stopped = true; client.close(); try { kill(); } catch { /* already exited */ } }
+        await done;
+      },
+    };
+  }
+
+  /**
+   * A container server: its identity's file and net grants are its container's policy.
+   * @param {any} reg @param {Record<string, string>} env @param {any[]} grants
+   * @param {(action: string, type: string, id: string) => any} ask @param {string} pv @param {string | null} sessionId
+   * @returns {Promise<Conn>}
+   */
+  async function startContained(reg, env, grants, ask, pv, sessionId) {
     let compiled;
     try { compiled = compileGrants(grants, now()); } catch (e) { throw new GatewayError('refused', /** @type {Error} */ (e).message); }
-    const id = crypto.randomUUID();
-    const mine = path.join(win(root), id);
-    const work = path.join(mine, 'work');
-    const temp = path.join(mine, 'tmp');
-    const serverHome = path.win32.join(agentsRoot, reg.identity_id.replace(/^local:/, '').replaceAll('/', '+'));
+    const dirs = scratchDirs();
+    const serverHome = homeOf(reg);
     const pathDirs = /** @type {string[]} */ (JSON.parse(reg.path_dirs));
     /** @type {Awaited<ReturnType<typeof startEgressProxy>> | null} */
     let proxy = null;
-    let stopped = false;
     const cleanup = async () => {
       if (proxy) await proxy.close();
-      if (pathKey(mine).startsWith(`${pathKey(root)}/`)) fs.rmSync(mine, { recursive: true, force: true });
+      dirs.remove();
     };
 
     let proc;
     try {
-      fs.mkdirSync(work, { recursive: true });
-      fs.mkdirSync(temp, { recursive: true });
-      fs.mkdirSync(serverHome, { recursive: true });
+      for (const d of [dirs.work, dirs.temp, serverHome]) fs.mkdirSync(d, { recursive: true });
       if (compiled.net.length) {
         proxy = await startEgressProxy({
           // A server is never attended: ask is deny.
@@ -212,16 +305,12 @@ export function createGateway({
       }
       const req = {
         ...launchRequest({
-          command: reg.command, workspace: work, temp, home, globals,
+          command: reg.command, workspace: dirs.work, temp: dirs.temp, home, globals,
           readwrite: [...compiled.readwrite, serverHome], readonly: [...compiled.readonly, ...pathDirs], denied: compiled.denied, pathDirs,
-          // Its profile folders are its own home, so caches (npm's, for an npx server) land there and not in the denied profile.
-          env: {
-            ...env, USERPROFILE: serverHome, HOME: serverHome, APPDATA: path.win32.join(serverHome, 'AppData', 'Roaming'),
-            LOCALAPPDATA: path.win32.join(serverHome, 'AppData', 'Local'), npm_config_cache: path.win32.join(serverHome, 'npm-cache'),
-          },
+          env: { ...env, ...profileEnv(serverHome) },
           proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
         }),
-        containerName: id.replaceAll('-', ''),
+        containerName: path.basename(dirs.mine).replaceAll('-', ''),
       };
       const mxc = sdk ?? await import('@microsoft/mxc-sdk/v1');
       proc = await mxc.spawn(req);
@@ -230,35 +319,44 @@ export function createGateway({
       const why = e instanceof LaunchError || e instanceof PathError ? e.message : `the container did not start: ${/** @type {Error} */ (e).message}`;
       throw new GatewayError('refused', `${reg.name}: ${why}`);
     }
-
-    const input = proc.standardInput;
-    const output = proc.standardOutput;
-    // Kept for the error message when it dies at start.
-    let stderr = '';
-    proc.standardError?.on('data', (/** @type {Buffer} */ c) => { stderr = (stderr + c.toString('utf8')).slice(-2000); });
-    const client = connectStdio({ input, output, timeoutMs: callTimeoutMs });
-    const done = proc.wait().catch(() => null).finally(async () => {
-      client.close('the server exited');
-      try { proc.dispose?.(); } catch { /* already gone */ }
-      await cleanup();
+    const p = proc;
+    return stdioConn({
+      input: p.standardInput, output: p.standardOutput, errors: p.standardError, exited: p.wait(), kill: () => p.kill(),
+      cleanup: async () => { try { p.dispose?.(); } catch { /* already gone */ } await cleanup(); },
     });
-    const close = async () => {
-      if (!stopped) { stopped = true; client.close(); try { proc.kill(); } catch { /* already exited */ } }
-      await done;
-    };
+  }
 
-    try {
-      await initialize(client, version, startTimeoutMs);
-      const tools = await listTools(client);
-      const hash = toolsHash(tools);
-      event('mcp.list_tools', 'tool.list', reg.identity_id, sessionId, { type: 'McpServer', id: reg.name },
-        { result: 'allow', policy_version: pv, reasons: [`${tools.length} tools`] }, { server: reg.name, tools_hash: hash });
-      return { client, tools, hash, close };
-    } catch (e) {
-      await close();
-      const why = /** @type {Error} */ (e).message;
-      throw new GatewayError('refused', `${reg.name} did not start as an MCP server: ${why}${stderr.trim() ? ` (stderr: ${stderr.trim().slice(-500)})` : ''}`);
-    }
+  /**
+   * A host server: unconfined, so its file and net grants don't bind it (its identity says
+   * so). It gets the Windows basics, a clean PATH, its own home and temp folders and its
+   * registration's env, and nothing else of the Core's environment.
+   * @param {any} reg @param {Record<string, string>} env
+   * @returns {Conn}
+   */
+  function startOnHost(reg, env) {
+    const dirs = scratchDirs();
+    const serverHome = homeOf(reg);
+    for (const d of [dirs.work, dirs.temp, serverHome]) fs.mkdirSync(d, { recursive: true });
+    const sys = process.env.SystemRoot ?? 'C:\\Windows';
+    const pathDirs = /** @type {string[]} */ (JSON.parse(reg.path_dirs));
+    const base = Object.fromEntries(HOST_ENV.flatMap((k) => (process.env[k] === undefined ? [] : [[k, process.env[k]]])));
+    const proc = spawnHost(reg.command, {
+      shell: true, cwd: dirs.work, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...base, ...env, ...profileEnv(serverHome), TEMP: dirs.temp, TMP: dirs.temp,
+        PATH: [path.win32.join(sys, 'System32'), sys, path.win32.join(sys, 'System32', 'Wbem'), ...pathDirs].join(path.delimiter),
+      },
+    });
+    const exited = new Promise((r) => { proc.on('exit', r); proc.on('error', r); });
+    // The shell is the parent: end the whole tree, or the server outlives it.
+    const kill = () => {
+      if (process.platform !== 'win32' || !proc.pid) { proc.kill(); return; }
+      spawnHost(path.win32.join(sys, 'System32', 'taskkill.exe'), ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }).on('error', () => proc.kill());
+    };
+    return stdioConn({
+      input: /** @type {import('node:stream').Writable} */ (proc.stdin), output: /** @type {import('node:stream').Readable} */ (proc.stdout), errors: proc.stderr,
+      exited, kill, cleanup: dirs.remove,
+    });
   }
 
   /**
@@ -466,31 +564,57 @@ export function createGateway({
 
     /**
      * Register a server: discovered, nothing run. Makes its identity, `local:mcp/<name>`,
-     * active and with no grants: the operator grants its folders, hosts and secrets.
-     * @param {any} spec name, command (the full line), env ({ VAR: text or 'secret:<name>' }), pathDirs (program folders)
+     * active and with no grants: the operator grants its folders, hosts and secrets. A host or
+     * http server's identity is unconfined, and says so wherever it appears.
+     * @param {any} spec name; transport (container, the default; host; http); command (the full
+     *   line) or, for http, url; env ({ VAR: text or 'secret:<name>' }; for http, request
+     *   headers, where 'Bearer secret:<name>' works too); pathDirs (program folders)
      */
     add(spec) {
       if (!isObject(spec)) throw new GatewayError('bad_request', 'the server is an object');
-      const { name, command, env = {}, pathDirs = [] } = spec;
+      const { name, transport = 'container', env = {}, pathDirs = [] } = spec;
       if (typeof name !== 'string' || !SERVER_NAME.test(name)) throw new GatewayError('bad_request', 'name is lower-case letters, digits, - and _, up to 40, e.g. github');
       if (row(name)) throw new GatewayError('conflict', `${name} is registered`);
+      if (!TRANSPORTS.includes(transport)) throw new GatewayError('bad_request', `transport is one of ${TRANSPORTS.join(', ')}`);
+      const http = transport === 'http';
+      const command = http ? loopbackUrl(spec.url) : spec.command;
       if (typeof command !== 'string' || !command.trim() || /[\r\n\0]/.test(command) || command.length > 2000) throw new GatewayError('bad_request', 'command is the full command line, one line');
-      if (!isObject(env) || Object.keys(env).length > 50) throw new GatewayError('bad_request', 'env maps names to text or secret:<name>');
+      if (!isObject(env) || Object.keys(env).length > 50) throw new GatewayError('bad_request', `${http ? 'env (its headers)' : 'env'} maps names to text or secret:<name>`);
       for (const [k, v] of Object.entries(env)) {
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) || typeof v !== 'string' || /[\0\r\n]/.test(v)) throw new GatewayError('bad_request', `env ${k}: a name and one line of text`);
-        if (v.startsWith('secret:') && !/^secret:[a-z0-9][a-z0-9_-]{0,62}$/.test(v)) throw new GatewayError('bad_request', `env ${k}: secret:<name> names a vault secret`);
+        if (!(http ? /^[A-Za-z][A-Za-z0-9-]*$/ : /^[A-Za-z_][A-Za-z0-9_]*$/).test(k) || typeof v !== 'string' || /[\0\r\n]/.test(v)) throw new GatewayError('bad_request', `env ${k}: a name and one line of text`);
+        if (v.includes('secret:') && !SECRET_REF.test(v)) throw new GatewayError('bad_request', `env ${k}: secret:<name> (or Bearer secret:<name>) names a vault secret`);
       }
-      if (!Array.isArray(pathDirs) || pathDirs.length > 20 || !pathDirs.every((p) => typeof p === 'string')) throw new GatewayError('bad_request', 'pathDirs is a list of program folders');
+      if (!Array.isArray(pathDirs) || pathDirs.length > 20 || !pathDirs.every((p) => typeof p === 'string') || (http && pathDirs.length)) {
+        throw new GatewayError('bad_request', http ? 'an http server has no pathDirs' : 'pathDirs is a list of program folders');
+      }
       let dirs;
       try { dirs = pathDirs.map((p) => win(canonicalPath(p))); } catch (e) { throw new GatewayError('bad_request', `pathDirs: ${/** @type {Error} */ (e).message}`); }
       const identity = `local:mcp/${name}`;
-      registry.create({ id: identity, kind: 'mcp-server', displayName: `MCP server ${name}`, purpose: `Runs the MCP server ${name} for the gateway` }, OPERATOR);
+      const containment = transport === 'container' ? 'container' : 'unconfined';
+      registry.create({ id: identity, kind: 'mcp-server', displayName: `MCP server ${name}`, purpose: `Runs the MCP server ${name} for the gateway`, containment }, OPERATOR);
       registry.setStatus(identity, 'active', OPERATOR, 'registered as an MCP server');
       const t = now().toISOString();
-      db.prepare("INSERT INTO mcp_servers (name, identity_id, command, env, path_dirs, state, added_at, updated_at) VALUES (?, ?, ?, ?, ?, 'discovered', ?, ?)")
-        .run(name, identity, command, JSON.stringify(env), JSON.stringify(dirs), t, t);
-      event('mcp.change', 'mcp.add', OPERATOR, null, { type: 'McpServer', id: name }, { result: 'allow', policy_version: policyVersion(db, globals), reasons: ['registered; the launch command is shown before it runs'] }, { server: { name, command, env } });
+      db.prepare("INSERT INTO mcp_servers (name, identity_id, transport, command, env, path_dirs, state, added_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'discovered', ?, ?)")
+        .run(name, identity, transport, command, JSON.stringify(env), JSON.stringify(dirs), t, t);
+      const why = http ? 'registered; nothing is called until it is installed' : 'registered; the launch command is shown before it runs';
+      event('mcp.change', 'mcp.add', OPERATOR, null, { type: 'McpServer', id: name }, { result: 'allow', policy_version: policyVersion(db, globals), reasons: [why] },
+        { server: { name, transport, ...(http ? { url: command } : { command }), env } });
       return shape(row(name));
+    },
+
+    /**
+     * Point an http server at its new address (Houston's own server takes a new port at every
+     * start). Its state stays: every start still checks its tools against the pinned hash.
+     * @param {unknown} name @param {unknown} url
+     */
+    update(name, url) {
+      const reg = must(name);
+      if (reg.transport !== 'http') throw new GatewayError('bad_request', `${reg.name} is a ${reg.transport} server; only an http server's url changes`);
+      const href = loopbackUrl(url);
+      db.prepare('UPDATE mcp_servers SET command = ?, updated_at = ? WHERE name = ?').run(href, now().toISOString(), reg.name);
+      event('mcp.change', 'mcp.update', OPERATOR, null, { type: 'McpServer', id: reg.name }, { result: 'allow', policy_version: policyVersion(db, globals), reasons: ['its address changed'] },
+        { server: { name: reg.name, url: href, was: reg.command } });
+      return shape(row(reg.name));
     },
 
     /**

@@ -99,6 +99,17 @@ test('schema v2 keeps the grants a v1 database already had', () => {
   assert.equal(db.prepare('SELECT effect FROM grants').get().effect, 'ask');
 });
 
+test('schema v5 gives a v4 server the container transport and refuses an unknown one', () => {
+  const db = openDb(':memory:');
+  migrate(db, MIGRATIONS.slice(0, 4));
+  db.exec(`INSERT INTO identities (id, kind, display_name, containment, created_at) VALUES ('local:me', 'operator', 'Me', 'unconfined', '${NOW}');
+    INSERT INTO identities (id, kind, display_name, owner, containment, created_at) VALUES ('local:mcp/a', 'mcp-server', 'A', 'local:me', 'container', '${NOW}');
+    INSERT INTO mcp_servers (name, identity_id, command, state, added_at, updated_at) VALUES ('a', 'local:mcp/a', 'node a.js', 'pinned', '${NOW}', '${NOW}');`);
+  migrate(db);
+  assert.equal(db.prepare('SELECT transport FROM mcp_servers').get().transport, 'container');
+  assert.throws(() => db.exec("UPDATE mcp_servers SET transport = 'pipe'"), /CHECK/);
+});
+
 test('dataDir: the override wins and must be absolute, then LOCALAPPDATA, then the home folder', () => {
   const abs = path.resolve('core-data');
   assert.equal(dataDir({ HOUSTON_CORE_DATA: ` ${abs} `, LOCALAPPDATA: 'L' }), abs);
