@@ -94,6 +94,15 @@ The **Agents** tab is the harness's: it lists the agent identities in the [Houst
 - **Stop All.** The red **⏹ Stop All** button at the right end of the address bar, **Ctrl+Shift+Backspace**, or **Stop all agent sessions** in the tray menu ends every session the Core is running, at once and without asking (it's the emergency stop). A note in the corner says how many it stopped. Your own terminals, dev servers and browser tabs are left alone. If the window itself hangs, the tray menu still works: it goes straight to the Core. So does `npm run ctl -- stop.all`.
 - Identities and grants are made with `npm run ctl` for now ([Backends](../../core/README.md#-backends)); the Identity Center comes later on the [roadmap](../ROADMAP.md).
 
+## 📜 Logs
+
+The **Logs** tab is the Core's audit log: what each agent identity did and what was decided, newest first. It needs the Core running.
+
+- Pick an identity, a session (the recent ones, by who and when they started) or a decision (allowed, asked, denied) to narrow it. It shows the newest 300 that match and says when there are more.
+- Each row is the event and what it acted on, such as `egress.connect example.org:443` or `approval.decided example.org:443 (deny)`, with who and when. Green allowed, amber asked, red denied; hover for the reasons.
+- Click a row for the whole event as the Core wrote it. **Only this session** (on hover) narrows to that row's session.
+- It only reads. The log itself is `audit/` in the Core's data folder, a hash chain the Core checks at every start ([core/README.md](../../core/README.md)).
+
 ## 🔌 Connections
 
 - Click the dot next to "Houston" at the top of the sidebar, or pick **Connections** from the palette or the View menu.

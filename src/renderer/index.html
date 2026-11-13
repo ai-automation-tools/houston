@@ -29,6 +29,7 @@
         <button role="tab" data-panel="git" aria-selected="false" title="The workspace repo's branch and changes">Git</button>
         <button role="tab" data-panel="dev" aria-selected="false" title="Dev servers from the workspace's package.json">Dev</button>
         <button role="tab" data-panel="agents" aria-selected="false" title="Agent identities and their contained sessions, from the Houston Core">Agents</button>
+        <button role="tab" data-panel="logs" aria-selected="false" title="The Houston Core's audit log: what each agent did and what was decided">Logs</button>
       </nav>
       <section id="panel-files" class="panel" role="tabpanel"></section>
       <section id="panel-bookmarks" class="panel" role="tabpanel" hidden>
@@ -79,6 +80,15 @@
           <button id="agents-refresh" title="Ask the Core again">Refresh</button>
         </div>
         <div id="agents-list"></div>
+      </section>
+      <section id="panel-logs" class="panel" role="tabpanel" hidden>
+        <div class="panel-tools log-tools">
+          <select id="logs-identity" aria-label="Identity"><option value="">Every identity</option></select>
+          <select id="logs-session" aria-label="Session"><option value="">Every session</option></select>
+          <select id="logs-result" aria-label="Decision"><option value="">Every decision</option><option value="allow">Allowed</option><option value="ask">Asked</option><option value="deny">Denied</option></select>
+          <button id="logs-refresh" title="Read the audit log again">Refresh</button>
+        </div>
+        <div id="logs-list" aria-live="polite"></div>
       </section>
       <section id="panel-search" class="panel" role="region" aria-label="Search results" hidden></section>
     </aside>
