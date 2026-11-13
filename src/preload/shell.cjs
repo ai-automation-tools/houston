@@ -124,6 +124,7 @@ contextBridge.exposeInMainWorld('acc', {
     info: invoke('cronsole:info'),
     tasks: invoke('cronsole:tasks'),
     history: invoke('cronsole:history'),
+    grant: invoke('cronsole:grant'),
   },
 
   /** Identities and contained sessions from the harness's Core. */
@@ -141,12 +142,14 @@ contextBridge.exposeInMainWorld('acc', {
   /** The Core's audit log, filtered by identity, session and decision. */
   logs: { query: invoke('logs:query') },
 
-  /** The Core's MCP servers, secret names and backends; install, pin and disable a server by name. */
+  /** The Core's MCP servers, secret names, standing grants and backends; install, pin and disable a server by name, pause and resume a standing grant by id. */
   integrations: {
     info: invoke('integrations:info'),
     install: invoke('integrations:install'),
     pin: invoke('integrations:pin'),
     disable: invoke('integrations:disable'),
+    pauseGrant: invoke('integrations:pauseGrant'),
+    resumeGrant: invoke('integrations:resumeGrant'),
   },
 
   /** The Core's approval inbox: cards waiting for the operator, and their answers. */

@@ -957,6 +957,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         // The Integrations tab over this Core: a server registered with ctl (after Settings, which counts identities), then Install and Pin pressed in the tab.
         const stub = fileURLToPath(new URL('../../tests/core/stub-mcp-server.js', import.meta.url));
         await ctl('mcp.add', { name: 'smoke-stub', transport: 'host', command: `"${node}" "${stub}"` });
+        await ctl('standing.create', { id: 'smoke-nightly', identity: 'local:smoke-shell', workspace: ws, command: 'cmd.exe /d /c exit 0', maxMinutes: 5, expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
         agentRun.integrations = await wc.executeJavaScript(`(async () => {
           const pause = (ms) => new Promise((r) => setTimeout(r, ms));
           const until = async (ok) => { for (let i = 0; i < 300 && !ok(); i++) await pause(100); return ok(); };
@@ -972,9 +973,21 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           const read = { buttons: buttons().map((b) => b.textContent), tools: names.filter((n) => ['echo', 'env', 'big'].includes(n)).sort() };
           press('Pin');
           await until(() => /tools served/.test(row()?.querySelector('.sub')?.textContent ?? ''));
-          return { before, read, pinned: row()?.querySelector('.sub')?.textContent ?? '', sections: [...document.querySelectorAll('#integrations-list .group-title')].map((g) => g.textContent) };
+          const pinned = row()?.querySelector('.sub')?.textContent ?? '';
+          // The standing grant: Pause, then Resume.
+          const grant = () => [...document.querySelectorAll('#integrations-list .row')].find((r) => r.querySelector('.name')?.textContent === 'smoke-nightly');
+          const grantButtons = () => [...(grant()?.querySelectorAll('.acts button') ?? [])].map((b) => b.textContent);
+          const grantBefore = { sub: grant()?.querySelector('.sub')?.textContent ?? '', buttons: grantButtons() };
+          grant()?.querySelector('.acts button')?.click();
+          await until(() => grantButtons().join() === 'Resume');
+          const grantPaused = grant()?.querySelector('.sub')?.textContent ?? '';
+          grant()?.querySelector('.acts button')?.click();
+          await until(() => grantButtons().join() === 'Pause');
+          return { before, read, pinned, grantBefore, grantPaused, sections: [...document.querySelectorAll('#integrations-list .group-title')].map((g) => g.textContent) };
         })()`);
         agentRun.integrations.state = (await ctl('mcp.get', { name: 'smoke-stub' })).state;
+        agentRun.integrations.grantStatus = (await ctl('standing.get', { id: 'smoke-nightly' })).status;
+        agentRun.integrations.grantChanges = (await ctl('audit.query', { type: 'standing.change' })).events.map((/** @type {any} */ e) => e.action);
         await shot('integrations.png', wc);
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
@@ -1018,7 +1031,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       check('the Integrations tab shows a registered server\'s command before it runs, installs it, lists the tools a pin would serve, and pins them',
         Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'
           && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
-          && ig.sections.join() === 'MCP servers (1),Secrets (0),Agent backends'), ig);
+          && ig.sections.join() === 'MCP servers (1),Secrets (0),Standing grants (1),Agent backends'), ig);
+      check('the Integrations tab lists a standing grant with who it runs as, and Pause and Resume change it in the Core',
+        Boolean(ig?.grantBefore?.sub === 'local:smoke-shell · up to 5 min' && ig.grantBefore.buttons.join() === 'Pause' && /^paused/.test(ig.grantPaused)
+          && ig.grantStatus === 'active' && ig.grantChanges?.join() === 'standing.create,standing.pause,standing.resume'), ig);
       const tr = agentRun?.transcript;
       check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
         Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0

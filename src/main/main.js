@@ -651,6 +651,17 @@ async function createWindow() {
   handle('cronsole:info', () => cron.info());
   handle('cronsole:tasks', () => cron.tasks());
   handle('cronsole:history', (taskId) => cron.history(taskId));
+  // The identity and standing grant a task runs under (H4): its command's --grant, then the Core's record of it.
+  handle('cronsole:grant', async (taskId) => {
+    const id = await cron.grant(taskId);
+    if (!id) return null;
+    try {
+      return { id, standing: await core.call('standing.get', { id }) };
+    } catch (e) {
+      const code = /** @type {any} */ (e).code;
+      return { id, error: code === 'not_found' ? 'the Core has no standing grant by that name' : code === 'ENOENT' ? 'the Houston Core is not running' : code === 'unknown_method' ? 'the Core runs older code: restart it' : /** @type {Error} */ (e).message };
+    }
+  });
 
   // The Git tab: the active workspace's repo, read-only (src/main/git.js).
   handle('git:status', () => gitStatus(current().folder));
@@ -769,6 +780,8 @@ async function createWindow() {
   handle('integrations:install', (name) => integrations.install(name));
   handle('integrations:pin', (name, hash) => integrations.pin(name, hash));
   handle('integrations:disable', (name) => integrations.disable(name));
+  handle('integrations:pauseGrant', (id) => integrations.pauseGrant(id));
+  handle('integrations:resumeGrant', (id) => integrations.resumeGrant(id));
   // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
   const approvals = watchApprovals(send);
   handle('approvals:list', () => approvals.list());
