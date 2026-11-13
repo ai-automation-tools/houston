@@ -11,7 +11,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installExtension } from 'electron-chrome-web-store';
-import { callControl } from '../../core/client.js';
+import { callControl, dataDir } from '../../core/client.js';
 import { onPath } from './env.js';
 import { listExtensions } from './extensions.js';
 import { cleanOutput } from '../shared/output.js';
@@ -120,6 +120,39 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
       const withToken = (await fetch(url, { method: 'POST', body, headers: { Authorization: `Bearer ${token}` } })).status;
       console.log(`[smoke] mcp ${url} without-token=${without} with-token=${withToken}`);
       check('MCP refuses a call without the token and answers with it', without === 401 && withToken === 200, { without, withToken });
+
+      // AT-13: a web page in a tab asks for the harness's control surfaces. The page is the real
+      // example.com, so this runs with a web origin's rights. Nothing may come back readable.
+      // The gateway comes in H3; the Control API is a named pipe whose token sits in the Core's
+      // operator-only data folder, so the page tries that file, the MCP server and Houston's own pages.
+      if (!process.env.ACC_SMOKE_URL) {
+        const controlFile = `file:///${path.join(dataDir(), 'control.json').replaceAll('\\', '/')}`;
+        const at13 = await tab.view.webContents.executeJavaScript(`(async () => {
+          const read = async (u, init) => {
+            try {
+              const r = await fetch(u, init);
+              // An opaque no-cors answer has status 0 and no body: the page learned nothing.
+              return r.type === 'opaque' ? 'opaque' : 'read ' + r.status + ': ' + (await r.text()).slice(0, 60);
+            } catch (e) { return 'refused: ' + e.message; }
+          };
+          const rpc = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+          return {
+            mcp: await read(${JSON.stringify(url)}, { method: 'POST', body: rpc, headers: { 'content-type': 'application/json' } }),
+            mcpNoCors: await read(${JSON.stringify(url)}, { method: 'POST', body: rpc, mode: 'no-cors' }),
+            controlFile: await read(${JSON.stringify(controlFile)}),
+            settings: await read('acc://settings/'),
+            transcript: await read('acc://transcript/00000000-0000-0000-0000-000000000000'),
+          };
+        })()`);
+        // Last: try to navigate the tab to an app page; it must stay on the web page.
+        await tab.view.webContents.executeJavaScript(`location.href = 'acc://settings/'`).catch(() => {});
+        await wait(1500);
+        at13.navigated = tab.view.webContents.getURL();
+        console.log(`[smoke] at13=${JSON.stringify(at13)}`);
+        check('AT-13: a web page can\'t read the MCP server, the Core\'s control file or Houston\'s own pages, nor navigate to one',
+          [at13.mcp, at13.mcpNoCors, at13.controlFile, at13.settings, at13.transcript].every((r) => !String(r).startsWith('read'))
+            && /^https:\/\/example\.com/.test(at13.navigated), at13);
+      }
       const call = (/** @type {string} */ name, /** @type {object} */ args) => fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

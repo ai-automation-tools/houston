@@ -65,3 +65,12 @@ test('Houston Core: running with its containment rung and sessions, not running 
   assert.equal(coreRow({ error: 'core.status: no answer in 3000 ms' }).detail, 'core.status: no answer in 3000 ms');
   assert.match(coreRow(null).detail, /^Windows only/);
 });
+test('hubRow: the access token in the detail, and a 401 says to set ACC_HUB_TOKEN', () => {
+  assert.match(hubRow('http://127.0.0.1:4273', { ok: true, state: 'ready' }, 'sent').detail, /access token sent/);
+  const asked = hubRow('http://127.0.0.1:4273', { ok: false, state: 'Project Hub /api/health returned 401: token' }, 'none');
+  assert.equal(asked.state, 'bad');
+  assert.match(asked.detail, /wants an access token/);
+  assert.match(asked.fix ?? '', /ACC_HUB_TOKEN/);
+  assert.match(hubRow('http://127.0.0.1:4273', { ok: false, state: 'Project Hub /api/health returned 401' }, 'sent').fix ?? '', /refused the token/);
+  assert.match(hubRow('http://hub.example.com', { ok: true, state: 'ready' }, 'withheld').detail, /withheld/);
+});

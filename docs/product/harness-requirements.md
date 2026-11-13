@@ -78,7 +78,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; standing grants Next | Its MCP server behind the gateway; `harness run --grant` as the task action |
 | INT-02 | Roundtable for collaboration | Should | Next | Its stdio MCP server, one per identity, started by the gateway |
 | INT-03 | Promptbook for prompts, skills, agents and MCP-server cards | Should | Next | Its stdio MCP server, read-only, as the discovery catalogue |
-| INT-04 | Project Hub for files, bookmarks and recent items | Must | Done; access token MVP | The HTTP adapter in `src/main/hub.js` |
+| INT-04 | Project Hub for files, bookmarks and recent items | Must | Done; access token built (H2) | The HTTP adapter in `src/main/hub.js` |
 | INT-05 | Link lists | Could | Next | Local Markdown link streams; a deep link to the web tool |
 | INT-06 | News briefings | Should | Done | The News tab over local Markdown digests |
 

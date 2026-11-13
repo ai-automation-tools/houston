@@ -59,7 +59,7 @@ Per-machine settings live in `%APPDATA%\ai-command-center\settings.json`. You on
 
 | Key | Means |
 |:---|:---|
-| `hubUrl` | Where Project Hub answers. `ACC_HUB_URL` in the environment overrides it. It must be on this machine unless `ACC_HUB_REMOTE=1` is set. |
+| `hubUrl` | Where Project Hub answers. `ACC_HUB_URL` in the environment overrides it. It must be on this machine unless `ACC_HUB_REMOTE=1` is set. If Hub runs with an access token (`HUB_TOKEN`), put the same value in `ACC_HUB_TOKEN` in `.env`: it's sent only to a Hub on this machine or over https. |
 | `quickLinks` | The buttons on the empty tab page. http(s) only, twelve at most. |
 | `newsSources` | The News tab's sources, none by default: each a label and an RSS or Atom feed, a Markdown page (http or https), or an absolute path to a local `.md` file. Twelve at most. |
 

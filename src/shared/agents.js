@@ -1,41 +1,12 @@
-// The Agents tab's logic: which identities it lists and what each row offers, and the toolchain
-// folders a contained session gets on its PATH. The Core decides what a session may do; this
-// only shapes what the window shows and asks for.
-
-import path from 'node:path';
+// The Agents tab's logic: which identities it lists and what each row offers. The Core decides
+// what a session may do; this only shapes what the window shows and asks for. No Node imports:
+// the browser demo loads it too. The toolchain PATH rule is main's, in toolchain.js.
 
 /**
  * What an identity with no backend runs: a plain contained shell. Fixed here, so no IPC message
  * names a command (the same rule as shells.js).
  */
 export const SHELL_COMMAND = 'cmd.exe /d /q /k';
-
-/**
- * The operator's PATH folders a contained session may search, after the Windows ones the Core
- * puts first: absolute, outside the users folder (denied to every session) and outside the
- * Windows folder (already there). Adding a folder to PATH grants nothing: the container still
- * reads only what its policy allows, and Windows' program folders are readable to it already.
- *
- * @param {string} PATH
- * @param {{ home: string, systemRoot: string }} where
- * @returns {string[]}
- */
-export function toolchainPath(PATH, { home, systemRoot }) {
-  const w = path.win32;
-  const key = (/** @type {string} */ p) => w.normalize(p).replace(/[\\/]+$/, '').toLowerCase();
-  const users = key(w.dirname(home));
-  const sys = key(systemRoot);
-  const under = (/** @type {string} */ k, /** @type {string} */ parent) => k === parent || k.startsWith(`${parent}\\`);
-  const seen = new Set();
-  return PATH.split(';').map((p) => p.trim()).filter((p) => {
-    // A drive-absolute path only: not relative, not \\server, no variables left unexpanded.
-    if (!/^[A-Za-z]:[\\/]/.test(p) || /[%"]/.test(p)) return false;
-    const k = key(p);
-    if (under(k, users) || under(k, sys) || seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  }).map((p) => w.normalize(p).replace(/[\\/]+$/, ''));
-}
 
 /**
  * @typedef {{ id: string, kind: string, displayName: string, backend: string | null, status: string, containment: string }} Identity

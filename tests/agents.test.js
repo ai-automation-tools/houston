@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SHELL_COMMAND, agentRows, toolchainPath } from '../src/shared/agents.js';
+import { SHELL_COMMAND, agentRows } from '../src/shared/agents.js';
+import { toolchainPath } from '../src/shared/toolchain.js';
 
 test('toolchainPath keeps absolute program folders outside the users and Windows folders', () => {
   const PATH = [

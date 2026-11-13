@@ -8,7 +8,8 @@
 
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
-import { SHELL_COMMAND, agentRows, toolchainPath } from '../shared/agents.js';
+import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
+import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { core } from './core.js';
