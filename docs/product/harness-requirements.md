@@ -90,7 +90,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SEC-02 | Identity Center: agents as identities with attributes, access, permissions and lifecycle | Must | Registry MVP, full screen Next | Core identity registry |
 | SEC-03 | Permissions | Must | MVP | Default-deny grants over files, commands, network, tools, secrets |
 | SEC-04 | Sandboxing | Must | MVP | An OS container per session (ADR-004) |
-| SEC-05 | Approvals | Must | MVP | An approval inbox; decided in the shell, executed by the Core |
+| SEC-05 | Approvals | Must | MVP; inbox built (H2) | An approval inbox (`core/approvals.js`); decided in the shell, executed by the Core |
 | SEC-06 | Secrets management | Must | MVP | A Core vault; credentials reach MCP servers, never an agent |
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
 | SEC-08 | Governance | Should | Next | Policy versions, expiry, grant review, lifecycle states, export |

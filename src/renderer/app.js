@@ -12,6 +12,7 @@ import { docUrl, isDocUrl } from './shared/docs.js';
 import { cycleTab, pickTab } from './shared/session.js';
 import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
+import { describeAsk, secondsLeft } from './shared/approvals.js';
 
 /** @type {any} */
 const api = /** @type {any} */ (window).acc;
@@ -161,6 +162,53 @@ async function answerAsk(run) {
   await api.mcp.answer(ask.id, run ? true : null);
   showAsk();
 }
+
+// ---- the Core's approval inbox ----------------------------------------------
+// One card at a time, oldest first, with its countdown; the Core denies it when that runs out.
+// The bar shows what the Core holds; answering only sends once, session or deny back.
+
+/** @type {import('./shared/approvals.js').Approval[]} */
+let approvalCards = [];
+/** The card the bar shows, so a refresh doesn't steal focus from it. */
+let shownApproval = '';
+
+function showApproval() {
+  const card = approvalCards[0];
+  $('approval-bar').hidden = !card;
+  if (!card) { shownApproval = ''; return; }
+  if (mainEl.classList.contains('no-terminal')) setTerminalOpen(true);
+  $('approval-who').textContent = card.identity;
+  $('approval-what').textContent = describeAsk(card);
+  $('approval-where').textContent = `in ${card.workspace}${approvalCards.length > 1 ? ` · 1 of ${approvalCards.length}` : ''}`;
+  tickApproval();
+  // Deny takes focus, so an Enter meant for a terminal can't allow anything.
+  if (shownApproval !== card.id) { shownApproval = card.id; $('approval-deny').focus(); }
+}
+
+function tickApproval() {
+  const card = approvalCards[0];
+  if (card) $('approval-left').textContent = `denies in ${secondsLeft(card.expiresAt, Date.now())} s`;
+}
+setInterval(tickApproval, 1000);
+
+/** @param {'once' | 'session' | 'deny'} answer */
+async function answerApproval(answer) {
+  const card = approvalCards[0];
+  if (!card) return;
+  approvalCards = approvalCards.slice(1);
+  showApproval();
+  try {
+    await api.approvals.decide(card.id, answer);
+  } catch (err) {
+    toast(`Couldn't answer: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+$('approval-once').addEventListener('click', () => answerApproval('once'));
+$('approval-session').addEventListener('click', () => answerApproval('session'));
+$('approval-deny').addEventListener('click', () => answerApproval('deny'));
+api.approvals.onChanged((/** @type {any[]} */ list) => { approvalCards = list; showApproval(); });
+api.approvals.list().then((/** @type {any[]} */ list) => { approvalCards = list; showApproval(); });
 
 // A run's terminal, opened by main on Run: shown and brought forward.
 api.term.onOpened((/** @type {any} */ t) => {

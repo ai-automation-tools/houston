@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createApprovals } from './approvals.js';
 import { openAudit } from './audit.js';
 import { dataDir } from './client.js';
 import { CoreLockedError, migrate, openDb } from './db.js';
@@ -118,9 +119,10 @@ if (import.meta.main) {
     }
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
-    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp(), agentsRoot: agentsRoot(core.dir) }) : null;
+    const approvals = createApprovals({ audit: core.audit });
+    const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp(), agentsRoot: agentsRoot(core.dir), approvals }) : null;
     const control = runner ? await startControl({
-      dir: core.dir, runner, audit: core.audit, schema: core.schema.to,
+      dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals,
       // The same globals the runner uses, so both record the same policy version.
       registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
     }) : null;

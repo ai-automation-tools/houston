@@ -8,6 +8,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
+import { createApprovals } from '../../core/approvals.js';
 import { attachSession } from '../../core/client.js';
 import { METHODS, callControl, queryAudit, startControl } from '../../core/control.js';
 import { migrate, openDb } from '../../core/db.js';
@@ -55,10 +56,11 @@ async function setup(t) {
   migrate(db);
   ensureOperator(db, audit);
   const registry = createRegistry({ db, audit });
-  const control = await startControl({ dir, runner, registry, audit, schema: 3 });
+  const approvals = createApprovals({ audit });
+  const control = await startControl({ dir, runner, registry, audit, schema: 3, approvals });
   t.after(async () => { await control.close(); audit.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
-  return { dir, audit, runner, control, call };
+  return { dir, audit, runner, control, call, approvals };
 }
 
 /** Send raw lines on one connection; resolve with every answer line once the Core closes it or `count` arrive. */
@@ -178,6 +180,20 @@ test('an attached connection that sends anything else is closed, and the session
   assert.deepEqual(lines[0], { id: 1, result: { attached: 's1' } });
   assert.equal(lines.at(-1).error.code, 'bad_request');
   assert.deepEqual((await s.call('session.list')).map((x) => x.id), ['s1']);
+});
+
+test('approval.list and approval.decide: the inbox over the pipe', async (t) => {
+  const s = await setup(t);
+  assert.deepEqual(await s.call('approval.list'), []);
+  const waiting = s.approvals.ask({ identity: 'local:dev', session_id: 's1', workspace: 'D:/w', action: 'net.connect', resource: { type: 'Host', id: 'example.com:443' }, policy_version: 'v' });
+  const [card] = await s.call('approval.list');
+  assert.deepEqual([card.identity, card.resource.id], ['local:dev', 'example.com:443']);
+  await assert.rejects(s.call('approval.decide', { id: card.id, answer: 'sure' }), (e) => e.code === 'bad_request');
+  await assert.rejects(s.call('approval.decide', { answer: 'once' }), (e) => e.code === 'bad_request');
+  assert.deepEqual(await s.call('approval.decide', { id: card.id, answer: 'session' }), { result: 'allow' });
+  assert.equal((await waiting).result, 'allow');
+  await assert.rejects(s.call('approval.decide', { id: card.id, answer: 'deny' }), (e) => e.code === 'not_found');
+  s.approvals.endSession('s1');
 });
 
 test('session.stop, stop.all', async (t) => {

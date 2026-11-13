@@ -37,6 +37,7 @@ import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSumma
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
 import { createAgents } from './agents.js';
+import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -705,6 +706,10 @@ async function createWindow() {
   handle('agents:start', (identity) => agents.start(identity));
   handle('agents:open', (session) => agents.open(session));
   handle('agents:stop', (session) => agents.stop(session));
+  // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
+  const approvals = watchApprovals(send);
+  handle('approvals:list', () => approvals.list());
+  handle('approvals:decide', (id, answer) => approvals.decide(id, answer));
 
   handle('mcp:answer', (id, answer) => confirmations.settle(Number(id), answer === true));
 

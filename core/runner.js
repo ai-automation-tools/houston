@@ -96,6 +96,7 @@ export function compileGrants(grants, now = new Date()) {
  * @property {string} [home]
  * @property {import('./backends.js').Where} [where] the operator's folders, to find backend programs; defaults from the environment
  * @property {(p: string) => boolean} [isFile] for tests
+ * @property {ReturnType<typeof import('./approvals.js').createApprovals>} [approvals] where an `ask` waits; without it, `ask` is deny
  * @property {{ spawnWithPty: Function }} [sdk] defaults to @microsoft/mxc-sdk/v1
  * @property {() => Date} [now]
  *
@@ -113,7 +114,7 @@ export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */
 export function createRunner({
-  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile,
+  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals,
   where = { home, appData: process.env.APPDATA ?? path.win32.join(home, 'AppData', 'Roaming'), PATH: process.env.PATH ?? '' },
 }) {
   const globals = globalDenies({ home, coreDir });
@@ -176,6 +177,8 @@ export function createRunner({
     let compiled;
     try { compiled = compileGrants(grants, now()); } catch (e) { throw refuse(/** @type {Error} */ (e).message); }
 
+    // Hosts an `ask` grant names: the session gets a proxy for them too when someone can answer.
+    const askHosts = approvals ? grants.filter((g) => g.resource.startsWith('net:') && g.effect === 'ask').map((g) => g.resource.slice(4)) : [];
     const temp = canonicalPath(path.join(win(root), id, 'tmp'));
     /** @type {Awaited<ReturnType<typeof startEgressProxy>> | null} */
     let proxy = null;
@@ -192,9 +195,18 @@ export function createRunner({
       fs.mkdirSync(win(temp), { recursive: true });
       // Kept between sessions: the CLI's sign-in, settings and history for this identity.
       if (backend) fs.mkdirSync(backend.home, { recursive: true });
-      if (compiled.net.length) {
+      if (compiled.net.length || askHosts.length) {
         proxy = await startEgressProxy({
-          check: ({ host, port }) => decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() }),
+          // An `ask` waits in the approval inbox, holding the request, until the operator answers or it times out.
+          check: async ({ host, port }) => {
+            const d = decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() });
+            if (d.decision !== 'ask' || !approvals) return d;
+            const o = await approvals.ask({
+              identity, session_id: id, workspace: win(ws), action: 'net.connect', resource: { type: 'Host', id: `${host}:${port}` },
+              policy_version: version, policy_ids: d.determining_policies,
+            });
+            return { ...d, decision: o.result, reasons: [o.reason], approval: true };
+          },
           onEvent: (e) => audit.append({
             type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: 'container' }, session_id: id,
             resource: { type: 'Host', id: `${e.host}:${e.port}` },
@@ -223,7 +235,7 @@ export function createRunner({
     const launch = {
       command, container: req.containerName,
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
-      network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)) } : { proxy: false },
+      network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}) } : { proxy: false },
       skipped: compiled.skipped,
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
@@ -238,6 +250,7 @@ export function createRunner({
       db.prepare('UPDATE sessions SET ended_at = ?, end_reason = ? WHERE id = ? AND ended_at IS NULL').run(now().toISOString(), reason, id);
       event('session.end', identity, id, { result: 'allow', policy_version: version }, { outcome: { status: exitCode === 0 ? 'ok' : 'error', error_code: exitCode == null ? reason : String(exitCode) } });
       live.delete(id);
+      approvals?.endSession(id);
       await cleanup();
       return { reason, exitCode };
     };

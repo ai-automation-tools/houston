@@ -135,6 +135,13 @@ contextBridge.exposeInMainWorld('acc', {
     onChanged: listen('agents:changed'),
   },
 
+  /** The Core's approval inbox: cards waiting for the operator, and their answers. */
+  approvals: {
+    list: invoke('approvals:list'),
+    decide: invoke('approvals:decide'),
+    onChanged: listen('approvals:changed'),
+  },
+
   connections: { check: invoke('connections:check') },
 
   git: { status: invoke('git:status') },

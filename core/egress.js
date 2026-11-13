@@ -70,8 +70,9 @@ function endToEnd(headers) {
  * @typedef {{ host: string, port: number }} Target
  * @typedef {{ type: 'egress.connect', host: string, port: number, scheme: 'https' | 'http', decision: 'allow' | 'deny', reason: string, method?: string, address?: string, policy?: any }} EgressEvent
  * @typedef {object} ProxyOptions
- * @property {(t: Target) => any} check  the policy answer for `net.connect` on `host:port`; only
- *   `{ decision: 'allow' }` lets traffic through. There is nobody to ask mid-connection, so `ask` is deny.
+ * @property {(t: Target) => any} check  the policy answer for `net.connect` on `host:port`, or a promise
+ *   of it; only `{ decision: 'allow' }` lets traffic through and `ask` is deny. The runner turns an
+ *   `ask` into the operator's answer before it gets here (approvals.js), holding the request meanwhile.
  * @property {(e: EgressEvent) => void} [onEvent]  one event per CONNECT or plain-HTTP request
  * @property {(host: string) => Promise<{ address: string, family: number }[]>} [lookup]
  * @property {(address: string) => boolean} [isPublic]  tests only; leave it alone
@@ -107,7 +108,8 @@ export function createEgressProxy({
       return { code: 403, text: 'Refused by policy.' };
     }
     if (policy?.decision !== 'allow') {
-      deny(policy?.decision === 'ask' ? 'ask is deny on the egress proxy' : 'not on the allow-list', { policy });
+      // An operator's answer (the runner's approval inbox) says so in its own words.
+      deny(policy?.approval ? policy.reasons[0] : policy?.decision === 'ask' ? 'ask is deny on the egress proxy' : 'not on the allow-list', { policy });
       return { code: 403, text: `${target.host}:${target.port} is not allowed for this session.` };
     }
     let addresses;
@@ -171,7 +173,7 @@ export function createEgressProxy({
       refuse(502, `Could not reach ${target.host}:${target.port}.`);
     });
     up.on('response', (r) => {
-      emit({ type: 'egress.connect', ...target, ...kind, decision: 'allow', reason: 'allowed', address, policy });
+      emit({ type: 'egress.connect', ...target, ...kind, decision: 'allow', reason: policy?.approval ? policy.reasons[0] : 'allowed', address, policy });
       res.writeHead(r.statusCode ?? 502, endToEnd(r.headers));
       let bytes = 0;
       r.on('data', (chunk) => {
@@ -219,7 +221,7 @@ export function createEgressProxy({
     upstream.once('connect', () => {
       established = true;
       upstream.setTimeout(0);
-      emit({ type: 'egress.connect', ...target, ...kind, decision: 'allow', reason: 'allowed', address, policy });
+      emit({ type: 'egress.connect', ...target, ...kind, decision: 'allow', reason: policy?.approval ? policy.reasons[0] : 'allowed', address, policy });
       client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       if (head?.length) upstream.write(head);
       upstream.pipe(client);

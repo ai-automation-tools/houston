@@ -39,6 +39,7 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 - A run's result is its exit code, never its output. Closing its tab while it runs ends it and every process it started, found by the pid the app started, never by name.
 - Newlines, control characters and invisible characters are refused, so the bar shows exactly what runs. Unanswered asks expire after 5 minutes.
 - The Agents tab's sessions are the Core's, not the app's. The window names an identity or a session and nothing else; the folder is the active workspace's and the command is the identity's backend manifest or a fixed `cmd.exe`. The Core checks the identity and its grants and runs the session in an OS container, which can't read your profile, reach other local apps, or connect anywhere its grants don't list. Its terminal reaches the window over the Core's named pipe, never a port.
+- An *ask* grant's request waits in the Core until you answer its card. The window only shows the card and sends back once, session or deny; the Core holds the request and denies it when the 2 minutes run out or the session ends, so a closed or hung window can only ever deny. Every ask and answer is in the audit log.
 - A Claude Code or Codex identity signs in to a folder of its own (`%LOCALAPPDATA%\houston-agents`), never your own `.claude` or `.codex`, so it can read its own sign-in and nothing of yours: not your MCP servers' tokens, hooks or history.
 
 ## The MCP server

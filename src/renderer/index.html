@@ -131,6 +131,15 @@
           <button id="confirm-run">Run</button>
           <button id="confirm-deny">Deny</button>
         </div>
+        <div id="approval-bar" role="alertdialog" aria-labelledby="approval-label" aria-describedby="approval-what" hidden>
+          <span id="approval-label">🛡 <b id="approval-who"></b> wants to</span>
+          <code id="approval-what"></code>
+          <span id="approval-where" class="approval-meta"></span>
+          <span id="approval-left" class="approval-meta" title="Unanswered, it's denied when this reaches 0"></span>
+          <button id="approval-once" title="Allow this one request">Allow once</button>
+          <button id="approval-session" title="Allow this and the same request again until the session ends">Allow for this session</button>
+          <button id="approval-deny">Deny</button>
+        </div>
         <div id="term-host"></div>
       </section>
     </main>

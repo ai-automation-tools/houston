@@ -9,6 +9,7 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
+import { createApprovals } from '../../core/approvals.js';
 import { RunnerError, compileGrants, containerName, createRunner, listBrokers, markInterrupted } from '../../core/runner.js';
 
 const WIN = process.platform === 'win32';
@@ -203,6 +204,33 @@ test('a backend identity refuses a command, a missing program, and a runner with
   assert.deepEqual(s.events().map((e) => e.decision.result), ['deny', 'deny', 'deny']);
   // An identity with no backend still names its command.
   await assert.rejects(setup(t).runner.start({ identity: 'local:dev', workspace: s.ws }), /a command is required/);
+});
+
+test('an ask grant gets a proxy; its CONNECT waits in the approval inbox, and the operator\'s deny refuses it', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t, { grants: [['maybe', 'net:example.com:443', 'connect', 'ask']] });
+  const approvals = createApprovals({ audit: s.audit });
+  const sdk = fakeSdk();
+  const runner = createRunner({ db: s.db, audit: s.audit, coreDir: path.join(s.root, 'core'), tempRoot: path.join(s.root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk, approvals });
+  const session = await runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe' });
+  const { launch } = s.events().find((e) => e.type === 'session.start');
+  assert.deepEqual(launch.network, { proxy: true, hosts: [], ask: ['example.com:443'] });
+  const port = Number(/:(\d+)$/.exec(sdk.calls[0].request.network.runtimeConfig.networkProxy)[1]);
+  const status = new Promise((resolve) => {
+    const c = net.connect(port, '127.0.0.1', () => c.write('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n'));
+    c.once('data', (d) => { resolve(Number(String(d).slice(9, 12))); c.destroy(); });
+  });
+  for (let i = 0; i < 50 && !approvals.list().length; i++) await new Promise((r) => setTimeout(r, 20));
+  const [card] = approvals.list();
+  assert.deepEqual([card.identity, card.session_id, card.action, card.resource.id], ['local:dev', session.id, 'net.connect', 'example.com:443']);
+  assert.equal(card.workspace.toLowerCase(), s.ws.toLowerCase());
+  approvals.decide(card.id, 'deny');
+  assert.equal(await status, 403);
+  const ev = s.events().find((e) => e.type === 'egress.connect');
+  assert.deepEqual([ev.decision.result, ev.decision.reasons[0]], ['deny', 'denied by the operator']);
+  // A card left waiting when the session ends is denied with it.
+  void approvals.ask({ identity: 'local:dev', session_id: session.id, workspace: s.ws, action: 'net.connect', resource: { type: 'Host', id: 'x:443' }, policy_version: 'v' });
+  await session.stop();
+  assert.deepEqual(approvals.list(), []);
 });
 
 test('a container that fails to start ends the session and cleans up', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
