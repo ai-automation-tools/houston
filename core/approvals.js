@@ -112,7 +112,7 @@ export function createApprovals({ audit, now = () => new Date(), timeoutMs = TIM
     },
 
     /** What the window shows, oldest first. */
-    list: () => [...pending.values()].map(({ id, identity, session_id, workspace, action, resource, createdAt, expiresAt }) => ({ id, identity, session_id, workspace, action, resource, createdAt, expiresAt })),
+    list: () => [...pending.values()].map(({ id, identity, containment, session_id, workspace, action, resource, createdAt, expiresAt }) => ({ id, identity, containment: containment ?? 'container', session_id, workspace, action, resource, createdAt, expiresAt })),
 
     /** A session ended: deny what it still had waiting and forget its session allows. @param {string} sessionId */
     endSession(sessionId) {

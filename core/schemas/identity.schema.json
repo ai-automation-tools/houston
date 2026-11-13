@@ -22,6 +22,7 @@
     "expiresAt": { "type": ["string", "null"], "format": "date-time" },
     "retiredAt": { "type": ["string", "null"], "format": "date-time" },
     "reviewedAt": { "description": "When the operator last marked it reviewed (identity.review). Null until then.", "type": ["string", "null"], "format": "date-time" },
+    "standingAllowed": { "description": "A broad-access (unconfined) identity only: whether it may hold standing grants. Off until the operator switches it on.", "type": "boolean" },
     "reviewBy": { "description": "When its next review is due.", "type": ["string", "null"], "format": "date-time" },
     "grants": { "type": "array", "items": { "$ref": "#/$defs/grant" } },
     "tags": { "type": "array", "items": { "type": "string" } }

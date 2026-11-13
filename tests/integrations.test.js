@@ -103,3 +103,9 @@ test('runtimeRows says which agent CLI can use each local runtime, and what the 
   assert.match(r.title, /net:127\.0\.0\.1:11434 \(connect\)/);
   assert.equal(runtimeRows([{ id: 'x', name: 'X', port: 1, models: ['a', 'b'], apis: { chat: true, responses: true, messages: true } }])[0].sub, '2 models · for Codex and Claude Code');
 });
+
+test('a standing grant of a broad-access identity is marked unconfined', () => {
+  const [r] = standingRows([{ id: 'wide', identity: 'local:wide', workspace: 'D:\w', command: 'x', maxMinutes: 5, expiresAt: '2099-01-01T00:00:00Z', status: 'active', grantsChanged: false, lastRunAt: null, running: null, containment: 'unconfined' }], Date.parse('2026-11-13T00:00:00Z'));
+  assert.match(r.sub, /^⚠ unconfined · local:wide/);
+  assert.match(r.title, /broad-access identity, outside any container/);
+});

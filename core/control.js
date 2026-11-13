@@ -29,7 +29,7 @@ import { VaultError } from './vault.js';
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'profile.list', 'profile.create', 'skill.list', 'skill.install', 'skill.remove',
-  'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list',
+  'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list', 'identity.allowStanding',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
@@ -232,6 +232,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'memory.remove': (p) => need(memory, 'memory').remove(p.id),
     'identity.list': (p) => registry.list({ status: p.status, profile: p.profile }),
     'identity.get': (p) => registry.get(str(p.id, 'id')),
+    'identity.allowStanding': (p) => registry.allowStanding(p.id, p.allowed, OPERATOR),
     'identity.create': (p) => registry.create(p, OPERATOR),
     'identity.activate': (p) => registry.setStatus(str(p.id, 'id'), 'active', OPERATOR, p.reason),
     // Suspending or retiring also stops the identity's running sessions.

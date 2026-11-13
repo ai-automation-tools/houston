@@ -181,7 +181,8 @@ function showApproval() {
   $('approval-bar').hidden = !card;
   if (!card) { shownApproval = ''; return; }
   if (mainEl.classList.contains('no-terminal')) setTerminalOpen(true);
-  $('approval-who').textContent = card.identity;
+  // A broad-access identity is marked wherever it appears (H5): nothing contains it.
+  $('approval-who').textContent = card.containment === 'unconfined' ? `${card.identity} ⚠ broad access, unconfined` : card.identity;
   $('approval-what').textContent = describeAsk(card);
   $('approval-where').textContent = `in ${card.workspace}${approvalCards.length > 1 ? ` · 1 of ${approvalCards.length}` : ''}`;
   tickApproval();

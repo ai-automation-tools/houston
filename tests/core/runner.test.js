@@ -89,6 +89,8 @@ function setup(t, { status = 'active', containment = 'container', grants = [], b
   const sdk = fakeSdk();
   const runner = createRunner({
     db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), agentsRoot: path.join(root, 'agents'), home: 'C:\\Users\\nobody-here', sdk, isFile,
+    // A broad-access identity's terminal: the same fake, its request the host spawn's options.
+    hostPty: (o) => sdk.spawnWithPty({ host: o }, undefined),
     where: { home: 'C:\\Users\\nobody-here', appData: 'C:\\Users\\nobody-here\\AppData\\Roaming', PATH: 'C:\\Program Files\\Git\\cmd' },
   });
   const events = () => [...audit.events()].map((e) => e);
@@ -154,7 +156,7 @@ test('a session that exits by itself is recorded with its exit code', { skip: !W
 test('start refuses, and writes a session.start deny, for each thing that would make the launch unsafe', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
   const cases = [
     [{ status: 'suspended' }, {}, /identity is suspended/],
-    [{ containment: 'unconfined' }, {}, /runs unconfined/],
+    [{ containment: 'restricted-token' }, {}, /restricted-token rung is not built/],
     [{}, { identity: 'local:ghost' }, /unknown identity/],
     [{}, { workspace: 'D:\\not-granted' }, /no write grant on the workspace/],
     [{ grants: [['env', 'file:D:/x/**/.env', 'read', 'deny']] }, {}, /can't be enforced by the container/],
@@ -362,4 +364,22 @@ test('a sub-agent runs under a running parent: its toolchain, no later end, at m
   await parent.stop();
   await Promise.all([child.done, grandchild.done]);
   assert.deepEqual(s.runner.list(), [], 'its children and theirs ended with it');
+});
+
+test('a broad-access (unconfined) identity runs on the host, not in a container, and says so in the session, its events and the list', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t, { containment: 'unconfined' });
+  const session = await s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe /c dir', program: { pathDirs: ['C:\\Tools'] } });
+  const { host } = s.sdk.calls[0].request;
+  assert.equal(host.command, 'cmd.exe /c dir');
+  assert.equal(host.cwd.toLowerCase(), s.ws.toLowerCase());
+  assert.equal(host.env.PATH, 'C:\\Tools;C:\\Program Files\\Git\\cmd', 'its program folders, then the operator\'s PATH');
+  assert.match(host.env.TEMP, /sessions/);
+  assert.equal(s.db.prepare('SELECT containment FROM sessions WHERE id = ?').get(session.id).containment, 'unconfined');
+  const [start] = s.events();
+  assert.deepEqual([start.identity.containment, start.launch.containment, start.launch.container], ['unconfined', 'unconfined', undefined]);
+  assert.match(start.launch.note, /grants do not bind it/);
+  assert.equal(s.runner.list()[0].containment, 'unconfined');
+  s.sdk.calls[0].term.exit(0);
+  assert.deepEqual(await session.done, { reason: 'exit 0', exitCode: 0 });
+  assert.equal(s.events().at(-1).identity.containment, 'unconfined');
 });

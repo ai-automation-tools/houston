@@ -35,13 +35,14 @@ test('agentRows: no operator or retired identities, active first, and why a row 
     ['local:codex', false, 'Codex is not installed'],
     ['local:odd', false, 'unknown backend gemini'],
     ['local:shell', true, ''],
-    ['local:wide', false, "runs unconfined, which this build can't start yet"],
+    ['local:wide', true, ''],
     ['local:draft', false, 'draft: activate it to start a session'],
   ]);
   assert.deepEqual(rows[0].sessions.map((s) => s.id), ['s1']);
   assert.equal(rows[0].what, 'Claude Code');
   assert.equal(rows[0].signIn, 'Run /login');
   assert.equal(rows[3].what, 'contained shell');
+  assert.deepEqual([rows[4].what, rows[4].broad, rows[3].broad], ['⚠ broad access, unconfined · shell', true, false], 'a broad-access identity starts, and says so');
 });
 
 test('the shell an identity with no backend runs is fixed', () => {

@@ -97,6 +97,7 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
     id: r.id, kind: r.kind, profile: r.profile_id ?? DEFAULT_PROFILE, displayName: r.display_name, owner: r.owner, parent: r.parent, purpose: r.purpose, backend: r.backend,
     status: r.status, containment: r.containment, createdAt: r.created_at, lastUsedAt: r.last_used_at,
     expiresAt: r.expires_at, retiredAt: r.retired_at, reviewedAt: r.reviewed_at ?? null, reviewBy: r.review_by ?? null, tags: JSON.parse(r.tags),
+    ...(r.containment === 'unconfined' && r.kind !== 'operator' ? { standingAllowed: r.standing_allowed === 1 } : {}),
     grants: /** @type {any[]} */ (db.prepare('SELECT * FROM grants WHERE identity_id = ? ORDER BY granted_at, id').all(r.id)).map((g) => ({
       id: g.id, resource: g.resource, permission: g.permission, effect: g.effect,
       grantedAt: g.granted_at, grantedBy: g.granted_by, expiresAt: g.expires_at, lastUsedAt: g.last_used_at,
@@ -180,6 +181,21 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
       db.prepare('UPDATE identities SET reviewed_at = ?, review_by = ? WHERE id = ?').run(at.toISOString(), by, id);
       event('identity.lifecycle', 'identity.review', actor, { type: 'Identity', id }, { lifecycle: { from: r.status, to: r.status }, review: { reviewedAt: at.toISOString(), reviewBy: by } });
       return shape(row(id));
+    },
+
+    /**
+     * Switch standing grants on or off for a broad-access (unconfined) identity (H5). Off by
+     * default: nothing unconfined runs unattended until the operator says so for that identity.
+     * Off again refuses its standing grants' next runs.
+     * @param {unknown} id @param {unknown} allowed @param {string} actor
+     */
+    allowStanding(id, allowed, actor) {
+      const r = must(id);
+      if (r.containment !== 'unconfined' || r.kind === 'operator') throw bad(`${String(id)} isn't a broad-access identity; a contained one's standing grants need no switch`);
+      if (typeof allowed !== 'boolean') throw bad('allowed is true or false');
+      db.prepare('UPDATE identities SET standing_allowed = ? WHERE id = ?').run(allowed ? 1 : 0, r.id);
+      event('identity.lifecycle', 'identity.allow_standing', actor, { type: 'Identity', id: r.id }, { lifecycle: { from: r.status, to: r.status }, standing_allowed: allowed });
+      return shape(row(r.id));
     },
 
     /**

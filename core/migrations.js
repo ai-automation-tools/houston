@@ -225,4 +225,10 @@ export const MIGRATIONS = [
   ) STRICT;
   CREATE INDEX memories_by_profile ON memories (profile_id, state);
   `,
+
+  // v12 (H5): a broad-access (unconfined) identity holds a standing grant only once the operator
+  // switches that on for it (identity.allowStanding). Meaningless for a contained one.
+  `
+  ALTER TABLE identities ADD COLUMN standing_allowed INTEGER NOT NULL DEFAULT 0 CHECK (standing_allowed IN (0, 1));
+  `,
 ];

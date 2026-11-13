@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/milestone-Harness_H5-8B5CF6?style=for-the-badge" alt="Milestone: Harness H5">
-  <img src="https://img.shields.io/badge/schema-v11-2ea44f?style=for-the-badge" alt="Schema v11">
+  <img src="https://img.shields.io/badge/schema-v12-2ea44f?style=for-the-badge" alt="Schema v12">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**delegate.js**](delegate.js) | Sub-agents: the gateway's `harness.delegate` tool, the intersection of what a child asks for with what its parent holds, and the child's identity from start to retirement. |
+| [**hostpty.js**](hostpty.js) | A broad-access session's terminal: the command on the host in a ConPTY, shaped like the container SDK's, ending its whole process tree when stopped. |
 | [**runtimes.js**](runtimes.js) | Local model runtimes: finding the ones answering on this machine and what APIs each serves, and the relay a session reaches one through. |
 | [**memory.js**](memory.js) | Profile memory: an agent's proposals, pending until the operator reviews them, and the approved items a session may recall. |
 | [**skills.js**](skills.js) | Skills: installing a skill folder into a profile with its content hash, and the skills a session gets (its `skill:` grants, unchanged ones only), linked into an agent CLI's home. |
@@ -81,11 +82,11 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v11
+## 🧱 Schema v12
 
 | Table | Holds |
 |:---|:---|
-| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due; since v9, its profile. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
+| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due; since v12, whether a broad-access one may hold standing grants; since v9, its profile. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`, and since v10 `skill:` and `memory:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
 | `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
@@ -586,6 +587,16 @@ npm run ctl -- memory.review id=<id> decision=approve
 
 AT-10 checks it in real containers: a parent asks for its folder plus the whole workspace, `C:`, pastebin and any command; the child gets the folder and the parent's hosts only, writes inside its folder, reaches the parent's host, and is refused the wider folder and pastebin.
 
+## 🔓 Broad-access identities
+
+Some work won't fit in a container (ADR-004). An identity made with `containment=unconfined` is a **broad-access identity** (H5): the runner starts its session on the host, in a terminal of its own ([`hostpty.js`](hostpty.js)), with the operator's `PATH` behind its program folders and its CLI home as usual. Nothing contains it: its file and `net:` grants don't bind it (it still needs a write grant on its workspace, as a statement of where it works). It still gets the session's gateway with its token, so its MCP tool calls are checked and recorded, but for it the gateway is an audit convenience, not a control.
+
+- **Marked everywhere.** `sessions.containment` and every event say `unconfined`, the `session.start` launch says its grants don't bind it, `session.list` gives its containment, and the window marks it ⚠ in the Agents tab, the Identity Center, the Logs tab, approval cards and standing grants.
+- **No standing grants unless switched on.** `standing.create` refuses one for a broad-access identity until `identity.allowStanding id=<id> allowed=true` (schema v12's `identities.standing_allowed`, an `identity.lifecycle` event). Switched off again, its standing grants' next runs are refused.
+- **Stopping** ends its whole process tree, Stop All included. A restricted-token rung is still refused (H7).
+
+Checked on 2026-11-13 by [`spikes/h5-broad-access.mjs`](../spikes/h5-broad-access.mjs): a broad-access session wrote outside its granted folder and its gateway answered with its token; every record said unconfined; Stop All left none of its processes; a standing grant for it was refused, then ran through `harness run` once switched on, and was refused again once switched off.
+
 ## ⏰ Standing grants
 
 [`standing.js`](standing.js) is the operator's leave for one identity to run one command in one folder with nobody watching (CORE-15, H4). Cronsole owns the schedule (ADR-004): a scheduled task runs [`harness.js`](harness.js), `node core/harness.js run --grant <id>`, and the Core checks the standing grant at every run.
@@ -664,6 +675,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `identity.create` | `id`, `kind`, `displayName`; optional `profile` (default `default`), `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
 | `identity.activate` | `id`; optional `reason` | the identity |
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
+| `identity.allowStanding` | `id`, `allowed` (true or false) | the identity; a broad-access (unconfined) one only ([Broad-access identities](#-broad-access-identities)) |
 | `identity.review` | `id`; optional `days` (1 to 366, default 90) | the identity, with `reviewedAt` now and `reviewBy` that many days on |
 | `identity.reach` | `id` | what its grants open now: `types` (live grants by type and effect), `expired`, `notApplied`, `alwaysDenied`, `backend` (with `missingHosts`), `standing`, `enforced` ([Identity registry](#-identity-registry)) |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
@@ -728,7 +740,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Profile memory is in, with its review queue ([Profile memory](#-profile-memory)), and local model runtimes are found and relayed ([Local model runtimes](#️-local-model-runtimes)). The window's Feed tab and start page finish H6. Next on the [roadmap](../docs/ROADMAP.md): H5's quarantine profile preset and broad-access identities, then H7. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Profiles are in (the [Profiles](#-profiles) section). Sub-agents are in too ([Sub-agents](#-sub-agents), AT-10). H5's quarantine profile preset and broad-access identities are still open. H6 has started: Roundtable's seats are bound to identities ([MCP gateway](#-mcp-gateway), `{identity}`). Promptbook is the discovery catalogue and skills install and attach ([Skills](#-skills)); AT-09 passes. Profile memory is in, with its review queue ([Profile memory](#-profile-memory)), and local model runtimes are found and relayed ([Local model runtimes](#️-local-model-runtimes)). The window's Feed tab and start page finish H6. Broad-access identities are in ([Broad-access identities](#-broad-access-identities)). Next on the [roadmap](../docs/ROADMAP.md): H5's quarantine profile preset, then H7. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

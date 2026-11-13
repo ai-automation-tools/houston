@@ -15,6 +15,8 @@ import { BACKENDS, BackendError, gatewayArgs, listBackends, quote, resolveBacken
 const BACKEND_LOCAL = (name) => (Object.hasOwn(BACKENDS, name) ? BACKENDS[/** @type {keyof typeof BACKENDS} */ (name)].localModel ?? null : null);
 import { startEgressProxy } from './egress.js';
 import { RELAY, relay } from './runtimes.js';
+import { spawnHostPty } from './hostpty.js';
+import { systemEnv } from './launch.js';
 import { LaunchError, launchRequest } from './launch.js';
 import { PathError, canonicalPath, pathKey, resolvePath } from './paths.js';
 import { decide, globalDenies, policyVersion } from './policy.js';
@@ -104,6 +106,8 @@ export function compileGrants(grants, now = new Date()) {
  * @property {Pick<ReturnType<typeof import('./skills.js').createSkills>, 'forSession' | 'link'>} [skills] installed skills (H6); each attached one is mounted read-only
  * @property {{ forSession: ReturnType<typeof import('./gateway.js').createGateway>['forSession'] }} [gateway] the MCP gateway; every session then gets one on its proxy port
  * @property {{ spawnWithPty: Function }} [sdk] defaults to @microsoft/mxc-sdk/v1
+ * @property {(o: { command: string, cwd: string, env: Record<string, string>, size?: { rows: number, columns: number } }) => Promise<any>} [hostPty]
+ *   a broad-access (unconfined) identity's terminal on the host; defaults to hostpty.js
  * @property {() => Date} [now]
  *
  * @typedef {object} StartSpec
@@ -130,7 +134,7 @@ export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */
 export function createRunner({
-  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals, gateway, skills,
+  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals, gateway, skills, hostPty = spawnHostPty,
   where = { home, appData: process.env.APPDATA ?? path.win32.join(home, 'AppData', 'Roaming'), PATH: process.env.PATH ?? '' },
 }) {
   const globals = globalDenies({ home, coreDir });
@@ -142,9 +146,11 @@ export function createRunner({
    * @typedef {{ id: string, identity: string, workspace: string, startedAt: string, standingGrant: string | null, parent: string | null, depth: number, endsAt: number, homeIdentity: string, program: { readonly?: string[], pathDirs?: string[], env?: Record<string, string> }, input: import('node:stream').Writable, output: import('node:stream').Readable, resize: (size: { rows: number, columns: number }) => void, stop: () => Promise<{ reason: string }>, done: Promise<{ reason: string, exitCode: number | null }> }} Session
    */
 
+  /** @param {string} id */
+  const containmentOf = (id) => /** @type {any} */ (db.prepare('SELECT containment FROM identities WHERE id = ?').get(id))?.containment ?? 'container';
   /** @param {string} type @param {string} identity @param {string} sessionId @param {object} decision @param {object} [extra] */
   const event = (type, identity, sessionId, decision, extra = {}) => audit.append({
-    type, action: type, identity: { subject: identity, containment: 'container' }, session_id: sessionId,
+    type, action: type, identity: { subject: identity, containment: containmentOf(identity) }, session_id: sessionId,
     resource: { type: 'Session', id: sessionId }, decision, ...extra,
   });
 
@@ -177,7 +183,9 @@ export function createRunner({
     if (!who) throw refuse('unknown identity');
     if (who.status !== 'active') throw refuse(`the identity is ${who.status}`);
     if (who.expires_at != null && !(Date.parse(who.expires_at) > now().getTime())) throw refuse('the identity has expired');
-    if (who.containment !== 'container') throw refuse(`the identity runs ${who.containment}; this runner starts containers only`);
+    if (who.containment === 'restricted-token') throw refuse('the restricted-token rung is not built yet (H7)');
+    // A broad-access identity (H5): on the host, unconfined. Its grants don't bind it; the gateway, its token and the audit log still apply.
+    const unconfined = who.containment === 'unconfined';
 
     // A backend identity runs its manifest's command, with its CLI home; anything else names its command.
     let backend = null;
@@ -241,7 +249,7 @@ export function createRunner({
         const toRuntime = runtime && gw ? relay({
           port: runtime.port, token: gw.token,
           onEvent: (e) => audit.append({
-            type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: 'container' }, session_id: id,
+            type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: who.containment }, session_id: id,
             resource: { type: 'Host', id: `127.0.0.1:${runtime.port}` },
             decision: { result: e.status === 401 ? 'deny' : 'allow', policy_version: version, policy_ids: [], reasons: [e.reason] },
             egress: { scheme: 'relay', method: e.method, path: e.path, status: e.status, runtime: runtime.id },
@@ -254,13 +262,13 @@ export function createRunner({
             const d = decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() });
             if (d.decision !== 'ask' || !approvals) return d;
             const o = await approvals.ask({
-              identity, session_id: id, workspace: win(ws), action: 'net.connect', resource: { type: 'Host', id: `${host}:${port}` },
+              identity, containment: who.containment, session_id: id, workspace: win(ws), action: 'net.connect', resource: { type: 'Host', id: `${host}:${port}` },
               policy_version: version, policy_ids: d.determining_policies,
             });
             return { ...d, decision: o.result, reasons: [o.reason], approval: true };
           },
           onEvent: (e) => audit.append({
-            type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: 'container' }, session_id: id,
+            type: 'egress.connect', action: 'net.connect', identity: { subject: identity, containment: who.containment }, session_id: id,
             resource: { type: 'Host', id: `${e.host}:${e.port}` },
             decision: { result: e.decision, policy_version: version, policy_ids: e.policy?.determining_policies ?? [], reasons: [e.reason] },
             egress: { scheme: e.scheme, method: e.method ?? null, address: e.address ?? null },
@@ -279,14 +287,20 @@ export function createRunner({
         if (more) command = [command.slice(0, command.length - backend.tail.length).trimEnd(), more, backend.tail].filter(Boolean).join(' ');
       }
       const runtimeEnv = runtimeUrl && runtime ? { HOUSTON_RUNTIME_URL: runtimeUrl, HOUSTON_RUNTIME_MODEL: runtime.model, ...(local ? local.env(runtimeUrl, runtime.model, /** @type {any} */ (gw).token) : {}) } : {};
-      req = {
+      const sessionEnv = { ...program.env, ...backend?.env, ...mcp, ...runtimeEnv, ...(skillSet.mounted.length ? { HOUSTON_SKILLS: skillSet.mounted.map((s) => s.folder).join(';') } : {}) };
+      // Unconfined: the operator's PATH with its program folders first, the Windows basics, and the session's own variables.
+      if (unconfined) req = {
+        unconfined: true, command, cwd: win(ws),
+        env: { ...systemEnv(), PATH: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? []), where.PATH].filter(Boolean).join(';'), TEMP: win(temp), TMP: win(temp), ...sessionEnv },
+      };
+      else req = {
         ...launchRequest({
           command, workspace: ws, temp, home, globals,
           readwrite: [...compiled.readwrite, ...(backend?.readwrite ?? [])],
           readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? []), ...skillSet.mounted.map((s) => s.folder)], denied: compiled.denied,
           pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
           // The manifest's variables win: a caller can't point the CLI at another home, or the session at another gateway.
-          env: { ...program.env, ...backend?.env, ...mcp, ...runtimeEnv, ...(skillSet.mounted.length ? { HOUSTON_SKILLS: skillSet.mounted.map((s) => s.folder).join(';') } : {}) }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
+          env: sessionEnv, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
           proxyPort: proxy?.port, timeoutMs: timeoutMs + 60_000,
         }),
         containerName: containerName(id),
@@ -298,8 +312,9 @@ export function createRunner({
 
     const startedAt = now().toISOString();
     const launch = {
-      command, container: req.containerName,
-      readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
+      command,
+      ...(unconfined ? { containment: 'unconfined', note: 'runs on the host: its file and net grants do not bind it' }
+        : { container: req.containerName, readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths }),
       network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}), ...(gw ? { gateway: true } : {}) } : { proxy: false },
       skipped: compiled.skipped,
       ...(runtime ? { runtime: { id: runtime.id, port: runtime.port, model: runtime.model } } : {}),
@@ -308,7 +323,7 @@ export function createRunner({
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
     };
     db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, standing_grant_id, parent_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt, standingGrant ?? null, parentSession ?? null);
+      .run(id, identity, ws, unconfined ? 'unconfined' : 'container', attended ? 1 : 0, version, startedAt, standingGrant ?? null, parentSession ?? null);
     db.prepare('UPDATE identities SET last_used_at = ? WHERE id = ?').run(startedAt, identity);
     event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch, ...(standingGrant ? { standing_grant: standingGrant } : {}), ...(parentSession ? { parent_session: parentSession } : {}) });
 
@@ -326,11 +341,14 @@ export function createRunner({
 
     let term;
     try {
-      const mxc = sdk ?? await import('@microsoft/mxc-sdk/v1');
-      term = await mxc.spawnWithPty(req, size ? { size } : undefined);
+      if (unconfined) term = await hostPty({ command: req.command, cwd: req.cwd, env: req.env, size });
+      else {
+        const mxc = sdk ?? await import('@microsoft/mxc-sdk/v1');
+        term = await mxc.spawnWithPty(req, size ? { size } : undefined);
+      }
     } catch (e) {
       await finish(`failed to start: ${/** @type {Error} */ (e).message}`, null);
-      throw new RunnerError(`the container did not start: ${/** @type {Error} */ (e).message}`);
+      throw new RunnerError(`${unconfined ? 'the process' : 'the container'} did not start: ${/** @type {Error} */ (e).message}`);
     }
 
     // The SDK hands out the terminal's streams only until wait() starts draining them.
@@ -364,7 +382,7 @@ export function createRunner({
     start,
     /** @param {string} id */
     get: (id) => live.get(id),
-    list: () => [...live.values()].map(({ id, identity, workspace, startedAt, standingGrant, parent }) => ({ id, identity, workspace, startedAt, standingGrant, parent })),
+    list: () => [...live.values()].map(({ id, identity, workspace, startedAt, standingGrant, parent }) => ({ id, identity, workspace, startedAt, standingGrant, parent, containment: containmentOf(identity) })),
     stopAll: () => Promise.all([...live.values()].map((s) => s.stop())),
     /** The backend manifests, and whether each program is installed on this machine. */
     backends: () => listBackends(where, isFile),

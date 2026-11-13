@@ -49,7 +49,7 @@ const TYPES = { file: 'Files', net: 'Network', tool: 'MCP tools', command: 'Comm
 export function identitiesBody({ identities, reach, sessions, starts, now }, esc) {
   const list = [...identities].sort((a, b) => Number(a.kind === 'operator') - Number(b.kind === 'operator')
     || Number(a.status === 'retired') - Number(b.status === 'retired') || a.id.localeCompare(b.id));
-  const runs = (/** @type {Identity} */ i) => `${i.containment}${i.backend ? ` · ${i.backend}` : ''}`;
+  const runs = (/** @type {Identity} */ i) => `${i.containment === 'unconfined' && i.kind !== 'operator' ? '⚠ broad access, unconfined' : i.containment}${i.backend ? ` · ${i.backend}` : ''}`;
   const overdue = list.filter((i) => reviewState(i, now).state === 'overdue').length;
   const top = `<h1>Identity Center</h1><p class="note">${esc(`${list.length} identities, ${sessions.length} sessions running${overdue ? `, ${overdue} overdue for review` : ''}. `
     + 'Activate, Suspend, Retire and Reviewed are in the sidebar\'s Agents tab; identities and grants are made with npm run ctl (core/README.md). '
@@ -69,6 +69,7 @@ function section(i, r, running, recent, now, esc) {
   const rows = /** @type {[string, string][]} */ ([
     ['Id', i.id], ['Kind', i.kind], ['Status', i.status],
     ['Runs', i.containment === 'unconfined' ? 'unconfined: outside any container, with the operator\'s own access' : i.containment],
+    ...(i.standingAllowed === undefined ? [] : [['Standing grants', i.standingAllowed ? 'switched on: it may run unattended, unconfined' : 'off (identity.allowStanding switches them on)']]),
     ['Backend', i.backend ?? '—'], ['Owner', i.owner ?? '—'], ['Parent', i.parent ?? '—'], ['Purpose', i.purpose ?? '—'],
     ['Tags', i.tags.join(', ') || '—'], ['Created', when(i.createdAt)], ['Last used', when(i.lastUsedAt)], ['Expires', when(i.expiresAt)],
     ...(i.retiredAt ? /** @type {[string, string][]} */ ([['Retired', when(i.retiredAt)]]) : []),
@@ -95,7 +96,7 @@ function reachBody(i, r, esc) {
   if (!r) return '<p class="note">Not asked.</p>';
   if ('error' in r) return `<p class="note">${esc(`The Core couldn't say: ${r.error}`)}</p>`;
   const out = [];
-  if (!r.enforced) out.push(`<p class="note">${esc(`It runs ${r.containment}, which this build can't start: nothing below is enforced yet.`)}</p>`);
+  if (!r.enforced) out.push(`<p class="note">${esc(r.containment === 'unconfined' ? 'It runs unconfined, on the host: nothing below is enforced by a container. Only the gateway\'s tool checks and the audit log apply.' : `It runs ${r.containment}, which this build can't start: nothing below is enforced yet.`)}</p>`);
   const lines = Object.entries(r.types).flatMap(([type, e]) => /** @type {const} */ (['allow', 'ask', 'deny'])
     .filter((k) => e[k].length).map((k) => `<li><strong>${esc(`${TYPES[/** @type {keyof typeof TYPES} */ (type)] ?? type}, ${k === 'allow' ? 'allowed' : k === 'ask' ? 'asks first' : 'denied'}:`)}</strong> `
       + e[k].map((x) => `<code>${esc(x.resource)}</code> ${esc(x.permission)}`).join(', ') + '</li>'));
