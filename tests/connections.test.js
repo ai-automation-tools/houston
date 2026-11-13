@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SHELLS, chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../src/shared/connections.js';
+import { SHELLS, chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../src/shared/connections.js';
 
 test('Hub: ready with its address, or failing with what to do', () => {
   assert.deepEqual(hubRow('http://127.0.0.1:4273', { ok: true, state: 'ready' }), { id: 'hub', name: 'Project Hub', state: 'ok', detail: 'http://127.0.0.1:4273 · ready' });
@@ -47,4 +47,21 @@ test('MCP server: its address, or that it never started', () => {
   const bad = mcpRow(null);
   assert.equal(bad.state, 'bad');
   assert.match(bad.fix || '', /app\.log/);
+});
+
+test('Houston Core: running with its containment rung and sessions, not running with how to start it, or failing', () => {
+  assert.deepEqual(coreRow({ pid: 41, containment: 'container', sessions: 1 }), { id: 'core', name: 'Houston Core', state: 'ok', detail: 'Running · containment: container · 1 session · pid 41' });
+  assert.match(coreRow({ pid: 41, containment: 'container', sessions: 0 }).detail, /0 sessions/);
+  for (const code of ['ENOENT', 'ECONNREFUSED']) {
+    const off = coreRow({ error: 'gone', code });
+    assert.equal(off.state, 'off');
+    assert.equal(off.detail, 'Not running');
+    assert.match(off.fix || '', /Register-HoustonCore\.ps1 -StartNow/);
+  }
+  const bad = coreRow({ error: 'bad or missing token', code: 'unauthorized' });
+  assert.deepEqual([bad.state, bad.detail], ['bad', 'unauthorized: bad or missing token']);
+  assert.match(bad.fix || '', /core\.log/);
+  assert.deepEqual(((r) => [r.state, r.detail])(coreRow({ error: 'methods: ...', code: 'unknown_method' })), ['bad', 'Running older code than the app']);
+  assert.equal(coreRow({ error: 'core.status: no answer in 3000 ms' }).detail, 'core.status: no answer in 3000 ms');
+  assert.match(coreRow(null).detail, /^Windows only/);
 });

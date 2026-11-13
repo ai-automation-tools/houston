@@ -12,6 +12,7 @@ import { METHODS, callControl, queryAudit, startControl } from '../../core/contr
 import { migrate, openDb } from '../../core/db.js';
 import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
 import { RunnerError } from '../../core/runner.js';
+import { core } from '../../src/main/core.js';
 
 const CTL = fileURLToPath(new URL('../../core/ctl.js', import.meta.url));
 
@@ -48,7 +49,7 @@ async function setup(t) {
   migrate(db);
   ensureOperator(db, audit);
   const registry = createRegistry({ db, audit });
-  const control = await startControl({ dir, runner, registry, audit });
+  const control = await startControl({ dir, runner, registry, audit, schema: 3 });
   t.after(async () => { await control.close(); audit.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
   return { dir, audit, runner, control, call };
@@ -207,4 +208,23 @@ test('ctl.js calls the API from the command line, with key=value or JSON params'
   assert.deepEqual([bad.code, bad.stderr.trim()], [1, "error: 'local:cli' is not key=value"]);
   const missing = await ctl('identity.get', 'id=local:nobody');
   assert.deepEqual([missing.code, missing.stderr.trim()], [1, 'not_found: no identity local:nobody']);
+});
+test('core.status: pid, schema, the containment rung and how many sessions run', async (t) => {
+  const s = await setup(t);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+  const st = await s.call('core.status');
+  assert.deepEqual({ ...st, startedAt: typeof st.startedAt }, { pid: process.pid, startedAt: 'string', schema: 3, containment: 'container', sessions: 1 });
+});
+
+test("Houston's client finds the Core through HOUSTON_CORE_DATA, and says ENOENT when it isn't running", async (t) => {
+  const s = await setup(t);
+  const before = process.env.HOUSTON_CORE_DATA;
+  t.after(() => { if (before === undefined) delete process.env.HOUSTON_CORE_DATA; else process.env.HOUSTON_CORE_DATA = before; });
+  process.env.HOUSTON_CORE_DATA = s.dir;
+  assert.deepEqual(await core.call('session.list'), []);
+  if (process.platform === 'win32') assert.equal((await core.status())?.containment, 'container');
+  else assert.equal(await core.status(), null);
+  await s.control.close();
+  await assert.rejects(core.call('session.list'), (e) => e.code === 'ENOENT');
+  if (process.platform === 'win32') assert.equal((await core.status())?.code, 'ENOENT');
 });

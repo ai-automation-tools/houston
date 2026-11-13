@@ -15,10 +15,10 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { OPERATOR, RegistryError } from './identities.js';
-import { RunnerError } from './runner.js';
+import { CONTAINMENT, RunnerError } from './runner.js';
 
 export const METHODS = [
-  'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
+  'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove',
 ];
@@ -82,10 +82,12 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number }} opts
+ *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0 }) {
+  const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
   /** @type {Set<net.Socket>} */
@@ -93,6 +95,8 @@ export async function startControl({ dir, runner, registry, audit }) {
 
   /** @type {Record<string, (p: any) => unknown>} */
   const handlers = {
+    // What the window's Connections row shows. The runner starts containers only until the fallback rung (H7).
+    'core.status': () => ({ pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length }),
     'session.start': async (p) => {
       const program = p.program ?? {};
       if (typeof program !== 'object' || Array.isArray(program)) throw new ControlError('bad_request', 'program is an object');
@@ -212,35 +216,4 @@ export async function startControl({ dir, runner, registry, audit }) {
   };
 }
 
-/**
- * Call the Core's Control API once: read control.json from the data folder, send one request,
- * wait for its answer.
- *
- * @param {string} dir the Core's data folder
- * @param {string} method
- * @param {object} [params]
- * @param {{ timeoutMs?: number }} [opts]
- * @returns {Promise<any>} the result
- * @throws {Error & { code?: string }} the Core's error, with its code
- */
-export function callControl(dir, method, params = {}, { timeoutMs = 30_000 } = {}) {
-  const { pipe, token } = JSON.parse(fs.readFileSync(path.join(dir, 'control.json'), 'utf8'));
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(pipe);
-    let buf = '';
-    const timer = setTimeout(() => { sock.destroy(); reject(new Error(`${method}: no answer in ${timeoutMs} ms`)); }, timeoutMs);
-    sock.setEncoding('utf8');
-    sock.on('connect', () => sock.write(`${JSON.stringify({ id: 1, token, method, params })}\n`));
-    sock.on('data', (c) => {
-      buf += c;
-      const i = buf.indexOf('\n');
-      if (i < 0) return;
-      clearTimeout(timer);
-      sock.end();
-      const res = JSON.parse(buf.slice(0, i));
-      if (res.error) reject(Object.assign(new Error(res.error.message), { code: res.error.code }));
-      else resolve(res.result);
-    });
-    sock.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
-}
+export { callControl } from './client.js';

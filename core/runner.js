@@ -104,6 +104,9 @@ export function compileGrants(grants, now = new Date()) {
  * @property {{ rows: number, columns: number }} [size]
  */
 
+/** The containment rung this runner starts sessions on; the fallback rung is H7. */
+export const CONTAINMENT = 'container';
+
 /** @param {RunnerOptions} opts */
 export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir(), sdk, now = () => new Date() }) {
   const globals = globalDenies({ home, coreDir });

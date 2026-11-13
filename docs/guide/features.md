@@ -85,7 +85,8 @@ The **News** tab lists headlines from the sources in `settings.json`'s `newsSour
 ## 🔌 Connections
 
 - Click the dot next to "Houston" at the top of the sidebar, or pick **Connections** from the palette or the View menu.
-- One row each for Project Hub, Cronsole, every shell the app knows, the chat model and the MCP server.
+- One row each for the Houston Core, Project Hub, Cronsole, every shell the app knows, the chat model and the MCP server.
+- The **Houston Core** row shows the containment its sessions run in and how many run. *Not running* says how to start it ([core-at-logon.md](core-at-logon.md)); *running older code than the app* means the Core was started before a `git pull`, so restart its task.
 - Each row shows working, not set up or failing, a detail line, and what to set when it's missing.
 - **Retry** checks one row again; **Check all** checks everything. A shell installed since the app started shows up on Retry, no restart needed.
 - The chat row never calls the API (that would cost a request). It says the key is set, not that it works.

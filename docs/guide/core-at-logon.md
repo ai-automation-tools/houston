@@ -34,9 +34,11 @@ What the task runs: `conhost.exe --headless node.exe core\main.js --exit-with-pa
 ## 🔍 Check it
 
 ```powershell
-npm run ctl -- session.list                      # [] means the Core is up and answering
+npm run ctl -- core.status                       # its pid, the containment rung and how many sessions run
 Get-Content "$env:LOCALAPPDATA\houston-core\core.log" -Tail 3
 ```
+
+In Houston, the **Houston Core** row in Connections (the dot by "Houston" in the sidebar) shows the same.
 
 `core.log` in the data folder has one line per start (`core.start`), stop (`core.stop`, with why) and failure to start (`core.error`). With no console, it's the only place a startup error shows.
 

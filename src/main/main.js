@@ -34,7 +34,8 @@ import { HUB_FAVORITES } from '../shared/tree.js';
 import { isPermissionAllowed } from '../shared/permissions.js';
 import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
-import { chatRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
+import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
+import { core } from './core.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -602,7 +603,7 @@ async function createWindow() {
   handle('dev:stop', (id) => devs.stop(Number(id)));
   handle('dev:restart', (id) => devs.restart(Number(id)));
 
-  // The Connections view: Hub, Cronsole, each shell, the chat model and the MCP server.
+  // The Connections view: the Core, Hub, Cronsole, each shell, the chat model and the MCP server.
   // Given a row's id it checks that one again (Retry), given a group ('shells') every row in it, and with none, all of them.
   handle('connections:check', async (id) => {
     const want = (/** @type {string} */ key) => !id || id === key || (key === 'shells' && String(id).startsWith('shell:'));
@@ -616,6 +617,7 @@ async function createWindow() {
       }
     };
     const groups = await Promise.all([
+      want('core') ? core.status().then((s) => [coreRow(s)]) : [],
       want('hub') ? hub.health().then((h) => [hubRow(hub.url, h)]) : [],
       want('cronsole') ? cronRow().then((r) => [r]) : [],
       want('shells') ? shellRows(terminals.rescanShells()) : [],
