@@ -55,3 +55,11 @@ test('a transcript page: its address, only from the app, and the text escaped', 
   assert.match(body, /2 KB · the newest 1 MB/);
   assert.match(transcriptBody({ id, text: '\n', bytes: 0, truncated: false }, escapeHtml), /Nothing printed yet/);
 });
+
+test('logRow marks an unconfined identity other than the operator', () => {
+  const e = (subject, containment) => ({ type: 'session.start', time: '2026-11-13T12:00:00Z', session_id: 's', identity: { subject, containment }, resource: { type: 'Session', id: 's' }, decision: { result: 'allow' } });
+  assert.match(logRow(e('local:wide', 'unconfined')).sub, /^⚠ local:wide/);
+  assert.match(logRow(e('local:wide', 'unconfined')).title, /unconfined: outside any container/);
+  assert.match(logRow(e('local:operator', 'unconfined')).sub, /^local:operator/);
+  assert.match(logRow(e('local:dev', 'container')).sub, /^local:dev/);
+});

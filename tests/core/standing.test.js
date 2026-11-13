@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
 import { EXIT, endFromEvent, parseArgs, refusalExit, sessionExit } from '../../core/harness.js';
+import { createRegistry } from '../../core/identities.js';
 import { createRunner } from '../../core/runner.js';
 import { StandingError, createStanding, grantsHash } from '../../core/standing.js';
 
@@ -54,7 +55,7 @@ function setup(t) {
     .run(`g${++n}`, resource.replaceAll('\\', '/'), permission, at);
   grant(`file:${ws}/**`, 'write');
   const sdk = fakeSdk();
-  const runner = createRunner({ db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk });
+  const runner = createRunner({ db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk, hostPty: (o) => sdk.spawnWithPty({ host: o }) });
   let clock = new Date('2026-11-13T00:00:00Z');
   const standing = createStanding({ db, audit, runner, now: () => clock });
   const events = () => [...audit.events()];
@@ -206,4 +207,23 @@ test('harness: its arguments, and an exit code for each way a run can go', () =>
   assert.deepEqual(endFromEvent({ outcome: { status: 'error', error_code: '2' } }), { reason: 'exit 2', exitCode: 2 });
   assert.deepEqual(endFromEvent({ outcome: { status: 'error', error_code: 'timeout' } }), { reason: 'timeout', exitCode: null });
   assert.equal(endFromEvent(undefined), null);
+});
+
+test('a broad-access identity holds a standing grant only once switched on for it, and its runs stop when switched off', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { db, standing, ws, sdk, events } = setup(t);
+  const registry = createRegistry({ db, audit: { append: () => {} } });
+  db.prepare("UPDATE identities SET containment = 'unconfined' WHERE id = 'local:nightly'").run();
+  assert.throws(() => standing.create({ id: 'broad', identity: 'local:nightly', workspace: ws, command: 'cmd.exe /c echo hi', maxMinutes: 5, expiresAt: '2026-12-01T00:00:00Z' }), /broad-access identity.*switches that on/);
+  assert.equal(registry.allowStanding('local:nightly', true, 'local:operator').standingAllowed, true);
+  assert.throws(() => registry.allowStanding('local:operator', true, 'local:operator'), /isn't a broad-access identity/);
+  assert.throws(() => registry.allowStanding('local:nightly', 'yes', 'local:operator'), /true or false/);
+  const g = standing.create({ id: 'broad', identity: 'local:nightly', workspace: ws, command: 'cmd.exe /c echo hi', maxMinutes: 5, expiresAt: '2026-12-01T00:00:00Z' });
+  assert.equal(g.containment, 'unconfined');
+  const s = await standing.run('broad');
+  assert.equal(sdk.calls[0].request.host.command, 'cmd.exe /c echo hi', 'it ran on the host');
+  sdk.calls[0].end({ exitCode: 0, timedOut: false });
+  await s.done;
+  registry.allowStanding('local:nightly', false, 'local:operator');
+  await assert.rejects(standing.run('broad'), (e) => e instanceof StandingError && e.code === 'refused' && /switched off/.test(e.message));
+  assert.equal(events().filter((e) => e.type === 'standing.run').at(-1).identity.containment, 'unconfined');
 });

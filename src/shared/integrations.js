@@ -148,7 +148,7 @@ export function standingId(id) {
  * and Pause or Resume. Stop All pauses them all, so Resume is how a scheduled run comes back. Revoked
  * ones are left out; making and approving one stays with ctl.
  * @param {{ id: string, identity: string, workspace: string, command: string, maxMinutes: number, expiresAt: string, status: string,
- *   grantsChanged: boolean, lastRunAt: string | null, running: string | null }[]} list standing.list's answer
+ *   grantsChanged: boolean, lastRunAt: string | null, running: string | null, containment?: string }[]} list standing.list's answer
  * @param {number} now ms since the epoch
  */
 export function standingRows(list, now) {
@@ -161,8 +161,8 @@ export function standingRows(list, now) {
         id: s.id, problem: Boolean(problem),
         icon: s.running ? '●' : problem ? '⏸' : '⏱',
         tone: /** @type {'ready' | 'idle' | 'exited'} */ (s.running ? 'ready' : problem ? 'exited' : 'idle'),
-        sub: problem || `${s.identity} · up to ${s.maxMinutes} min${s.running ? ' · running now' : ''}`,
-        title: [`${s.id}: runs ${s.identity}, unattended, in ${s.workspace}`, s.command, `Budget ${s.maxMinutes} min; expires ${new Date(s.expiresAt).toLocaleString()}`,
+        sub: problem || `${s.containment === 'unconfined' ? '⚠ unconfined · ' : ''}${s.identity} · up to ${s.maxMinutes} min${s.running ? ' · running now' : ''}`,
+        title: [`${s.id}: runs ${s.identity}, unattended, in ${s.workspace}${s.containment === 'unconfined' ? ', unconfined: a broad-access identity, outside any container' : ''}`, s.command, `Budget ${s.maxMinutes} min; expires ${new Date(s.expiresAt).toLocaleString()}`,
           s.lastRunAt ? `Last run ${new Date(s.lastRunAt).toLocaleString()}` : 'Not run yet', `A task runs it with: harness run --grant ${s.id}`].join('\n'),
         actions: s.status === 'paused'
           ? [{ act: /** @type {'resume'} */ ('resume'), label: 'Resume', title: 'Let scheduled runs start again' }]

@@ -58,16 +58,18 @@ export function logRow(e) {
   const result = e.decision?.result ?? '';
   const what = e.resource?.id && e.resource.id !== e.session_id ? `${e.type} ${e.resource.id}` : String(e.type);
   const answer = e.approval?.answer ? ` (${e.approval.answer})` : '';
+  // An unconfined identity other than the operator: a broad-access agent or a host MCP server, marked.
+  const broad = e.identity?.containment === 'unconfined' && e.identity.subject !== 'local:operator';
   const time = new Date(e.time);
   return {
     result,
     icon: result === 'allow' ? '✓' : result === 'ask' ? '?' : result === 'deny' ? '✕' : '·',
     name: what + answer,
-    sub: `${e.identity?.subject ?? '?'} · ${Number.isNaN(time.getTime()) ? '?' : time.toLocaleTimeString()}`,
+    sub: `${broad ? '⚠ ' : ''}${e.identity?.subject ?? '?'} · ${Number.isNaN(time.getTime()) ? '?' : time.toLocaleTimeString()}`,
     title: [
       `${e.type}: ${result}${e.decision?.reasons?.length ? ` (${e.decision.reasons.join('; ')})` : ''}`,
       `${e.resource?.type ?? '?'} ${e.resource?.id ?? ''}`,
-      `identity ${e.identity?.subject ?? '?'}`,
+      `identity ${e.identity?.subject ?? '?'}${broad ? ' (unconfined: outside any container)' : ''}`,
       e.session_id ? `session ${e.session_id}` : '',
       Number.isNaN(time.getTime()) ? '' : time.toLocaleString(),
     ].filter(Boolean).join('\n'),

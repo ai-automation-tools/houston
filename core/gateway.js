@@ -490,7 +490,7 @@ export function createGateway({
         if (tool === 'delegate' && d.decision === 'ask') {
           if (!approvals) return refuse('ask is deny without an approval inbox', { policy_ids: d.determining_policies });
           const o = await approvals.ask({
-            identity: s.identity, session_id: s.id, workspace: s.workspace.replaceAll('/', '\\'), action: 'session.spawn', resource: { ...resource, type: 'Session', id: DELEGATE_RESOURCE },
+            identity: s.identity, containment: containmentOf(s.identity), session_id: s.id, workspace: s.workspace.replaceAll('/', '\\'), action: 'session.spawn', resource: { ...resource, type: 'Session', id: DELEGATE_RESOURCE },
             policy_version: s.policy.policyVersion, policy_ids: d.determining_policies,
           });
           if (o.result !== 'allow') return refuse(o.reason, { policy_ids: d.determining_policies });
@@ -519,7 +519,7 @@ export function createGateway({
         if (!approvals) return refuse('ask is deny without an approval inbox', { policy_ids: d.determining_policies });
         // The operator answers this request only: nothing the agent sends later can reuse the answer, except an "allow for this session".
         const o = await approvals.ask({
-          identity: s.identity, session_id: s.id, workspace: s.workspace.replaceAll('/', '\\'), action: 'tool.call', resource,
+          identity: s.identity, containment: containmentOf(s.identity), session_id: s.id, workspace: s.workspace.replaceAll('/', '\\'), action: 'tool.call', resource,
           policy_version: s.policy.policyVersion, policy_ids: d.determining_policies,
         });
         if (o.result !== 'allow') return refuse(o.reason, { policy_ids: d.determining_policies });

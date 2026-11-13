@@ -70,10 +70,11 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
     id: r.id, identity: r.identity_id, workspace: win(r.workspace), command: r.prompt === null ? r.command : null, prompt: r.prompt, pathDirs: JSON.parse(r.path_dirs).map(win),
     maxMinutes: r.max_minutes, expiresAt: r.expires_at, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at, lastRunAt: r.last_run_at,
     grantsChanged: grantsHash(db, r.identity_id) !== r.grants_hash, running: live(r.id),
+    containment: /** @type {any} */ (db.prepare('SELECT containment FROM identities WHERE id = ?').get(r.identity_id))?.containment ?? 'container',
   });
   /** @param {string} type @param {string} action @param {string} subject @param {string} id @param {'allow' | 'deny'} result @param {string} reason @param {object} [extra] */
   const event = (type, action, subject, id, result, reason, extra = {}) => audit.append({
-    type, action, identity: { subject, containment: subject === OPERATOR ? 'unconfined' : 'container' }, session_id: null,
+    type, action, identity: { subject, containment: /** @type {any} */ (db.prepare('SELECT containment FROM identities WHERE id = ?').get(subject))?.containment ?? 'container' }, session_id: null,
     resource: { type: 'StandingGrant', id }, decision: { result, policy_version: 'none', reasons: [reason] }, ...extra,
   });
   /** @param {any} r @param {string} action @param {string} reason */
@@ -108,11 +109,12 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
       const { id, identity, workspace, command, prompt, pathDirs = [], maxMinutes, expiresAt } = spec;
       if (typeof id !== 'string' || !STANDING_ID.test(id)) throw new StandingError('bad_request', 'id is lower-case letters, digits, - and _, up to 40, e.g. nightly-docs');
       if (row(id)) throw new StandingError('conflict', `${id} exists (ids are never reused, revoked ones included)`);
-      const who = typeof identity === 'string' ? /** @type {any} */ (db.prepare('SELECT kind, status, containment, backend FROM identities WHERE id = ?').get(identity)) : null;
+      const who = typeof identity === 'string' ? /** @type {any} */ (db.prepare('SELECT kind, status, containment, backend, standing_allowed FROM identities WHERE id = ?').get(identity)) : null;
       if (!who) throw new StandingError('bad_request', 'identity is an identity id, e.g. local:nightly-docs');
       if (who.kind !== 'ai-agent' && who.kind !== 'service-account') throw new StandingError('bad_request', `a ${who.kind} identity can't hold a standing grant`);
       if (who.status === 'retired') throw new StandingError('bad_request', `${identity} is retired`);
-      if (who.containment !== 'container') throw new StandingError('bad_request', `${identity} runs ${who.containment}; standing grants run in containers only`);
+      if (who.containment === 'restricted-token') throw new StandingError('bad_request', `${identity} runs restricted-token, which isn't built yet`);
+      if (who.containment === 'unconfined' && !who.standing_allowed) throw new StandingError('bad_request', `${identity} is a broad-access identity: it runs unconfined, and it holds standing grants only once the operator switches that on for it (identity.allowStanding)`);
       if (who.backend != null) {
         if (!BACKENDS[who.backend]?.headless) throw new StandingError('bad_request', `${identity} runs ${who.backend}, which has no unattended start yet`);
         if (command !== undefined) throw new StandingError('bad_request', `${identity} runs ${who.backend}: name a prompt, not a command`);
@@ -210,6 +212,8 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
       if (r.status === 'revoked') throw refuse('revoked', 'it is revoked');
       if (r.status === 'paused') throw refuse('paused', 'it is paused (Stop All pauses every standing grant); the operator resumes it');
       if (!(Date.parse(r.expires_at) > now().getTime())) throw refuse('expired', `it expired at ${r.expires_at}`);
+      const who = /** @type {any} */ (db.prepare('SELECT containment, standing_allowed FROM identities WHERE id = ?').get(r.identity_id));
+      if (who?.containment === 'unconfined' && !who.standing_allowed) throw refuse('refused', `${r.identity_id} is a broad-access identity and standing grants are switched off for it`);
       if (grantsHash(db, r.identity_id) !== r.grants_hash) throw refuse('changed', `${r.identity_id}'s grants changed since it was approved; the operator approves it again`);
       if (starting.has(id) || live(id)) throw refuse('overlap', `a run under it is still going (${live(id) ?? 'starting'})`);
       starting.add(id);
