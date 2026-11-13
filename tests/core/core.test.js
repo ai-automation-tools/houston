@@ -107,6 +107,26 @@ test('dataDir: the override wins and must be absolute, then LOCALAPPDATA, then t
   assert.equal(dataDir({ HOUSTON_CORE_DATA: '  ' }), path.join(os.homedir(), '.houston-core'));
 });
 
+test('with --exit-with-parent the Core stops cleanly once the process that started it is gone', async (t) => {
+  const dir = tmp(t);
+  const logged = () => (fs.existsSync(path.join(dir, 'core.log')) ? fs.readFileSync(path.join(dir, 'core.log'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
+  const until = async (/** @type {() => boolean} */ ok, /** @type {string} */ what) => {
+    for (let i = 0; i < 80 && !ok(); i++) await new Promise((r) => setTimeout(r, 250));
+    assert.ok(ok(), what);
+  };
+  // A stand-in for conhost: it starts the Core and is then killed, as ending the task does.
+  // detached: Node otherwise puts its children in a job that kills them with it, which conhost doesn't.
+  const starter = spawn(process.execPath, ['-e', `require('node:child_process').spawn(process.execPath, [${JSON.stringify(MAIN)}, '--exit-with-parent'], { stdio: 'ignore', detached: true }); setInterval(() => {}, 1e9);`],
+    { env: { ...process.env, HOUSTON_CORE_DATA: dir }, stdio: 'ignore' });
+  t.after(() => starter.kill());
+  await until(() => logged().some((l) => l.event === 'core.start'), 'the Core started');
+  const pid = logged().find((l) => l.event === 'core.start').pid;
+  starter.kill();
+  await until(() => logged().some((l) => l.event === 'core.stop'), 'the Core stopped after its parent ended');
+  assert.equal(logged().at(-1).why, 'its parent process ended');
+  await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, 'the Core process exited');
+});
+
 test('sessionTemp: the override wins and must be absolute, then ProgramData', () => {
   const abs = path.resolve('session-temp');
   assert.equal(sessionTemp({ HOUSTON_SESSION_TEMP: ` ${abs} `, ProgramData: 'P' }), abs);
@@ -162,6 +182,9 @@ test('the entry point exits 2 while another process holds the lock, and a killed
 
   const second = spawnSync(process.execPath, [MAIN], { env, encoding: 'utf8', timeout: 20_000 });
   assert.equal(second.status, 2, `second Core: ${second.error?.message ?? ''} ${second.stdout} ${second.stderr}`);
+  // A Core started hidden has no console: its start and the second one's refusal are in core.log.
+  const log = fs.readFileSync(path.join(dir, 'core.log'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(log.map((l) => [l.event, l.alreadyRunning]), [['core.start', undefined], ['core.error', true]]);
   assert.match(second.stderr, /already running/);
 
   first.kill();

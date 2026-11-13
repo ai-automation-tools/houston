@@ -96,10 +96,26 @@ export function sessionTemp(env = process.env) {
   return path.join(env.ProgramData ?? 'C:\\ProgramData', 'houston-core', 'sessions');
 }
 
+/**
+ * Append one line to <data>/core.log. A Core started hidden at logon has no console, so this
+ * is where its start line and a failure to start can be read.
+ * ponytail: a line per start; cap it with the log limits (H7).
+ * @param {string} dir @param {object} entry
+ */
+function logLine(dir, entry) {
+  try { fs.appendFileSync(path.join(dir, 'core.log'), `${JSON.stringify({ time: new Date().toISOString(), ...entry })}\n`); } catch { /* nowhere better to say it */ }
+}
+
 if (import.meta.main) {
+  /** @type {string | undefined} */
+  let dir;
   try {
-    const core = start();
-    for (const b of core.audit.newBreaks) console.error(`audit chain break: ${b.segment} line ${b.line}: ${b.reason}`);
+    dir = dataDir();
+    const core = start(dir);
+    for (const b of core.audit.newBreaks) {
+      console.error(`audit chain break: ${b.segment} line ${b.line}: ${b.reason}`);
+      logLine(core.dir, { event: 'audit.break', ...b });
+    }
     // Sessions are Windows containers, so elsewhere (CI on Linux) the Core only holds its lock.
     const win32 = process.platform === 'win32';
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp() }) : null;
@@ -109,20 +125,34 @@ if (import.meta.main) {
       registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
     }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
-    console.log(JSON.stringify({ event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null }));
+    const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
+    console.log(JSON.stringify(line));
+    logLine(core.dir, line);
     let stopping = false;
-    const stop = async () => {
+    const stop = async (/** @type {string} */ why) => {
       if (stopping) return;
       stopping = true;
       await runner?.stopAll();
       await control?.close();
       core.close();
+      logLine(core.dir, { event: 'core.stop', pid: process.pid, why });
       process.exit(0);
     };
-    process.on('SIGINT', stop);
-    process.on('SIGTERM', stop);
+    process.on('SIGINT', () => stop('SIGINT'));
+    process.on('SIGTERM', () => stop('SIGTERM'));
+    // Started by a Scheduled Task under conhost, ending the task kills conhost but not the Core,
+    // so with this flag the Core stops (sessions first) once the process that started it is gone.
+    // ponytail: checks the parent's pid only; a pid reused within 2 s would keep the Core up.
+    if (process.argv.includes('--exit-with-parent')) {
+      const parent = process.ppid;
+      setInterval(() => {
+        try { process.kill(parent, 0); } catch (e) { if (/** @type {any} */ (e).code === 'ESRCH') void stop('its parent process ended'); }
+      }, 2000).unref();
+    }
   } catch (e) {
-    console.error(/** @type {Error} */ (e).message);
+    const message = /** @type {Error} */ (e).message;
+    console.error(message);
+    if (dir && fs.existsSync(dir)) logLine(dir, { event: 'core.error', pid: process.pid, error: message, alreadyRunning: e instanceof CoreLockedError });
     process.exit(e instanceof CoreLockedError ? 2 : 1);
   }
 }

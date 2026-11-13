@@ -21,6 +21,7 @@ The [repository README](../../README.md) has the short version. These pages have
 | [**💬 chat.md**](chat.md) | The Chat tab: the key and model in `.env`, the context tray, Stop, saved conversations. |
 | [**⏱️ cronsole.md**](cronsole.md) | Cronsole's scheduled tasks in the Cron tab, its run pages, and its UI in a pinned tab. |
 | [**🔒 security-model.md**](security-model.md) | What a web page, an agent and the app's own processes can and can't do. |
+| [**🛡️ core-at-logon.md**](core-at-logon.md) | Run the harness's Core at logon with no window: turn it on, check it, stop it, update it, and what `core.log` says when it won't start. |
 | [**🌿 contributing.md**](contributing.md) | Branches, checks, and how the roadmap routine opens PRs. |
 
 ---
