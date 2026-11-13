@@ -104,6 +104,19 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 - **Transcript** (on hover, on a session's start and end rows) opens what that session's terminal showed as a page: plain text, with keys, tokens and passwords already replaced by `[REDACTED:…]` when the Core wrote it. A transcript keeps up to 100 MB; past 5 GB in all, the oldest go first. The page shows the newest 1 MB.
 - It only reads. The log itself is `audit/` in the Core's data folder, a hash chain the Core checks at every start ([core/README.md](../../core/README.md)).
 
+## ⚙️ Settings
+
+⚙ at the right of the address bar, **Ctrl+,** or **Settings** in the palette opens a page listing every control, grouped by scope:
+
+| Scope | What it means | Examples |
+|:---|:---|:---|
+| Global | One per install; nothing overrides it | Hard denies, Stop All, the audit log, transcript limits, the approval timeout |
+| Profile | Belongs to a profile; there's one until profiles arrive | Agent identities and grants, Project Hub, workspaces, quick links, news sources, chat |
+| Workspace | Saved with the active workspace | Its folder, tabs, terminals and conversations |
+| Session | Lives as long as one agent session | Allow once and allow for this session; running sessions |
+
+Each row says what it's set to now and where it's changed (a menu, a tab, `settings.json`, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
+
 ## 🔌 Connections
 
 - Click the dot next to "Houston" at the top of the sidebar, or pick **Connections** from the palette or the View menu.

@@ -3,9 +3,9 @@
 // the shell's session; tabs can't reach it. See src/shared/docs.js for the page.
 //
 // acc://run/<task>/<run> is a Cronsole run's output, acc://git/<path>?area=… a file's
-// diff in the workspace's repo, acc://dev/<id> a dev server's log, and acc://runlog/<id> a terminal_run
-// run's output, on the same pages; the app opens those, never a
-// web page (see serveAppPage).
+// diff in the workspace's repo, acc://dev/<id> a dev server's log, acc://runlog/<id> a terminal_run
+// run's output, acc://transcript/<id> a contained session's transcript and acc://settings/ the
+// Settings page, on the same pages; the app opens those, never a web page (see serveAppPage).
 //
 // Only ids in Project Hub's own index are served. Text comes from Hub's /api/file
 // (Hub renders Markdown and refuses paths outside its roots); images are read here,
@@ -45,7 +45,7 @@ const notePage = (status, title, text) => new Response(
 );
 
 /**
- * A page only the app opens (a Cronsole run, a Git diff, a dev server's log, a terminal_run run). Navigation is refused from any
+ * A page only the app opens (a Cronsole run, a Git diff, a dev server's log, a terminal_run run, a transcript, Settings). Navigation is refused from any
  * page (isAllowedNavigation), and a request a page makes carries its referrer, so a web
  * page can't fetch or embed one either; only another page of the same kind may.
  * @param {GlobalRequest} req
@@ -65,19 +65,16 @@ async function serveAppPage(req, kind, title, render) {
 
 /**
  * @param {Electron.Session} session
- * @param {(url: string) => Promise<string>} runPage acc://run pages, from src/main/cronsole.js
- * @param {(url: string) => Promise<string>} gitPage acc://git pages, from src/main/git.js
- * @param {(url: string) => Promise<string>} devPage acc://dev pages, from src/main/devservers.js
- * @param {(url: string) => Promise<string>} runLogPage acc://runlog pages, from the run history in src/main/main.js
- * @param {(url: string) => Promise<string>} transcriptPage acc://transcript pages, from the Core (src/main/agents.js)
+ * @param {Record<string, { title: string, render: (url: string) => Promise<string> }>} pages the app's own
+ *   pages by address kind (acc://<kind>/…): run, git, dev, runlog, transcript, settings. Every other
+ *   address is a Project Hub document.
  */
-export function serveDocs(session, runPage, gitPage, devPage, runLogPage, transcriptPage) {
+export function serveDocs(session, pages) {
   session.protocol.handle('acc', async (req) => {
-    if (/^acc:\/\/run\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/run\//i, 'Cronsole run', runPage);
-    if (/^acc:\/\/git\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/git\//i, 'Git diff', gitPage);
-    if (/^acc:\/\/dev\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/dev\//i, 'Dev server', devPage);
-    if (/^acc:\/\/runlog\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/runlog\//i, 'Run', runLogPage);
-    if (/^acc:\/\/transcript\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/transcript\//i, 'Transcript', transcriptPage);
+    const kind = /^acc:\/\/([a-z]+)\//i.exec(req.url)?.[1]?.toLowerCase() ?? '';
+    if (kind !== 'doc' && Object.hasOwn(pages, kind)) {
+      return serveAppPage(req, new RegExp(`^acc://${kind}/`, 'i'), pages[kind].title, pages[kind].render);
+    }
     let id;
     try {
       id = docIdFromUrl(req.url);

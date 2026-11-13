@@ -67,6 +67,8 @@ export function createApprovals({ audit, now = () => new Date(), timeoutMs = TIM
   }
 
   return {
+    timeoutMs,
+
     /**
      * Wait for the operator. Resolves allow or deny, never rejects.
      * @param {Ask} ask

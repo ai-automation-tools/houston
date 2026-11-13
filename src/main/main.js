@@ -26,7 +26,7 @@ import { allTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
 import { Confirmations } from '../shared/confirm.js';
 import { Runs, changedFiles, runIdFromUrl, runInfo, runRows, runStateText } from '../shared/runs.js';
-import { runLogPage } from '../shared/docs.js';
+import { docPage, escapeHtml, runLogPage } from '../shared/docs.js';
 import { cleanOutput } from '../shared/output.js';
 import { Activity, activityRows } from '../shared/activity.js';
 import { menuItems } from '../shared/menu.js';
@@ -36,7 +36,8 @@ import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
-import { createAgents, transcriptPage } from './agents.js';
+import { coreSettings, createAgents, transcriptPage } from './agents.js';
+import { settingsBody } from '../shared/scopes.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
@@ -250,6 +251,7 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
         item('New terminal', 'CmdOrCtrl+Shift+`', 'new-terminal'),
         item('Command palette', 'CmdOrCtrl+K', 'palette'),
         item('Connections', undefined, 'connections'),
+        item('Settings', 'CmdOrCtrl+,', 'settings'),
         item('Search everything', 'CmdOrCtrl+Shift+F', 'focus-search'),
         item('Toggle sidebar', 'CmdOrCtrl+B', 'toggle-sidebar'),
         item('Toggle chat', 'CmdOrCtrl+Shift+L', 'toggle-chat'),
@@ -305,7 +307,14 @@ async function createWindow() {
   browseSession.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
   browseSession.setDevicePermissionHandler(() => false);
   const devs = new DevServers(send);
-  serveDocs(browseSession, (url) => cron.page(url), (url) => gitDiff(current().folder, url), async (url) => devs.page(url), async (url) => runLog(url), transcriptPage);
+  serveDocs(browseSession, {
+    run: { title: 'Cronsole run', render: (url) => cron.page(url) },
+    git: { title: 'Git diff', render: (url) => gitDiff(current().folder, url) },
+    dev: { title: 'Dev server', render: async (url) => devs.page(url) },
+    runlog: { title: 'Run', render: async (url) => runLog(url) },
+    transcript: { title: 'Transcript', render: transcriptPage },
+    settings: { title: 'Settings', render: () => settingsPage() },
+  });
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
     invalidateDocsIndex();
@@ -347,6 +356,22 @@ async function createWindow() {
     r.changed = changedFiles(await before, await gitFiles(r.cwd));
     saveRuns();
   };
+  /** The acc://settings/ page: every control, its value now, its scope and where it's changed. */
+  const settingsPage = async () => {
+    const settings = store.settings();
+    const layout = store.layout();
+    const ws = current();
+    const body = settingsBody({
+      hubUrl: hub.url, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, bookmarkSource: layout.bookmarkSource,
+      adBlock: layout.adBlock, closeToTray: layout.closeToTray,
+      chat: conversation.info(), cronsole: cron.info(), mcpUrl: mcp?.url ?? '',
+      workspaces: spaces.list.length,
+      workspace: { name: ws.name, folder: ws.folder ?? '', tabs: tabs.list().length, terminals: terminals.listSessions().filter((t) => t.ws === spaces.active).length },
+      core: await coreSettings(),
+    }, escapeHtml);
+    return docPage({ title: 'Settings', trail: 'Houston › Settings', body });
+  };
+
   /** The acc://runlog/<id> page. @param {string} url */
   const runLog = (url) => {
     const id = runIdFromUrl(url);

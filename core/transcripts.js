@@ -119,6 +119,8 @@ export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessi
   rotate();
 
   return {
+    capBytes,
+    sessionCapBytes,
     rotate,
 
     /**

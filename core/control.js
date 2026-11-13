@@ -157,7 +157,11 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
   /** @type {Record<string, (p: any) => unknown>} */
   const handlers = {
     // What the window's Connections row shows. The runner starts containers only until the fallback rung (H7).
-    'core.status': () => ({ pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length }),
+    // limits: the defaults the window's Settings page shows (null when this Core has no inbox or transcripts).
+    'core.status': () => ({
+      pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
+      limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, transcriptBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null },
+    }),
     'session.start': async (p) => {
       const program = p.program ?? {};
       if (typeof program !== 'object' || Array.isArray(program)) throw new ControlError('bad_request', 'program is an object');

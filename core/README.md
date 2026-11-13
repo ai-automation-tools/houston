@@ -435,7 +435,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 
 | Method | Params | Result |
 |:---|:---|:---|
-| `core.status` | none | `{ pid, startedAt, schema, containment, sessions }`: `containment` is the rung sessions run on (`container`) and `sessions` how many run. Houston's Connections row shows it |
+| `core.status` | none | `{ pid, startedAt, schema, containment, sessions, limits }`: `containment` is the rung sessions run on (`container`), `sessions` how many run, and `limits` the approval timeout and transcript caps (`approvalSeconds`, `transcriptBytes`, `sessionTranscriptBytes`). Houston's Connections row and Settings page show it |
 | `session.start` | `identity`, `workspace`; `command` unless the identity has a backend; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
 | `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
 | `session.attach` | `id` | `{ attached: id }`, then the connection streams the terminal ([below](#a-sessions-terminal)) |
@@ -499,7 +499,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox, Stop All, the Logs tab and transcripts are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox, Stop All, the Logs tab, transcripts and the Settings page are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

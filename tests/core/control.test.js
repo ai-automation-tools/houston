@@ -299,11 +299,14 @@ test('ctl.js calls the API from the command line, with key=value or JSON params'
   const missing = await ctl('identity.get', 'id=local:nobody');
   assert.deepEqual([missing.code, missing.stderr.trim()], [1, 'not_found: no identity local:nobody']);
 });
-test('core.status: pid, schema, the containment rung and how many sessions run', async (t) => {
+test('core.status: pid, schema, the containment rung, how many sessions run and the limits', async (t) => {
   const s = await setup(t);
   await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
   const st = await s.call('core.status');
-  assert.deepEqual({ ...st, startedAt: typeof st.startedAt }, { pid: process.pid, startedAt: 'string', schema: 3, containment: 'container', sessions: 1 });
+  assert.deepEqual({ ...st, startedAt: typeof st.startedAt }, {
+    pid: process.pid, startedAt: 'string', schema: 3, containment: 'container', sessions: 1,
+    limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 },
+  });
 });
 
 test("Houston's client finds the Core through HOUSTON_CORE_DATA, and says ENOENT when it isn't running", async (t) => {
