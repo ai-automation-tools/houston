@@ -23,3 +23,7 @@ test('the window offers the answers the Core takes, and nothing else', () => {
   assert.ok(isAnswer('session'));
   for (const v of ['yes', 'constructor', 1, null]) assert.equal(isAnswer(v), false);
 });
+
+test('a sub-agent card says it starts one, with the task and grants asked for', () => {
+  assert.equal(describeAsk({ action: 'session.spawn', resource: { type: 'Session', id: 'delegate', args_preview: '{"task":"dir"}' } }), 'start a sub-agent with {"task":"dir"}');
+});

@@ -18,6 +18,8 @@ export function describeAsk({ action, resource }) {
   // A tool's arguments come clipped and with vault values redacted (core/gateway.js).
   if (action === 'tool.call') return `call the tool ${resource.id}${resource.args_preview ? ` with ${resource.args_preview}` : ''}`;
   if (action === 'command.run') return `run ${resource.id}`;
+  // A sub-agent (core/delegate.js): the task and the grants it asked for, clipped and redacted like a tool's arguments.
+  if (action === 'session.spawn') return `start a sub-agent${resource.args_preview ? ` with ${resource.args_preview}` : ''}`;
   return `${action} on ${resource.type} ${resource.id}`;
 }
 

@@ -354,6 +354,8 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
   return {
     pipe,
+    /** Keep a session started elsewhere (a sub-agent, delegate.js) like one started here: its tail for attach, and its transcript. */
+    tap,
     file,
     close: async () => {
       fs.rmSync(file, { force: true });

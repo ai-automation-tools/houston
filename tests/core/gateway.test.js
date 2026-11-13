@@ -392,3 +392,23 @@ test('a session sees only its own profile\'s servers: another profile\'s is neit
   agent('local:home-dev', [['tool:stub/echo', 'call']]);
   assert.deepEqual((await (await session('local:home-dev')).rpc('tools/list')).body.result.tools.map((/** @type {any} */ x) => x.name), ['stub.echo']);
 });
+
+test('the gateway\'s own harness.delegate tools: listed and callable only with a session:delegate spawn grant; the name is reserved', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { gateway, session, agent } = await setup(t);
+  /** @type {any[]} */
+  const asked = [];
+  gateway.useDelegation(/** @type {any} */ ({ delegate: async (/** @type {any} */ s, /** @type {any} */ a) => { asked.push([s.identity, a.task]); return { session: 'kid', identity: `${s.identity}/sub-1`, granted: [], dropped: [] }; }, status: () => ({ state: 'running' }) }));
+  agent('local:boss', [['session:delegate', 'spawn']]);
+  agent('local:worker', []);
+  const boss = await session('local:boss');
+  assert.deepEqual((await boss.rpc('tools/list')).body.result.tools.map((/** @type {any} */ x) => x.name), ['harness.delegate', 'harness.delegate_status']);
+  const ok = await boss.rpc('tools/call', { name: 'harness.delegate', arguments: { task: 'dir' } });
+  assert.match(ok.body.result.content[0].text, /local:boss\/sub-1/);
+  assert.deepEqual(asked, [['local:boss', 'dir']]);
+  const worker = await session('local:worker');
+  assert.deepEqual((await worker.rpc('tools/list')).body.result.tools, []);
+  const no = await worker.rpc('tools/call', { name: 'harness.delegate', arguments: { task: 'dir' } });
+  assert.match(no.body.result.content[0].text, /needs a session:delegate spawn grant/);
+  assert.equal(asked.length, 1);
+  assert.throws(() => gateway.add({ name: 'harness', command: 'x' }), /gateway's own tools/);
+});
