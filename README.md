@@ -125,7 +125,7 @@ How to contribute: [contributing.md](docs/guide/contributing.md).
 | [**📚 docs/**](docs/README.md) | Roadmap, changelog, design decisions, architecture diagram |
 | [**🧩 src/**](src/README.md) | The app's code |
 | [**🛡️ core/**](core/README.md) | The harness's Core process, H1 done: SQLite database and single-instance lock, hash-chained audit log, policy check with canonical Windows paths, container launch defaults, the per-session egress proxy, the runner, the identity registry and the Control API on a named pipe. The data contracts are in [`core/schemas/`](core/schemas/). H2 adds backend manifests, the session terminal stream, the approval inbox and redacted transcripts; the window's Agents and Logs tabs and Stop All drive it |
-| [**🥊 abuse/**](abuse/README.md) | The abuse suite: scripted attacks on the Core in real containers (AT-01 to AT-05, AT-12, AT-14 to AT-16; AT-13 runs in `npm run smoke`), run by hand with `node abuse/run.js`; each run is saved in `abuse/results/` |
+| [**🥊 abuse/**](abuse/README.md) | The abuse suite: scripted attacks on the Core in real containers (AT-01 to AT-08, AT-12, AT-14 to AT-16; AT-13 runs in `npm run smoke`), run by hand with `node abuse/run.js`; each run is saved in `abuse/results/` |
 | **🧪 spikes/** | Scripts run by hand against the real container SDK: the H0 spikes (`s1` to `s5`) and the H1 checks (`h1-*`). Nothing imports them |
 | [**🧪 tests/**](tests/README.md) | Unit tests and the scripted launch check |
 | **📜 scripts/** | Smoke run, lint, demo build, diagram build, launcher |
