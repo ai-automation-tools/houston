@@ -166,7 +166,7 @@ export function createRunner({
         if (e instanceof BackendError) throw refuse(e.message);
         throw e;
       }
-      command = backend.command;
+      command = [backend.command, backend.tail].filter(Boolean).join(' ');
     } else if (prompt !== undefined) throw refuse('a prompt is for an identity with a backend; this one names its command');
     else if (typeof command !== 'string' || !command) throw refuse('a command is required for an identity with no backend');
 
@@ -227,7 +227,8 @@ export function createRunner({
       const mcp = gw && proxy ? { HOUSTON_MCP_URL: `http://127.0.0.1:${proxy.port}/mcp`, HOUSTON_MCP_TOKEN: gw.token } : {};
       if (backend && mcp.HOUSTON_MCP_URL) {
         const extra = gatewayArgs(/** @type {string} */ (who.backend), mcp.HOUSTON_MCP_URL, win(temp));
-        if (extra) command = `${command} ${extra}`;
+        // Before the unattended start's arguments: Codex's prompt follows a `--`.
+        if (extra) command = [backend.command, extra, backend.tail].filter(Boolean).join(' ');
       }
       req = {
         ...launchRequest({

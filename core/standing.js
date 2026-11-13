@@ -99,7 +99,7 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
     /**
      * Approve a new one, active at once. The identity's grants as they are now are what it approves.
      * @param {any} spec id, identity, workspace, then command (an identity with no backend) or prompt
-     *   (one whose backend has a headless start: Claude Code), pathDirs, maxMinutes, expiresAt
+     *   (one whose backend has a headless start: Claude Code, Codex), pathDirs, maxMinutes, expiresAt
      */
     create(spec) {
       if (!spec || typeof spec !== 'object') throw new StandingError('bad_request', 'the standing grant is an object');
