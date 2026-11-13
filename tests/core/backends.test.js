@@ -72,11 +72,19 @@ test('gatewayArgs points each CLI at the session gateway, with the token left in
   } finally { fs.rmSync(file, { force: true }); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('a prompt runs Claude Code unattended, its prompts off; a backend without a headless start refuses one', () => {
+test('a prompt runs Claude Code and Codex unattended, their prompts off; interactive has no tail', () => {
   const b = resolveBackend('claude-code', { ...opts(on(CLAUDE, ...GIT)), prompt: 'Fix the "flaky" test in C:\\work\\' });
-  assert.ok(b.command.endsWith(' --strict-mcp-config -p "Fix the \\"flaky\\" test in C:\\work\\\\" --dangerously-skip-permissions'), b.command);
-  assert.throws(() => resolveBackend('codex', { ...opts(on(CODEX)), prompt: 'x' }), /Codex has no unattended start yet/);
-  assert.doesNotMatch(resolveBackend('claude-code', opts(on(CLAUDE, ...GIT))).command, / -p /, 'interactive without one');
+  assert.ok(b.command.endsWith(' --strict-mcp-config'), b.command);
+  assert.equal(b.tail, '-p "Fix the \\"flaky\\" test in C:\\work\\\\" --dangerously-skip-permissions');
+  const c = resolveBackend('codex', { ...opts(on(CODEX)), prompt: '-v is a flag' });
+  assert.match(c.command, / --sandbox danger-full-access .*analytics\.enabled=false$/);
+  assert.equal(c.tail, 'exec --skip-git-repo-check -- "-v is a flag"');
+  assert.equal(resolveBackend('claude-code', opts(on(CLAUDE, ...GIT))).tail, '', 'interactive without one');
+  const saved = BACKENDS.codex.headless;
+  try {
+    delete BACKENDS.codex.headless;
+    assert.throws(() => resolveBackend('codex', { ...opts(on(CODEX)), prompt: 'x' }), /Codex has no unattended start yet/);
+  } finally { BACKENDS.codex.headless = saved; }
 });
 
 test('quote: every argument comes back as it went in, through a real Windows program\'s argv', { skip: process.platform !== 'win32' && 'Windows command lines' }, () => {

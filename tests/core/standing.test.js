@@ -80,7 +80,6 @@ test('create approves a command identity\'s run with its grants as they are; bad
   bad({ identity: 'local:claude', command: undefined }, /prompt is what the agent is asked to do/);
   bad({ prompt: 'do it' }, /no backend: name the command/);
   identity('local:codex', 'ai-agent', 'codex');
-  bad({ identity: 'local:codex', command: undefined, prompt: 'x' }, /no unattended start yet/);
   const p = standing.create({ id: 'prompted', identity: 'local:claude', workspace: ws, prompt: 'Update the "docs"\nand commit', maxMinutes: 5, expiresAt: '2026-12-01T00:00:00Z' });
   assert.deepEqual([p.prompt, p.command], ['Update the "docs"\nand commit', null]);
   bad({ identity: 'local:mcp/x' }, /can't hold a standing grant/);

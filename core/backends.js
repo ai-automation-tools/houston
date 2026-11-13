@@ -37,8 +37,9 @@ export class BackendError extends Error {
  * @property {string[]} hosts  `host:port` it talks to; each needs a net: connect grant
  * @property {string} signIn
  * @property {(prompt: string) => string[]} [headless]  the arguments for one unattended run of a prompt (a standing
- *   grant's, H4): no prompts of the CLI's own, since nobody is there to answer them; the container and the
- *   identity's grants are the boundary (ADR-004). A backend without it can't run unattended.
+ *   grant's, H4), last on the command line, after the gateway's: no prompts of the CLI's own, since nobody is there
+ *   to answer them; the container and the identity's grants are the boundary (ADR-004). A backend without it can't
+ *   run unattended.
  */
 
 /** @type {Record<string, Manifest>} */
@@ -74,6 +75,9 @@ export const BACKENDS = {
     // ChatGPT sign-in (chatgpt.com, auth.openai.com) or an API key (api.openai.com).
     hosts: ['chatgpt.com:443', 'auth.openai.com:443', 'api.openai.com:443'],
     signIn: 'Choose device sign-in in the session (or run `codex login --device-auth`) and enter the code in the browser.',
+    // exec: one prompt and out, never asking (its approval policy is "never"); the options before it carry over, the
+    // sandbox among them. A workspace needn't be a git repo; `--` so a prompt starting with - is still the prompt.
+    headless: (prompt) => ['exec', '--skip-git-repo-check', '--', prompt],
   },
 };
 
@@ -89,7 +93,8 @@ const slug = (id) => id.replace(/^local:/, '').replaceAll('/', '+'); // ids can'
  * @param {string} name a key of BACKENDS
  * @param {{ identity: string, agentsRoot: string, where: Where, isFile?: (p: string) => boolean, prompt?: string }} opts
  *   prompt: run it unattended (the manifest's headless start) instead of the interactive CLI
- * @returns {{ command: string, readonly: string[], readwrite: string[], pathDirs: string[], env: Record<string, string>, hosts: string[], home: string, program: string }}
+ * @returns {{ command: string, tail: string, readonly: string[], readwrite: string[], pathDirs: string[], env: Record<string, string>, hosts: string[], home: string, program: string }}
+ *   tail: the unattended start's arguments, quoted, to go after anything added to command ('' when interactive)
  * @throws {BackendError} for an unknown backend or a program that isn't installed
  */
 export function resolveBackend(name, { identity, agentsRoot, where, isFile = exists, prompt }) {
@@ -114,8 +119,8 @@ export function resolveBackend(name, { identity, agentsRoot, where, isFile = exi
     pathDirs.push(path.win32.join(root, 'cmd'));
     env.CLAUDE_CODE_GIT_BASH_PATH = bash;
   }
-  const args = [...m.args, ...(prompt !== undefined && m.headless ? m.headless(prompt) : [])];
-  return { command: [program, ...args].map(quote).join(' '), readonly, readwrite: [home], pathDirs, env, hosts: m.hosts, home, program };
+  const tail = prompt !== undefined && m.headless ? m.headless(prompt).map(quote).join(' ') : '';
+  return { command: [program, ...m.args].map(quote).join(' '), tail, readonly, readwrite: [home], pathDirs, env, hosts: m.hosts, home, program };
 }
 
 /**
