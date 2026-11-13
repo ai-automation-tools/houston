@@ -175,7 +175,15 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       return s.stop();
     },
     'session.list': () => runner.list(),
-    'stop.all': async () => ({ stopped: (await runner.stopAll()).length }),
+    // Stop All (SEC-10): one event saying the operator pressed it, then each session's own session.end.
+    'stop.all': async () => {
+      const running = runner.list().length;
+      audit.append({
+        type: 'stop.all', action: 'stop.all', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'Sessions', id: 'all' },
+        decision: { result: 'allow', policy_version: 'none', reasons: [`${running} running`] },
+      });
+      return { stopped: (await runner.stopAll()).length };
+    },
     'audit.query': (p) => queryAudit(audit, p),
 
     'identity.list': (p) => registry.list({ status: p.status }),

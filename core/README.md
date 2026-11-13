@@ -431,7 +431,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `approval.list` | none | the asks waiting, oldest first: `id`, `identity`, `session_id`, `workspace`, `action`, `resource`, `createdAt`, `expiresAt` |
 | `approval.decide` | `id`, `answer` (`once`, `session` or `deny`) | `{ result }`; `not_found` once it was answered, timed out or its session ended |
 | `session.list` | none | the running sessions |
-| `stop.all` | none | `{ stopped }`, the number stopped |
+| `stop.all` | none | `{ stopped }`, the number stopped. One `stop.all` audit event by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `identity.list` | optional `status` | identities with their grants |
 | `identity.get` | `id` | one identity with its grants |
@@ -486,7 +486,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done and H2 is under way: backends, the window's Agents tab and the approval inbox are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (Stop All, the logs screen, transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox and Stop All are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (the logs screen, transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

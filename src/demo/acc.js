@@ -531,7 +531,9 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       start: async () => { throw new Error('This is the demo, so no agent starts. In the app, the Core starts it in a container.'); },
       open: async () => { throw new Error('This is the demo, so there is no session to show.'); },
       stop: async () => { throw new Error('This is the demo, so there is no session to stop.'); },
+      stopAll: async () => { throw new Error('This is the demo, so no agent session is running.'); },
       onChanged: listen('agents'),
+      onStopped: listen('agents-stopped'),
     },
     approvals: {
       list: async () => [],

@@ -263,6 +263,10 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 #approval-bar button { background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 12px; cursor: pointer; }
 #approval-once, #approval-session { border-color: var(--warn) !important; color: var(--warn); }
 #approval-bar button:focus-visible { outline: 2px solid var(--accent); }
+/* Stop All: on the navbar, which nothing hides. */
+#stop-all { flex: none; margin-left: 4px; background: transparent; border: 1px solid var(--bad); border-radius: 5px; padding: 2px 10px; color: var(--bad); cursor: pointer; white-space: nowrap; }
+#stop-all:hover { background: var(--bad); color: #fff; }
+#stop-all:focus-visible { outline: 2px solid var(--accent); }
 
 /* ---- light theme ------------------------------------------------------ */
 /* Follows Windows' app mode, like document pages (src/shared/docs.js). The terminal keeps its
