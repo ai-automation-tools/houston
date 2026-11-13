@@ -67,9 +67,11 @@ if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA
 // Before any renderer or service worker starts: they read navigator.userAgent from this.
 app.userAgentFallback = chromeUserAgent(app.userAgentFallback);
 
-// One instance: a second launch focuses the first. exit(), not quit(): quit() is async,
-// so whenReady would still run and start a second MCP server over the first's mcp.json.
-if (!app.requestSingleInstanceLock()) app.exit(0);
+// One instance: a second launch focuses the first, or with --quit (Start-AICommandCenter.ps1
+// -Quit, the Stop-Houston task) makes it quit as File → Quit does; --quit with nothing
+// running just ends. exit(), not quit(): quit() is async, so whenReady would still run and
+// start a second MCP server over the first's mcp.json.
+if (!app.requestSingleInstanceLock() || process.argv.includes('--quit')) app.exit(0);
 
 /** @type {BaseWindow | null} */
 let win = null;
@@ -845,7 +847,7 @@ async function createWindow() {
   await shellView.webContents.loadURL('acc://shell/index.html');
 }
 
-app.on('second-instance', showWindow);
+app.on('second-instance', (_e, argv) => { if (argv.includes('--quit')) app.quit(); else showWindow(); });
 app.on('before-quit', () => { quitting = true; });
 
 logCrashes();
