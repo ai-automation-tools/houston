@@ -9,7 +9,7 @@ import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
-import { logRow } from './shared/logs.js';
+import { logRow, transcriptUrl } from './shared/logs.js';
 import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
 
 const ICONS = {
@@ -833,6 +833,13 @@ export class Sidebar {
       q(row, '.name').textContent = v.name;
       q(row, '.sub').textContent = v.sub;
       row.title = v.title;
+      if (e.session_id && (e.type === 'session.start' || e.type === 'session.end')) {
+        const b = document.createElement('button');
+        b.textContent = 'Transcript';
+        b.title = 'What the session printed, secrets redacted, in a tab';
+        b.addEventListener('click', (ev) => { ev.stopPropagation(); this.openUrl(transcriptUrl(e.session_id)); });
+        q(row, '.acts').append(b);
+      }
       if (e.session_id && !filter.session) {
         const b = document.createElement('button');
         b.textContent = 'Only this session';

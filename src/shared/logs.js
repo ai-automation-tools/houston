@@ -1,6 +1,28 @@
 // The Logs tab's rules: which filters the window may send for the Core's audit log, and how an
 // audit event (core/schemas/audit-event.schema.json) reads as a row. No DOM, so it's tested.
 
+/** A session's transcript page. @param {string} session */
+export const transcriptUrl = (session) => `acc://transcript/${encodeURIComponent(session)}`;
+
+/** The session id in an acc://transcript/<id> address, or null. @param {string} url */
+export function transcriptIdFromUrl(url) {
+  return /^acc:\/\/transcript\/([A-Za-z0-9-]{1,64})\/?$/i.exec(url)?.[1] ?? null;
+}
+
+/**
+ * A transcript as a script-free page body: the Core's text, already redacted.
+ * @param {{ id: string, text: string, bytes: number, truncated: boolean }} t
+ * @param {(s: string) => string} esc HTML escaping
+ */
+export function transcriptBody(t, esc) {
+  const kb = Math.max(1, Math.round(t.bytes / 1024));
+  const about = [t.id, `${kb} KB`, t.truncated ? 'the newest 1 MB' : ''].filter(Boolean).join(' · ');
+  return [
+    `<h1>Session transcript</h1><p class="note">${esc(about)}. Secrets are replaced with [REDACTED:…] before the Core writes it.</p>`,
+    t.text.trim() ? `<pre>${esc(t.text.trimEnd())}</pre>` : '<p class="note">Nothing printed yet.</p>',
+  ].join('');
+}
+
 export const RESULTS = /** @type {const} */ (['allow', 'ask', 'deny']);
 export const LOG_LIMIT = 300;
 

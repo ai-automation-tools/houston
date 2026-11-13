@@ -9,13 +9,30 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows, toolchainPath } from '../shared/agents.js';
-import { logFilter, sessionChoices } from '../shared/logs.js';
+import { docPage, escapeHtml } from '../shared/docs.js';
+import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { core } from './core.js';
 
 /** Why a call to the Core failed, in words for the tab. @param {unknown} e */
 function why(e) {
   const err = /** @type {Error & { code?: string }} */ (e);
   return err.code === 'ENOENT' ? 'The Houston Core is not running. Start it: see docs/guide/core-at-logon.md.' : err.message;
+}
+
+/**
+ * The acc://transcript/<session> page: the Core's transcript of that session, already redacted.
+ * @param {string} url
+ */
+export async function transcriptPage(url) {
+  const id = transcriptIdFromUrl(url);
+  if (!id) throw new Error('This address doesn\'t name a session.');
+  let t;
+  try {
+    t = await core.call('transcript.get', { id });
+  } catch (e) {
+    throw new Error(/** @type {any} */ (e).code === 'not_found' ? 'The Core has no transcript for this session. Transcripts start with the Core that writes them, and the oldest are deleted past the size cap.' : why(e));
+  }
+  return docPage({ title: `Transcript ${id.slice(0, 8)}`, trail: `Agents › Transcripts › ${id}`, body: transcriptBody(t, escapeHtml) });
 }
 
 /**

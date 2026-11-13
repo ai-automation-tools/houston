@@ -8,6 +8,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openAudit } from '../../core/audit.js';
+import { createTranscripts } from '../../core/transcripts.js';
 import { createApprovals } from '../../core/approvals.js';
 import { attachSession } from '../../core/client.js';
 import { METHODS, callControl, queryAudit, startControl } from '../../core/control.js';
@@ -57,7 +58,8 @@ async function setup(t) {
   ensureOperator(db, audit);
   const registry = createRegistry({ db, audit });
   const approvals = createApprovals({ audit });
-  const control = await startControl({ dir, runner, registry, audit, schema: 3, approvals });
+  const transcripts = createTranscripts({ dir: path.join(dir, 'transcripts'), audit });
+  const control = await startControl({ dir, runner, registry, audit, schema: 3, approvals, transcripts });
   t.after(async () => { await control.close(); audit.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
   return { dir, audit, runner, control, call, approvals };
@@ -194,6 +196,20 @@ test('approval.list and approval.decide: the inbox over the pipe', async (t) => 
   assert.equal((await waiting).result, 'allow');
   await assert.rejects(s.call('approval.decide', { id: card.id, answer: 'deny' }), (e) => e.code === 'not_found');
   s.approvals.endSession('s1');
+});
+
+test('transcript.get: what the session printed, redacted, while it runs and after it ends', async (t) => {
+  const s = await setup(t);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+  s.runner.get('s1').output.write('hello\r\nDB_PASSWORD=hunter22\r\n');
+  await new Promise((r) => setImmediate(r));
+  const running = await s.call('transcript.get', { id: 's1' });
+  assert.match(running.text, /^# session s1 · local:dev · D:\\w · started .*\nhello\nDB_PASSWORD=\[REDACTED:secret\]\n$/);
+  s.runner.get('s1').exit(0);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.match((await s.call('transcript.get', { id: 's1' })).text, /\n# ended: exit 0\n$/);
+  await assert.rejects(s.call('transcript.get', { id: 'missing' }), (e) => e.code === 'not_found');
+  await assert.rejects(s.call('transcript.get', {}), (e) => e.code === 'bad_request');
 });
 
 test('session.stop, stop.all', async (t) => {

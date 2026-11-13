@@ -36,7 +36,7 @@ import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
-import { createAgents } from './agents.js';
+import { createAgents, transcriptPage } from './agents.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
@@ -305,7 +305,7 @@ async function createWindow() {
   browseSession.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
   browseSession.setDevicePermissionHandler(() => false);
   const devs = new DevServers(send);
-  serveDocs(browseSession, (url) => cron.page(url), (url) => gitDiff(current().folder, url), async (url) => devs.page(url), async (url) => runLog(url));
+  serveDocs(browseSession, (url) => cron.page(url), (url) => gitDiff(current().folder, url), async (url) => devs.page(url), async (url) => runLog(url), transcriptPage);
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
     invalidateDocsIndex();

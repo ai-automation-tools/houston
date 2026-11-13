@@ -785,6 +785,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         })()`);
         const t = terminals.listSessions().find((s) => s.session);
         if (!t) throw new Error('no contained session tab');
+        agentRun.sessionId = t.session;
         // Typed with a variable cut to nothing, so the echoed command line can't pass for the output.
         const lines = () => cleanOutput(terminals.read(t.id)?.raw ?? '').split(/\r?\n/).map((l) => l.trim());
         // The container takes a moment to start; type once cmd shows its prompt.
@@ -796,6 +797,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         for (let i = 0; i < 100 && !fs.existsSync(proof); i++) await wait(100);
         await wait(200);
         agentRun.wrote = fs.existsSync(proof) ? fs.readFileSync(proof, 'utf8').trim() : null;
+        // A made-up key printed in the session: its transcript must hold only the marker (checked below).
+        terminals.write(t.id, 'echo sk-ant-api03-SMOKEsmokeSMOKEsmoke0123456789\r');
 
         // The approval inbox: a request to an `ask` host waits on a card in the bar.
         /** @param {string} button @returns {Promise<any>} what the card said, after clicking */
@@ -882,6 +885,25 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           const detail = document.querySelector('#logs-list .log-detail')?.textContent ?? '';
           return { all: all.length, stopAll: all.includes('stop.all sessions') && all[0] === 'session.end', identities, sessions, denied, deniedClasses, oneSession: sel('session').value !== '' && one.length > 0 && one.length < all.length, detail: detail.includes('"event_id"') };
         })()`);
+        // The first session's transcript, from its session.start row's Transcript button.
+        await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const sel = document.getElementById('logs-session');
+          sel.value = ${JSON.stringify(t.session)};
+          sel.dispatchEvent(new Event('change'));
+          const find = () => [...document.querySelectorAll('#logs-list .row.log')].find((r) => r.title.includes(${JSON.stringify(`session ${t.session}`)}) && r.querySelector('.name').textContent === 'session.start');
+          for (let i = 0; i < 50 && !find(); i++) await pause(100);
+          const row = find();
+          [...(row?.querySelectorAll('.acts button') ?? [])].find((b) => b.textContent === 'Transcript')?.click();
+        })()`);
+        for (let i = 0; i < 40 && !tabs.list().some((x) => x.url.startsWith('acc://transcript/')); i++) await wait(250);
+        const tTab = tabs.list().find((x) => x.url.startsWith('acc://transcript/'));
+        const tView = tTab && tabs.tabs.get(tTab.id);
+        if (tView) {
+          for (let i = 0; i < 40 && tView.view.webContents.isLoading(); i++) await wait(100);
+          agentRun.transcript = await tView.view.webContents.executeJavaScript(`({ url: location.href, h1: document.querySelector('h1')?.textContent, text: document.querySelector('pre')?.textContent ?? '', scripts: document.scripts.length })`);
+          tabs.close(tTab.id);
+        }
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -914,6 +936,11 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         Boolean(lg?.all > 5 && lg.stopAll && lg.identities.includes('local:smoke-shell') && lg.sessions === 3
           && lg.denied.includes('egress.connect example.org:443') && lg.deniedClasses.every((/** @type {string} */ c) => c.endsWith(' deny'))
           && lg.oneSession && lg.detail), lg);
+      const tr = agentRun?.transcript;
+      check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
+        Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0
+          && /# session .* · local:smoke-shell/.test(tr.text) && tr.text.includes('agent-smoke-ok') && tr.text.includes('[REDACTED:anthropic-key]')
+          && !tr.text.includes('SMOKEsmoke') && /# ended: stopped/.test(tr.text)), { ...tr, text: tr?.text?.slice(-600) });
     }
     // Last, so it shows terminal_run's output in the terminal.
     await wait(1500);
