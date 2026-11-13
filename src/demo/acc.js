@@ -199,6 +199,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     if (url.startsWith('acc://run/')) return 'Cronsole run';
     if (url.startsWith('acc://runlog/')) return 'Run';
     if (url.startsWith('acc://settings/')) return 'Settings';
+    if (url.startsWith('acc://identities/')) return 'Identity Center';
     if (url.startsWith('acc://transcript/')) return 'Transcript';
     try { return new URL(url).hostname || url; } catch { return url; }
   };

@@ -133,6 +133,7 @@ contextBridge.exposeInMainWorld('acc', {
     start: invoke('agents:start'),
     open: invoke('agents:open'),
     stop: invoke('agents:stop'),
+    lifecycle: invoke('agents:lifecycle'),
     stopAll: invoke('agents:stopAll'),
     onChanged: listen('agents:changed'),
     /** Stop All's result, whichever of the button, hotkey or tray pressed it. */

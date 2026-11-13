@@ -151,4 +151,11 @@ export const MIGRATIONS = [
   `
   ALTER TABLE standing_grants ADD COLUMN prompt TEXT CHECK (prompt IS NULL OR length(prompt) BETWEEN 1 AND 8000);
   `,
+
+  // v8 (H5): review dates. The operator marks an identity reviewed (identity.review); review_by
+  // is when it's due again. Null until its first review.
+  `
+  ALTER TABLE identities ADD COLUMN reviewed_at TEXT;
+  ALTER TABLE identities ADD COLUMN review_by TEXT;
+  `,
 ];

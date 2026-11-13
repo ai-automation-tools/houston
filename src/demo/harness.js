@@ -1,6 +1,6 @@
 // The demo's stand-in for the Houston Core: made-up agent identities and grants, one session
 // already running, contained terminal tabs, the approval inbox, the audit log, transcripts and
-// the Settings page and the Integrations tab. It runs the window's own rules (src/shared/agents.js, logs.js, scopes.js,
+// the Settings page, the Identity Center and the Integrations tab. It runs the window's own rules (src/shared/agents.js, logs.js, scopes.js,
 // approvals.js) on fabricated state, in the browser tab. Nothing runs, nothing is fetched.
 
 import { agentRows } from '../shared/agents.js';
@@ -8,6 +8,7 @@ import { backendRows, secretRows, serverName, serverRows, standingId, standingRo
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
+import { IDENTITIES_URL, identitiesBody } from '../shared/identities.js';
 
 const WS = 'D:/work/acme-api';
 const MIN = 60_000;
@@ -16,15 +17,25 @@ const APPROVAL_MS = 120_000;
 const FAKE_KEY = ['sk', 'ant', 'demo03', 'Xq7dL2mPz9WvK4nR8tYb1cHs6Fg0Jk5Ue3'].join('-');
 
 /** @param {string} resource @param {string} permission @param {'allow' | 'ask'} [effect] */
-const grant = (resource, permission, effect = 'allow') => ({ resource, permission, effect });
+let grantN = 0;
+const grant = (resource, permission, effect = 'allow') => ({
+  id: `g-${++grantN}`, resource, permission, effect, grantedAt: '2026-11-12T09:00:00Z', grantedBy: 'local:operator', expiresAt: null, lastUsedAt: null,
+});
+/** The rest of an identity's record, as the Core's identity.list has it. @param {object} i @param {string | null} [reviewBy] */
+const ident = (i, reviewBy = null) => ({
+  owner: 'local:operator', parent: null, purpose: null, createdAt: '2026-11-12T09:00:00Z', lastUsedAt: null, expiresAt: null, retiredAt: null, tags: [],
+  reviewedAt: reviewBy && '2026-08-15T09:00:00Z', reviewBy, ...i,
+});
+// Every folder no grant opens, as policy.js globalDenies() lists them (made up; only the count is shown).
+const ALWAYS_DENIED = ['core-data', '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', 'GitHub CLI', '.git-credentials', '_netrc', 'Protect', 'Credentials', 'Credentials (Local)', 'Vault'];
 const IDENTITIES = [
-  { id: 'local:operator', kind: 'operator', displayName: 'You', status: 'active', containment: 'unconfined', backend: null, grants: [] },
-  { id: 'local:dev-claude', kind: 'ai-agent', displayName: 'Dev Claude', status: 'active', containment: 'container', backend: 'claude-code',
-    grants: [grant(`file:${WS}/**`, 'write'), grant('net:api.anthropic.com:443', 'connect'), grant('net:registry.npmjs.org:443', 'connect', 'ask')] },
-  { id: 'local:build-shell', kind: 'ai-agent', displayName: 'Build shell', status: 'active', containment: 'container', backend: null,
-    grants: [grant(`file:${WS}/**`, 'write'), grant('net:registry.npmjs.org:443', 'connect'), grant('net:example.com:443', 'connect', 'ask')] },
-  { id: 'local:review-codex', kind: 'ai-agent', displayName: 'Review Codex', status: 'suspended', containment: 'container', backend: 'codex',
-    grants: [grant(`file:${WS}/**`, 'read'), grant('net:chatgpt.com:443', 'connect')] },
+  ident({ id: 'local:operator', kind: 'operator', displayName: 'You', owner: null, status: 'active', containment: 'unconfined', backend: null, grants: [] }),
+  ident({ id: 'local:dev-claude', kind: 'ai-agent', displayName: 'Dev Claude', status: 'active', containment: 'container', backend: 'claude-code', purpose: 'Day-to-day work in acme-api',
+    grants: [grant(`file:${WS}/**`, 'write'), grant('net:api.anthropic.com:443', 'connect'), grant('net:registry.npmjs.org:443', 'connect', 'ask')] }, '2027-01-20T09:00:00Z'),
+  ident({ id: 'local:build-shell', kind: 'ai-agent', displayName: 'Build shell', status: 'active', containment: 'container', backend: null, purpose: 'npm ci and the test suite',
+    grants: [grant(`file:${WS}/**`, 'write'), grant('net:registry.npmjs.org:443', 'connect'), grant('net:example.com:443', 'connect', 'ask')] }, '2026-11-01T09:00:00Z'),
+  ident({ id: 'local:review-codex', kind: 'ai-agent', displayName: 'Review Codex', status: 'suspended', containment: 'container', backend: 'codex',
+    grants: [grant(`file:${WS}/**`, 'read'), grant('net:chatgpt.com:443', 'connect')] }),
 ];
 const BACKENDS = [
   { name: 'claude-code', displayName: 'Claude Code', hosts: ['api.anthropic.com:443'], signIn: 'Run /login in the session, once; it signs in to a home of its own.', installed: true },
@@ -261,6 +272,25 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
         return { terminal: show(s) };
       },
       stop: async (/** @type {string} */ id) => { if (!stop(id)) throw new Error('no running session has that id'); return { reason: 'stopped' }; },
+      // The Core's lifecycle rules (core/identities.js), on the made-up identities.
+      lifecycle: async (/** @type {string} */ identity, /** @type {string} */ action) => {
+        const i = /** @type {any} */ (IDENTITIES.find((x) => x.id === identity));
+        if (!i || i.kind === 'operator') throw new Error(`no identity ${identity}`);
+        if (action === 'review') {
+          i.reviewedAt = iso();
+          i.reviewBy = iso(now() + 90 * 24 * 60 * MIN);
+        } else {
+          const to = /** @type {Record<string, string>} */ ({ activate: 'active', suspend: 'suspended', retire: 'retired' })[action];
+          const next = /** @type {Record<string, string[]>} */ ({ draft: ['active', 'retired'], active: ['suspended', 'retired'], suspended: ['active', 'retired'], retired: [] })[i.status];
+          if (!to || !next.includes(to)) throw new Error(`${identity} is ${i.status}; it can become ${next.join(' or ') || 'nothing else'}`);
+          event('identity.lifecycle', 'local:operator', null, `identity.${action}`, { type: 'Identity', id: identity }, 'allow', [], { lifecycle: { from: i.status, to } });
+          i.status = to;
+          if (to === 'retired') i.retiredAt = iso();
+          if (to !== 'active') for (const s of [...sessions.values()]) if (s.identity === identity) stop(s.id);
+        }
+        agentsChanged();
+        return { identity: i };
+      },
       stopAll: async () => {
         const ids = [...sessions.keys()];
         event('stop.all', 'local:operator', null, 'stop.all', { type: 'Core', id: 'sessions' }, 'allow', [`${ids.length} running`]);
@@ -314,6 +344,25 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
 
     /** The body of an app page the demo can show (Settings, a transcript), or null. @param {string} url */
     page(url) {
+      if (url.startsWith(IDENTITIES_URL)) {
+        /** @type {Record<string, any>} */
+        const reach = {};
+        for (const i of IDENTITIES) {
+          /** @type {Record<string, any>} */
+          const types = {};
+          for (const g of i.grants) {
+            const type = g.resource.slice(0, g.resource.indexOf(':'));
+            (types[type] ??= { allow: [], ask: [], deny: [] })[g.effect].push({ resource: g.resource.slice(type.length + 1), permission: g.permission });
+          }
+          const b = BACKENDS.find((x) => x.name === i.backend);
+          const allowed = (/** @type {string} */ h) => i.grants.some((g) => g.resource === `net:${h}` && g.effect === 'allow');
+          reach[i.id] = {
+            status: i.status, containment: i.containment, enforced: true, types, expired: 0, notApplied: [], alwaysDenied: ALWAYS_DENIED, standing: [],
+            backend: b ? { name: b.name, displayName: b.displayName, hosts: b.hosts, missingHosts: b.hosts.filter((h) => !allowed(h)) } : null,
+          };
+        }
+        return identitiesBody({ identities: /** @type {any} */ (IDENTITIES), reach, sessions: list(), starts: events.filter((e) => e.type === 'session.start').reverse(), now: now() }, escapeHtml);
+      }
       if (url === SETTINGS_URL) {
         return settingsBody({
           hubUrl: 'http://127.0.0.1:4273', hubToken: 'sent', quickLinks: 2, newsSources: 2, bookmarkSource: 'chrome', adBlock: true, closeToTray: true,

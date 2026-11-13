@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/milestone-Harness_H4-8B5CF6?style=for-the-badge" alt="Milestone: Harness H4">
-  <img src="https://img.shields.io/badge/schema-v7-2ea44f?style=for-the-badge" alt="Schema v7">
+  <img src="https://img.shields.io/badge/milestone-Harness_H5-8B5CF6?style=for-the-badge" alt="Milestone: Harness H5">
+  <img src="https://img.shields.io/badge/schema-v8-2ea44f?style=for-the-badge" alt="Schema v8">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -74,11 +74,11 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v7
+## 🧱 Schema v8
 
 | Table | Holds |
 |:---|:---|
-| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
+| `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns; since v8, when it was last reviewed and when its next review is due. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
 | `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
 | `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked; since v7, a prompt for a backend identity instead of a command. |
@@ -367,7 +367,11 @@ Codex reaches for GitHub even with its update check off; those calls are refused
 | `suspended` | `active`, `retired` |
 | `retired` | nothing: final, and the id is never reused |
 
-Only an `active` identity starts a session (the runner checks, and records `lastUsedAt`). Suspending or retiring one over the Control API also stops its running sessions.
+Only an `active` identity starts a session (the runner checks, and records `lastUsedAt`). Suspending or retiring one over the Control API also stops its running sessions: [`spikes/h5-identity-center.mjs`](../spikes/h5-identity-center.mjs) measured 173 ms from `identity.suspend` to the session gone (H5 asks for under 5 s).
+
+**Review** (H5). `identity.review id=<id>` marks an identity reviewed (its grants and purpose looked at) and due again in `days` (1 to 366, default 90): `reviewedAt` and `reviewBy`, null until the first review. An `identity.lifecycle` event with action `identity.review` records it, with the status unchanged. Not for the operator or a retired identity.
+
+**What it can reach.** `identity.reach id=<id>` answers from its grants as they are now: the live ones grouped by type (`file`, `net`, `tool`, …) and effect, how many expired ones were left out, the ones a container won't apply (a file pattern that isn't `dir/**` or an exact path, an `ask` on a file, a `list`, with the reason), the folders no grant opens (the global denies), its backend's hosts that no allow grant covers, and the standing grants that name it. For an unconfined identity `enforced` is false: no container holds it to any of this. Houston's Identity Center shows it for every identity.
 
 **What `create` checks:** an id of `local:` plus a lowercase name; a kind other than `operator`; a display name of 1 to 80 characters; an owner (default: the caller) and a parent that exist and aren't retired, and a parent for a sub-agent; a containment rung (default `container`); an expiry in the future.
 
@@ -560,6 +564,8 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `identity.create` | `id`, `kind`, `displayName`; optional `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
 | `identity.activate` | `id`; optional `reason` | the identity |
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
+| `identity.review` | `id`; optional `days` (1 to 366, default 90) | the identity, with `reviewedAt` now and `reviewBy` that many days on |
+| `identity.reach` | `id` | what its grants open now: `types` (live grants by type and effect), `expired`, `notApplied`, `alwaysDenied`, `backend` (with `missingHosts`), `standing`, `enforced` ([Identity registry](#-identity-registry)) |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |
 | `grant.remove` | `id` | the grant removed |
 | `mcp.list`, `mcp.get` | `name` for get | registrations: `name`, `identity`, `transport`, `command` (or `url` for http), `env` (names and `secret:` references, never values), `pathDirs`, `state`, `tools`, `toolsHash`, `pinnedHash` ([Gateway](#-mcp-gateway)) |
@@ -622,7 +628,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. Next on the [roadmap](../docs/ROADMAP.md): H5, starting with the Identity Center screen. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, AT-11 passes, the window's Cron and Integrations tabs show them, a standing grant can run Claude Code or Codex on a prompt, and the first real nightly job runs on one; H4 is done after its 5 nights. H5 is under way: identities have review dates (`identity.review`) and an answer to what they can reach (`identity.reach`), which the window's Identity Center shows. Next on the [roadmap](../docs/ROADMAP.md): profiles. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

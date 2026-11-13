@@ -41,7 +41,7 @@ test('create makes a draft owned by the caller, audited, in the schema\'s shape'
   assert.deepEqual(id, {
     id: 'local:dev-shell', kind: 'ai-agent', displayName: 'Dev shell', owner: OPERATOR, parent: null, purpose: 'Try the harness', backend: 'codex',
     status: 'draft', containment: 'container', createdAt: NOW.toISOString(), lastUsedAt: null, expiresAt: '2027-01-01T00:00:00.000Z', retiredAt: null,
-    tags: ['h1'], grants: [],
+    reviewedAt: null, reviewBy: null, tags: ['h1'], grants: [],
   });
   const e = s.events().at(-1);
   assert.deepEqual([e.type, e.action, e.identity.subject, e.resource, e.lifecycle], ['identity.lifecycle', 'identity.create', OPERATOR, { type: 'Identity', id: 'local:dev-shell' }, { from: null, to: 'draft' }]);
@@ -118,4 +118,40 @@ test('grants: added and removed with checks on type, permission, effect and patt
 
   s.reg.setStatus('local:dev-shell', 'retired', OPERATOR);
   assert.throws(add({}), fails('conflict', /retired/));
+});
+
+test('review marks an identity reviewed and due again in 90 days, or the days given; audited', (t) => {
+  const s = setup(t);
+  s.agent();
+  const r = s.reg.review('local:dev-shell', undefined, OPERATOR);
+  assert.deepEqual([r.reviewedAt, r.reviewBy], [NOW.toISOString(), '2027-02-10T12:00:00.000Z']);
+  assert.equal(s.reg.review('local:dev-shell', 7, OPERATOR).reviewBy, '2026-11-19T12:00:00.000Z');
+  const e = s.events().at(-1);
+  assert.deepEqual([e.type, e.action, e.lifecycle, e.review.reviewBy], ['identity.lifecycle', 'identity.review', { from: 'draft', to: 'draft' }, '2026-11-19T12:00:00.000Z']);
+  for (const d of [0, 367, 1.5, 'x']) assert.throws(() => s.reg.review('local:dev-shell', d, OPERATOR), fails('bad_request', /days/));
+  assert.throws(() => s.reg.review(OPERATOR, undefined, OPERATOR), fails('bad_request'));
+  s.reg.setStatus('local:dev-shell', 'retired', OPERATOR);
+  assert.throws(() => s.reg.review('local:dev-shell', undefined, OPERATOR), fails('conflict'));
+});
+
+test('reach groups live grants by type and effect, leaves out expired ones, and names what a container cannot apply', (t) => {
+  const s = setup(t);
+  s.agent('local:dev-shell', { backend: 'codex' });
+  const add = (resource, permission, extra = {}) => s.reg.addGrant({ identity: 'local:dev-shell', resource, permission, ...extra }, OPERATOR);
+  add('file:D:/work/**', 'write');
+  add('file:D:/docs/*.md', 'read');
+  add('net:chatgpt.com:443', 'connect');
+  add('net:api.openai.com:443', 'connect', { effect: 'ask' });
+  add('tool:github.*', 'call');
+  const old = add('net:old.example:443', 'connect', { expiresAt: '2026-11-13T00:00:00Z' });
+  s.db.prepare("UPDATE grants SET expires_at = '2026-11-01T00:00:00Z' WHERE id = ?").run(old.id);
+  const r = s.reg.reach('local:dev-shell');
+  assert.deepEqual(r.types.file.allow, [{ resource: 'D:/docs/*.md', permission: 'read' }, { resource: 'D:/work/**', permission: 'write' }]);
+  assert.deepEqual(r.types.net, { allow: [{ resource: 'chatgpt.com:443', permission: 'connect' }], ask: [{ resource: 'api.openai.com:443', permission: 'connect' }], deny: [] });
+  assert.deepEqual(r.types.tool.allow, [{ resource: 'github.*', permission: 'call' }]);
+  assert.equal(r.expired, 1);
+  assert.deepEqual(r.notApplied.map((n) => n.resource), ['file:D:/docs/*.md']);
+  assert.deepEqual([r.enforced, r.backend.name, r.backend.missingHosts], [true, 'codex', ['auth.openai.com:443', 'api.openai.com:443']]);
+  assert.deepEqual(r.standing, []);
+  assert.throws(() => s.reg.reach('local:nobody'), fails('not_found'));
 });

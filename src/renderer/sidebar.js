@@ -10,6 +10,7 @@ import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
 import { logRow, transcriptUrl } from './shared/logs.js';
+import { IDENTITIES_URL, identityAnchor } from './shared/identities.js';
 import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
 
 const ICONS = {
@@ -122,6 +123,7 @@ export class Sidebar {
     document.getElementById('dev-refresh')?.addEventListener('click', () => this.loadDev());
     api.dev.onChanged(() => { if (this.current === 'dev') this.loadDev(); });
     document.getElementById('agents-refresh')?.addEventListener('click', () => this.loadAgents());
+    document.getElementById('agents-identities')?.addEventListener('click', () => this.openUrl(IDENTITIES_URL));
     api.agents.onChanged(() => { if (this.current === 'agents') this.loadAgents(); });
     document.getElementById('logs-refresh')?.addEventListener('click', () => this.loadLogs());
     document.getElementById('integrations-refresh')?.addEventListener('click', () => this.loadIntegrations());
@@ -765,13 +767,40 @@ export class Sidebar {
       row.innerHTML = '<span class="icon"></span><span class="name"></span><span class="sub"></span><span class="acts"></span>';
       q(row, '.icon').textContent = r.sessions.length ? '●' : r.canStart ? '▷' : '■';
       q(row, '.name').textContent = r.name;
-      q(row, '.sub').textContent = r.why || r.what;
-      row.title = [r.id, r.what, r.why, r.signIn && `First time: ${r.signIn}`].filter(Boolean).join('\n');
+      q(row, '.sub').textContent = [r.why || r.what, r.overdue ? 'review overdue' : ''].filter(Boolean).join(' · ');
+      row.title = [r.id, r.what, r.why, r.signIn && `First time: ${r.signIn}`, `Review: ${r.review}`].filter(Boolean).join('\n');
       if (r.canStart && info.folder) {
         const b = document.createElement('button');
         b.textContent = 'Start';
         b.title = `Start ${r.name} in a container, in ${info.folder}`;
         b.addEventListener('click', () => { b.disabled = true; open(this.api.agents.start(r.id)).finally(() => { b.disabled = false; }); });
+        q(row, '.acts').append(b);
+      }
+      // Lifecycle (H5). The Core checks each move; suspending or retiring ends the identity's sessions.
+      // Retire is final and its id is never reused, so it takes a second click within 4 s.
+      /** @type {[string, string, string][]} */
+      const moves = [
+        r.status === 'active' ? ['Suspend', 'suspend', 'Refuse new sessions and end the running ones; Activate undoes it'] : ['Activate', 'activate', 'Let it start sessions'],
+        ['Reviewed', 'review', `Its grants and purpose are checked: due again in 90 days (now: ${r.review})`],
+        ['Retire', 'retire', 'Final: it can never start again, and its id is never reused'],
+        ['Details', '', 'Open it in the Identity Center'],
+      ];
+      for (const [label, action, title] of moves) {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.title = title;
+        let armed = 0;
+        b.addEventListener('click', () => {
+          if (!action) { this.openUrl(`${IDENTITIES_URL}#${identityAnchor(r.id)}`); return; }
+          if (action === 'retire' && Date.now() - armed > 4000) {
+            armed = Date.now();
+            b.textContent = 'Retire?';
+            setTimeout(() => { b.textContent = label; }, 4000);
+            return;
+          }
+          b.disabled = true;
+          act(this.api.agents.lifecycle(r.id, action)).finally(() => { b.disabled = false; });
+        });
         q(row, '.acts').append(b);
       }
       host.append(row);
