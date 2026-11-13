@@ -172,4 +172,39 @@ export const MIGRATIONS = [
   ALTER TABLE identities ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default';
   ALTER TABLE secrets ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default';
   `,
+
+  // v10 (H6): skills installed in a profile (skills.js); the files are in houston-skills\<profile>\<name>.
+  // hash is their content hash at install: a skill whose files changed isn't mounted. Grants now
+  // take skill: (and memory:, for profile memory) resources, so the grants table is rebuilt as in v2.
+  `
+  CREATE TABLE skills (
+    profile_id    TEXT NOT NULL REFERENCES profiles(id),
+    name          TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 64 AND name NOT GLOB '*[^a-z0-9_-]*'),
+    source        TEXT,
+    hash          TEXT NOT NULL,
+    files         INTEGER NOT NULL,
+    bytes         INTEGER NOT NULL,
+    installed_at  TEXT NOT NULL,
+    installed_by  TEXT NOT NULL,
+    PRIMARY KEY (profile_id, name)
+  ) STRICT;
+  CREATE TABLE grants_v10 (
+    id            TEXT PRIMARY KEY,
+    identity_id   TEXT NOT NULL REFERENCES identities(id),
+    resource      TEXT NOT NULL CHECK (
+                    resource GLOB 'file:?*' OR resource GLOB 'net:?*' OR resource GLOB 'tool:?*' OR
+                    resource GLOB 'command:?*' OR resource GLOB 'secret:?*' OR resource GLOB 'session:?*' OR
+                    resource GLOB 'skill:?*' OR resource GLOB 'memory:?*'),
+    permission    TEXT NOT NULL CHECK (permission IN ('read', 'write', 'list', 'connect', 'call', 'run', 'use', 'spawn')),
+    effect        TEXT NOT NULL CHECK (effect IN ('allow', 'ask', 'deny')),
+    granted_at    TEXT NOT NULL,
+    granted_by    TEXT NOT NULL,
+    expires_at    TEXT,
+    last_used_at  TEXT
+  ) STRICT;
+  INSERT INTO grants_v10 SELECT * FROM grants;
+  DROP TABLE grants;
+  ALTER TABLE grants_v10 RENAME TO grants;
+  CREATE INDEX grants_by_identity ON grants (identity_id);
+  `,
 ];

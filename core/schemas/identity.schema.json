@@ -34,7 +34,7 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
-        "resource": { "description": "'<type>:<pattern>', e.g. 'file:D:/work/app/**', 'net:api.openai.com:443', 'tool:github/create_issue', 'command:git push*', 'secret:github-token'.", "type": "string", "pattern": "^(file|net|tool|command|secret|session):.+$" },
+        "resource": { "description": "'<type>:<pattern>', e.g. 'file:D:/work/app/**', 'net:api.openai.com:443', 'tool:github/create_issue', 'command:git push*', 'secret:github-token', 'skill:git-commit-helper'.", "type": "string", "pattern": "^(file|net|tool|command|secret|session|skill|memory):.+$" },
         "permission": { "enum": ["read", "write", "list", "connect", "call", "run", "use", "spawn"] },
         "effect": { "description": "'ask' raises an approval card; an unattended run treats it as deny. 'deny' beats every allow and ask, however narrow (added 2026-11-12 for the precedence rule).", "enum": ["allow", "ask", "deny"] },
         "grantedAt": { "type": "string", "format": "date-time" },
