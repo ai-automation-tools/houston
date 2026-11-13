@@ -18,7 +18,7 @@ The Core is a plain Node 24 process, separate from the Electron app ([ADR-004](.
 npm run core        # or: node core/main.js
 ```
 
-It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between, the number of audit chain breaks and the Control API's pipe) and then, on Windows, serves the [Control API](#-control-api); elsewhere (CI on Linux) there are no containers, so it only holds its lock and prints `pipe: null`. Ctrl+C stops every session and then the Core. Session temp folders go under `HOUSTON_SESSION_TEMP`, or `%ProgramData%\houston-core\sessions`: they can't be in the user profile, which sessions are denied. A second copy started on the same data folder exits with code 2 and says the Core is already running.
+It prints one JSON line (`core.start`, with the data folder, the schema versions it moved between, the number of audit chain breaks and the Control API's pipe) and then, on Windows, serves the [Control API](#-control-api); elsewhere (CI on Linux) there are no containers, so it only holds its lock and prints `pipe: null`. Ctrl+C stops every session and then the Core. Each start, stop and failure to start is also a line in `core.log` in the data folder, the only record when the Core runs with no console. To start it at logon with no window, see [core-at-logon.md](../docs/guide/core-at-logon.md): the task passes `--exit-with-parent`, which stops the Core cleanly once the process that started it is gone. Session temp folders go under `HOUSTON_SESSION_TEMP`, or `%ProgramData%\houston-core\sessions`: they can't be in the user profile, which sessions are denied. A second copy started on the same data folder exits with code 2 and says the Core is already running.
 
 ## 📁 What's here
 
@@ -415,7 +415,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): starting at logon. The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done; what comes next is [Harness H2 to H7](../docs/ROADMAP.md) (the window, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 
