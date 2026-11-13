@@ -19,6 +19,7 @@ import { ApprovalError } from './approvals.js';
 import { GatewayError } from './gateway.js';
 import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
+import { StandingError } from './standing.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
@@ -26,6 +27,7 @@ export const METHODS = [
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
+  'standing.list', 'standing.get', 'standing.create', 'standing.update', 'standing.pause', 'standing.resume', 'standing.revoke', 'standing.run',
 ];
 const MAX_LINE = 1024 * 1024;
 /** How much of a session's recent output an attach replays first. */
@@ -89,11 +91,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>>, standing?: ReturnType<typeof import('./standing.js').createStanding> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault, standing }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -197,14 +199,16 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       return s.stop();
     },
     'session.list': () => runner.list(),
-    // Stop All (SEC-10): one event saying the operator pressed it, then each session's own session.end.
+    // Stop All (SEC-10): one event saying the operator pressed it, every standing grant paused (so no
+    // scheduled run starts in between), then each session's own session.end.
     'stop.all': async () => {
       const running = runner.list().length;
+      const paused = standing?.pauseAll() ?? [];
       audit.append({
         type: 'stop.all', action: 'stop.all', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'Core', id: 'sessions' },
         decision: { result: 'allow', policy_version: 'none', reasons: [`${running} running`] },
       });
-      return { stopped: (await runner.stopAll()).length };
+      return { stopped: (await runner.stopAll()).length, paused: paused.length };
     },
     'audit.query': (p) => queryAudit(audit, p),
 
@@ -232,6 +236,20 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'secret.list': () => need(vault, 'vault').list(),
     'secret.set': (p) => need(vault, 'vault').set(p.name, p.value),
     'secret.delete': (p) => need(vault, 'vault').remove(p.name),
+    // Standing grants (standing.js): made and changed here only, by the operator; standing.run is what
+    // `harness run --grant <id>` (harness.js) calls for a scheduled task. Its session is tapped like any other, transcript included.
+    'standing.list': () => need(standing, 'standing grants').list(),
+    'standing.get': (p) => need(standing, 'standing grants').get(p.id),
+    'standing.create': (p) => need(standing, 'standing grants').create(p),
+    'standing.update': (p) => need(standing, 'standing grants').update(p.id, p),
+    'standing.pause': (p) => need(standing, 'standing grants').pause(p.id),
+    'standing.resume': (p) => need(standing, 'standing grants').resume(p.id),
+    'standing.revoke': (p) => need(standing, 'standing grants').revoke(p.id),
+    'standing.run': async (p) => {
+      const s = await need(standing, 'standing grants').run(p.id);
+      tap(s);
+      return { id: s.id, identity: s.identity, workspace: s.workspace, startedAt: s.startedAt, standingGrant: s.standingGrant };
+    },
   };
 
   /** @template T @param {T | undefined} part @param {string} what @returns {T} */
@@ -290,7 +308,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError || e instanceof StandingError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }

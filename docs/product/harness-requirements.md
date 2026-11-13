@@ -62,7 +62,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-12 | Reusable workflows | Could | Later | Saved recipes: identity, prompt, workspace, grant set |
 | CORE-13 | Loops | Could | Later | A recipe with an iteration cap, a time budget and a stop condition |
 | CORE-14 | Tasks | Should | MVP | A session with a goal, a budget and a recorded outcome |
-| CORE-15 | Scheduled tasks | Must | Next | Cronsole owns schedules; the Core authorises each run with a standing grant |
+| CORE-15 | Scheduled tasks | Must | MVP; standing grants and `harness run` built (H4) | Cronsole owns schedules; the Core authorises each run with a standing grant |
 | CORE-16 | Local LLM support | Should | Next | Discovery of local OpenAI-compatible runtimes, passed to backends that take a base URL |
 | CORE-17 | External model providers | Must | MVP | Whatever the backends support; provider hosts on the session's network allowlist |
 | CORE-18 | Memory | Should | Next | A curated per-profile store with provenance and a review queue |
@@ -75,7 +75,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
-| INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; MCP server behind the gateway (H3); standing grants Next | Its MCP server behind the gateway; `harness run --grant` as the task action |
+| INT-01 | Cronsole for scheduling and task operations | Must | Read and run-now done; MCP server behind the gateway (H3); `harness run --grant` built (H4) | Its MCP server behind the gateway; `harness run --grant` as the task action |
 | INT-02 | Roundtable for collaboration | Should | Next | Its stdio MCP server, one per identity, started by the gateway |
 | INT-03 | Promptbook for prompts, skills, agents and MCP-server cards | Should | Next | Its stdio MCP server, read-only, as the discovery catalogue |
 | INT-04 | Project Hub for files, bookmarks and recent items | Must | Done; access token built (H2) | The HTTP adapter in `src/main/hub.js` |
@@ -95,7 +95,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
 | SEC-08 | Governance | Should | Next | Policy versions, expiry, grant review, lifecycle states, export |
 | SEC-09 | Controls enforced at execution boundaries | Must | MVP | Container policy and gateway checks. A prompt or a UI toggle is never the control |
-| SEC-10 | Emergency stop | Must | MVP; sessions part built (H2), tokens and standing grants with H3 and H5 | Stop All: end every session tree, revoke tokens, pause standing grants |
+| SEC-10 | Emergency stop | Must | MVP; sessions (H2), gateway tokens (H3) and pausing standing grants (H4) built | Stop All: end every session tree, revoke tokens, pause standing grants |
 
 ### News feed
 

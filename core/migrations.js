@@ -123,4 +123,26 @@ export const MIGRATIONS = [
   `
   ALTER TABLE mcp_servers ADD COLUMN transport TEXT NOT NULL DEFAULT 'container' CHECK (transport IN ('container', 'host', 'http'));
   `,
+
+  // v6 (H4): standing grants, the operator's leave for an identity to run one command in one
+  // folder with nobody watching (standing.js). grants_hash is the identity's grants when the
+  // operator approved it: a run is refused once they differ. A session started under one
+  // names it, so its audit trail says which leave it ran on.
+  `
+  CREATE TABLE standing_grants (
+    id           TEXT PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 40),
+    identity_id  TEXT NOT NULL REFERENCES identities(id),
+    workspace    TEXT NOT NULL,
+    command      TEXT NOT NULL,
+    path_dirs    TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(path_dirs)),
+    grants_hash  TEXT NOT NULL,
+    max_minutes  INTEGER NOT NULL CHECK (max_minutes BETWEEN 1 AND 1440),
+    expires_at   TEXT NOT NULL,
+    status       TEXT NOT NULL CHECK (status IN ('active', 'paused', 'revoked')),
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    last_run_at  TEXT
+  ) STRICT;
+  ALTER TABLE sessions ADD COLUMN standing_grant_id TEXT REFERENCES standing_grants(id);
+  `,
 ];

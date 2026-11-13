@@ -15,6 +15,7 @@ import { METHODS, callControl, queryAudit, startControl } from '../../core/contr
 import { migrate, openDb } from '../../core/db.js';
 import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
 import { RunnerError } from '../../core/runner.js';
+import { StandingError } from '../../core/standing.js';
 import { core } from '../../src/main/core.js';
 
 const CTL = fileURLToPath(new URL('../../core/ctl.js', import.meta.url));
@@ -49,7 +50,8 @@ function fakeRunner() {
   };
 }
 
-async function setup(t) {
+/** @param {any} t @param {object} [extra] more startControl options */
+async function setup(t, extra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-ctl-'));
   const audit = openAudit(path.join(dir, 'audit'));
   const runner = fakeRunner();
@@ -59,7 +61,7 @@ async function setup(t) {
   const registry = createRegistry({ db, audit });
   const approvals = createApprovals({ audit });
   const transcripts = createTranscripts({ dir: path.join(dir, 'transcripts'), audit });
-  const control = await startControl({ dir, runner, registry, audit, schema: 3, approvals, transcripts });
+  const control = await startControl({ dir, runner, registry, audit, schema: 3, approvals, transcripts, ...extra });
   t.after(async () => { await control.close(); audit.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
   return { dir, audit, runner, control, call, approvals };
@@ -218,10 +220,46 @@ test('session.stop, stop.all', async (t) => {
   await assert.rejects(s.call('session.stop', {}), (e) => e.code === 'bad_request');
   for (let i = 0; i < 3; i++) await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
   assert.deepEqual(await s.call('session.stop', { id: 's2' }), { reason: 'stopped', exitCode: null });
-  assert.deepEqual(await s.call('stop.all'), { stopped: 2 });
+  assert.deepEqual(await s.call('stop.all'), { stopped: 2, paused: 0 });
   assert.deepEqual(await s.call('session.list'), []);
   const { events: [e] } = await s.call('audit.query', { type: 'stop.all' });
   assert.deepEqual([e.identity.subject, e.decision.reasons], ['local:operator', ['2 running']]);
+});
+
+test('standing grants: not_found without them; a run is tapped like any session; Stop All pauses them before stopping sessions', async (t) => {
+  const none = await setup(t);
+  await assert.rejects(none.call('standing.list'), (e) => e.code === 'not_found' && /no standing grants/.test(e.message));
+  /** @type {string[]} */
+  const order = [];
+  /** @type {any} */
+  let runner;
+  const standing = {
+    list: () => [{ id: 'nightly' }], get: (id) => ({ id }), create: (p) => ({ id: p.id }), update: (id, p) => ({ id, maxMinutes: p.maxMinutes }),
+    pause: (id) => ({ id, status: 'paused' }), resume: (id) => ({ id, status: 'active' }), revoke: (id) => ({ id, status: 'revoked' }),
+    pauseAll: () => { order.push('pause'); return ['nightly']; },
+    run: async (id) => {
+      if (id === 'late') throw new StandingError('expired', 'late: it expired');
+      const s = await runner.start({ identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+      return Object.assign(s, { standingGrant: id });
+    },
+  };
+  const s = await setup(t, { standing });
+  runner = s.runner;
+  const stopAll = runner.stopAll;
+  runner.stopAll = () => { order.push('stop'); return stopAll(); };
+  assert.deepEqual(await s.call('standing.list'), [{ id: 'nightly' }]);
+  assert.deepEqual(await s.call('standing.update', { id: 'nightly', maxMinutes: 5 }), { id: 'nightly', maxMinutes: 5 });
+  assert.deepEqual(await s.call('standing.revoke', { id: 'nightly' }), { id: 'nightly', status: 'revoked' });
+  await assert.rejects(s.call('standing.run', { id: 'late' }), (e) => e.code === 'expired');
+  const started = await s.call('standing.run', { id: 'nightly' });
+  assert.deepEqual([started.id, started.standingGrant], ['s1', 'nightly']);
+  runner.live.get('s1').output.write('scheduled output\r\n');
+  runner.live.get('s1').exit(0);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.match((await s.call('transcript.get', { id: 's1' })).text, /scheduled output/);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\\w', command: 'c' });
+  assert.deepEqual(await s.call('stop.all'), { stopped: 1, paused: 1 });
+  assert.deepEqual(order, ['pause', 'stop']);
 });
 
 test('several requests on one connection are each answered with their id', async (t) => {
