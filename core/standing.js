@@ -3,7 +3,8 @@
 // `harness run --grant <id>` (harness.js); ADR-004: Cronsole owns the schedule, and the Core
 // checks the standing grant at every run.
 //
-// One names the identity, the folder, the command and its program folders, a budget (the minutes
+// One names the identity, the folder, the command (or, for a backend identity such as Claude Code,
+// a prompt its headless start runs) and its program folders, a budget (the minutes
 // a run may take before its container is ended) and an expiry, and holds the hash of the
 // identity's grants when the operator approved it. A run is refused while it is paused, once it
 // is revoked or expired, once the identity's grants differ from what was approved (the operator
@@ -13,6 +14,7 @@
 
 import crypto from 'node:crypto';
 import { canonical } from './audit.js';
+import { BACKENDS } from './backends.js';
 import { OPERATOR } from './identities.js';
 import { PathError, canonicalPath, resolvePath } from './paths.js';
 import { RunnerError } from './runner.js';
@@ -65,7 +67,7 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
   const live = (id) => runner.list().find((s) => s.standingGrant === id)?.id ?? null;
   /** @param {any} r */
   const shape = (r) => ({
-    id: r.id, identity: r.identity_id, workspace: win(r.workspace), command: r.command, pathDirs: JSON.parse(r.path_dirs).map(win),
+    id: r.id, identity: r.identity_id, workspace: win(r.workspace), command: r.prompt === null ? r.command : null, prompt: r.prompt, pathDirs: JSON.parse(r.path_dirs).map(win),
     maxMinutes: r.max_minutes, expiresAt: r.expires_at, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at, lastRunAt: r.last_run_at,
     grantsChanged: grantsHash(db, r.identity_id) !== r.grants_hash, running: live(r.id),
   });
@@ -96,13 +98,12 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
 
     /**
      * Approve a new one, active at once. The identity's grants as they are now are what it approves.
-     * ponytail: a command identity only; a backend identity (Claude Code, Codex) needs a headless
-     *   start in its manifest first, which comes with the first signed-in backend.
-     * @param {any} spec id, identity, workspace, command, pathDirs, maxMinutes, expiresAt
+     * @param {any} spec id, identity, workspace, then command (an identity with no backend) or prompt
+     *   (one whose backend has a headless start: Claude Code), pathDirs, maxMinutes, expiresAt
      */
     create(spec) {
       if (!spec || typeof spec !== 'object') throw new StandingError('bad_request', 'the standing grant is an object');
-      const { id, identity, workspace, command, pathDirs = [], maxMinutes, expiresAt } = spec;
+      const { id, identity, workspace, command, prompt, pathDirs = [], maxMinutes, expiresAt } = spec;
       if (typeof id !== 'string' || !STANDING_ID.test(id)) throw new StandingError('bad_request', 'id is lower-case letters, digits, - and _, up to 40, e.g. nightly-docs');
       if (row(id)) throw new StandingError('conflict', `${id} exists (ids are never reused, revoked ones included)`);
       const who = typeof identity === 'string' ? /** @type {any} */ (db.prepare('SELECT kind, status, containment, backend FROM identities WHERE id = ?').get(identity)) : null;
@@ -110,8 +111,14 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
       if (who.kind !== 'ai-agent' && who.kind !== 'service-account') throw new StandingError('bad_request', `a ${who.kind} identity can't hold a standing grant`);
       if (who.status === 'retired') throw new StandingError('bad_request', `${identity} is retired`);
       if (who.containment !== 'container') throw new StandingError('bad_request', `${identity} runs ${who.containment}; standing grants run in containers only`);
-      if (who.backend != null) throw new StandingError('bad_request', `${identity} runs ${who.backend}, which has no unattended start yet; use an identity with no backend and name the command`);
-      if (typeof command !== 'string' || !command.trim() || /[\r\n\0]/.test(command) || command.length > 2000) throw new StandingError('bad_request', 'command is the full command line, one line');
+      if (who.backend != null) {
+        if (!BACKENDS[who.backend]?.headless) throw new StandingError('bad_request', `${identity} runs ${who.backend}, which has no unattended start yet`);
+        if (command !== undefined) throw new StandingError('bad_request', `${identity} runs ${who.backend}: name a prompt, not a command`);
+        if (typeof prompt !== 'string' || !prompt.trim() || prompt.includes('\0') || prompt.length > 8000) throw new StandingError('bad_request', 'prompt is what the agent is asked to do, up to 8000 characters');
+      } else {
+        if (prompt !== undefined) throw new StandingError('bad_request', `${identity} has no backend: name the command, not a prompt`);
+        if (typeof command !== 'string' || !command.trim() || /[\r\n\0]/.test(command) || command.length > 2000) throw new StandingError('bad_request', 'command is the full command line, one line');
+      }
       let ws;
       let dirs;
       try {
@@ -123,8 +130,10 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
         throw e;
       }
       const t = now().toISOString();
-      db.prepare(`INSERT INTO standing_grants (id, identity_id, workspace, command, path_dirs, grants_hash, max_minutes, expires_at, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).run(id, identity, ws, command, JSON.stringify(dirs), grantsHash(db, identity), minutes(maxMinutes), expiry(expiresAt), t, t);
+      // A prompt grant's command is '' (the column predates prompts, schema v7).
+      const viaPrompt = who.backend != null;
+      db.prepare(`INSERT INTO standing_grants (id, identity_id, workspace, command, prompt, path_dirs, grants_hash, max_minutes, expires_at, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).run(id, identity, ws, viaPrompt ? '' : command, viaPrompt ? prompt : null, JSON.stringify(dirs), grantsHash(db, identity), minutes(maxMinutes), expiry(expiresAt), t, t);
       const r = row(id);
       changed(r, 'standing.create', 'approved by the operator');
       return shape(r);
@@ -204,7 +213,7 @@ export function createStanding({ db, audit, runner, now = () => new Date() }) {
       starting.add(id);
       try {
         const s = await runner.start({
-          identity: r.identity_id, workspace: r.workspace, command: r.command, attended: false,
+          identity: r.identity_id, workspace: r.workspace, ...(r.prompt === null ? { command: r.command } : { prompt: r.prompt }), attended: false,
           program: { pathDirs: JSON.parse(r.path_dirs) }, timeoutMs: r.max_minutes * 60_000, standingGrant: id,
         });
         db.prepare('UPDATE standing_grants SET last_run_at = ? WHERE id = ?').run(s.startedAt, id);

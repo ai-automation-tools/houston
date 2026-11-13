@@ -110,6 +110,7 @@ export function compileGrants(grants, now = new Date()) {
  * @property {{ rows: number, columns: number }} [size]
  * @property {number} [timeoutMs]  the container is ended after this long (a standing grant's budget); a day by default
  * @property {string} [standingGrant]  the standing grant it runs under (standing.js), recorded on the session
+ * @property {string} [prompt]  for a backend identity: run this prompt unattended (the manifest's headless start) instead of the CLI
  */
 
 /** The containment rung this runner starts sessions on; the fallback rung is H7. */
@@ -141,7 +142,7 @@ export function createRunner({
    * @returns {Promise<Session>}
    * @throws {RunnerError} with a session.start deny event written first
    */
-  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant }) {
+  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant, prompt }) {
     if (typeof identity !== 'string' || !identity) throw new RunnerError('identity is an id like local:dev-codex');
     const id = crypto.randomUUID();
     const version = policyVersion(db, globals);
@@ -161,12 +162,13 @@ export function createRunner({
     if (who.backend != null) {
       if (command !== undefined) throw refuse(`the ${who.backend} backend's manifest sets the command`);
       if (!agentsRoot) throw refuse('this runner has no agents folder for backend homes');
-      try { backend = resolveBackend(who.backend, { identity, agentsRoot, where, isFile }); } catch (e) {
+      try { backend = resolveBackend(who.backend, { identity, agentsRoot, where, isFile, prompt }); } catch (e) {
         if (e instanceof BackendError) throw refuse(e.message);
         throw e;
       }
       command = backend.command;
-    } else if (typeof command !== 'string' || !command) throw refuse('a command is required for an identity with no backend');
+    } else if (prompt !== undefined) throw refuse('a prompt is for an identity with a backend; this one names its command');
+    else if (typeof command !== 'string' || !command) throw refuse('a command is required for an identity with no backend');
 
     const grants = /** @type {Grant[]} */ (db.prepare('SELECT id, resource, permission, effect, expires_at FROM grants WHERE identity_id = ?').all(identity));
     let ws;

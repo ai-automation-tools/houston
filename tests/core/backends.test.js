@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { BACKENDS, BackendError, gatewayArgs, listBackends, resolveBackend } from '../../core/backends.js';
+import { spawnSync } from 'node:child_process';
+import { BACKENDS, BackendError, gatewayArgs, listBackends, quote, resolveBackend } from '../../core/backends.js';
 
 const where = { home: 'C:\\Users\\op', appData: 'C:\\Users\\op\\AppData\\Roaming', PATH: 'relative\\git;C:\\Program Files\\Git\\cmd;C:\\Windows\\System32' };
 const CLAUDE = 'C:\\Users\\op\\.local\\bin\\claude.exe';
@@ -69,4 +70,20 @@ test('gatewayArgs points each CLI at the session gateway, with the token left in
     assert.match(codex, /bearer_token_env_var=HOUSTON_MCP_TOKEN/);
     assert.equal(gatewayArgs('other', url, dir), '');
   } finally { fs.rmSync(file, { force: true }); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a prompt runs Claude Code unattended, its prompts off; a backend without a headless start refuses one', () => {
+  const b = resolveBackend('claude-code', { ...opts(on(CLAUDE, ...GIT)), prompt: 'Fix the "flaky" test in C:\\work\\' });
+  assert.ok(b.command.endsWith(' --strict-mcp-config -p "Fix the \\"flaky\\" test in C:\\work\\\\" --dangerously-skip-permissions'), b.command);
+  assert.throws(() => resolveBackend('codex', { ...opts(on(CODEX)), prompt: 'x' }), /Codex has no unattended start yet/);
+  assert.doesNotMatch(resolveBackend('claude-code', opts(on(CLAUDE, ...GIT))).command, / -p /, 'interactive without one');
+});
+
+test('quote: every argument comes back as it went in, through a real Windows program\'s argv', { skip: process.platform !== 'win32' && 'Windows command lines' }, () => {
+  const cases = ['plain', 'two words', 'say "hi"', 'ends with \\', 'C:\\x\\ "q"', '', 'a\\\\"b', 'tab\there', '\\\\server\\share\\'];
+  for (const c of cases) {
+    // Verbatim: the arguments go on the command line exactly as quote() wrote them.
+    const r = spawnSync(process.execPath, ['-e', '"console.log(JSON.stringify(process.argv[1]))"', quote(c)], { argv0: 'node', windowsVerbatimArguments: true, encoding: 'utf8' });
+    assert.equal(r.stdout.trim(), JSON.stringify(c), `${JSON.stringify(c)} quoted as ${quote(c)}`);
+  }
 });
