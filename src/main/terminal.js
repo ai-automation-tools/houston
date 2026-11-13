@@ -30,7 +30,7 @@ export class Terminals {
     /** @type {Map<number, import('node-pty').IPty>} */
     this.sessions = new Map();
     /** What list_terminals reports; kept after exit until the UI closes the tab. */
-    /** @type {Map<number, { id: number, shell: string, profile: string, cwd: string, powershell: boolean, exited: boolean, ws: string, run: boolean }>} */
+    /** @type {Map<number, { id: number, shell: string, profile: string, cwd: string, powershell: boolean, exited: boolean, ws: string, run: boolean, agent?: string, session?: string }>} */
     this.meta = new Map();
     /** Hears every session's exit with its code; main hands it to the runs. @type {(id: number, exitCode: number) => void} */
     this.onExit = () => {};
@@ -80,22 +80,54 @@ export class Terminals {
       // which crashes (AttachConsole failed) and keeps the app alive when it quits.
       useConptyDll: true,
     });
-    p.onData((data) => {
-      this.output.set(id, appendOutput(this.output.get(id) || '', data));
-      this.send('term:data', id, data);
-    });
-    p.onExit(({ exitCode }) => {
-      this.sessions.delete(id);
-      const m = this.meta.get(id);
-      if (m) m.exited = true;
-      this.onExit(id, exitCode);
-      this.send('term:exit', id, exitCode);
-    });
+    p.onData((data) => this.data(id, data));
+    p.onExit(({ exitCode }) => this.exited(id, exitCode));
     this.sessions.set(id, p);
     const info = { id, cwd, shell: path.basename(profile.file), profile: profile.id, powershell: profile.powershell, ws: opts.ws || '', run };
     this.meta.set(id, { ...info, exited: false });
     this.output.set(id, '');
     return info;
+  }
+
+  /**
+   * A contained session the Core runs (agents.js), shown like any other terminal: typing and
+   * resizing go to `remote`, and closing the tab calls `remote.kill`. Feed it with the returned
+   * `data` and `exit`.
+   * @param {{ write: (data: string) => void, resize: (cols: number, rows: number) => void, kill: () => void }} remote
+   * @param {{ cwd: string, ws: string, agent: string, session: string }} about
+   */
+  adopt(remote, { cwd, ws, agent, session }) {
+    const id = this.nextId++;
+    this.sessions.set(id, /** @type {any} */ ({ pid: 0, ...remote }));
+    const info = { id, cwd, shell: agent, profile: 'agent', powershell: false, ws, run: false, agent, session };
+    this.meta.set(id, { ...info, exited: false });
+    this.output.set(id, '');
+    return {
+      info,
+      data: (/** @type {string} */ d) => this.data(id, d),
+      exit: (/** @type {number | null} */ code, /** @type {string} */ reason) => this.exited(id, code ?? -1, reason),
+    };
+  }
+
+  /** The terminal id showing a Core session, if one does. @param {string} session */
+  bySession(session) {
+    for (const m of this.meta.values()) if (m.session === session) return m.id;
+    return undefined;
+  }
+
+  /** @param {number} id @param {string} data */
+  data(id, data) {
+    this.output.set(id, appendOutput(this.output.get(id) || '', data));
+    this.send('term:data', id, data);
+  }
+
+  /** @param {number} id @param {number} exitCode @param {string} [reason] a contained session's end, shown in place of the code */
+  exited(id, exitCode, reason) {
+    this.sessions.delete(id);
+    const m = this.meta.get(id);
+    if (m) m.exited = true;
+    this.onExit(id, exitCode);
+    this.send('term:exit', id, exitCode, reason);
   }
 
   /** Every session the UI still shows, oldest first, for list_terminals. */

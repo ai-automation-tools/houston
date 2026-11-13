@@ -520,6 +520,19 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       restart: async () => { throw new Error('This is the demo, so no dev server starts.'); },
       onChanged: listen('dev'),
     },
+    agents: {
+      info: async () => ({
+        folder: 'D:\\work\\acme-api',
+        rows: [
+          { id: 'local:dev-claude', name: 'Dev Claude', status: 'active', what: 'Claude Code', canStart: true, why: '', signIn: 'Run /login in the session.', sessions: [] },
+          { id: 'local:review-codex', name: 'Review Codex', status: 'suspended', what: 'Codex', canStart: false, why: 'suspended: activate it to start a session', signIn: '', sessions: [] },
+        ],
+      }),
+      start: async () => { throw new Error('This is the demo, so no agent starts. In the app, the Core starts it in a container.'); },
+      open: async () => { throw new Error('This is the demo, so there is no session to show.'); },
+      stop: async () => { throw new Error('This is the demo, so there is no session to stop.'); },
+      onChanged: listen('agents'),
+    },
 
     // Made-up states: what a machine with Hub up, Git Bash missing and no chat key would show.
     connections: {

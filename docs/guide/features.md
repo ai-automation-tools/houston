@@ -82,6 +82,16 @@ The **News** tab lists headlines from the sources in `settings.json`'s `newsSour
 - **Log** opens the server's output in a tab; reload the tab for newer lines. **Restart** stops and starts it again; **Stop** ends it and everything it started.
 - Servers keep running when you switch workspaces and are listed under *Other workspaces*. Closing the app stops every server it started. It never stops a process it didn't start, such as a server you ran in a terminal.
 
+## 🛡 Agents
+
+The **Agents** tab is the harness's: it lists the agent identities in the [Houston Core](core-at-logon.md) and the contained sessions each one has running. It needs the Core running; otherwise it says so.
+
+- Each row is an identity that could run (not retired), with what it runs: Claude Code, Codex, or a plain contained shell (`cmd.exe`) for an identity with no backend. One that can't start says why: suspended, still a draft, or its CLI isn't installed. Hover a row for its id and, for a CLI, how to sign in the first time.
+- **Start** asks the Core for a session in the active workspace's folder and opens it as a terminal tab marked 🛡 with the identity's name. The Core decides: the identity needs a write grant on that folder, and if something's missing the refusal shows as a message. The session can reach only what its grants allow ([core/README.md](../../core/README.md)); your toolchain folders are on its `PATH`, which grants nothing by itself.
+- Running sessions sit under their identity. **Open** shows one in a tab (its recent output first), **Show** brings forward the tab that already has it, and **Stop** ends it. Closing its tab stops it too.
+- Sessions belong to the Core. Closing Houston closes their tabs, which stops them; one started elsewhere (`npm run ctl`) and never opened in a tab keeps running and shows here.
+- Identities and grants are made with `npm run ctl` for now ([Backends](../../core/README.md#-backends)); the Identity Center comes later on the [roadmap](../ROADMAP.md).
+
 ## 🔌 Connections
 
 - Click the dot next to "Houston" at the top of the sidebar, or pick **Connections** from the palette or the View menu.

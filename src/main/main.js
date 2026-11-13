@@ -36,6 +36,7 @@ import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
+import { createAgents } from './agents.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -697,6 +698,13 @@ async function createWindow() {
     runEnded(runs.cancel(Number(id), terminals.read(Number(id))?.raw ?? undefined));
     terminals.kill(Number(id));
   });
+
+  // The Agents tab: the renderer names an identity or a session; the Core decides (agents.js).
+  const agents = createAgents({ terminals, send, workspace: () => ({ id: spaces.active, folder: current().folder }) });
+  handle('agents:info', () => agents.info());
+  handle('agents:start', (identity) => agents.start(identity));
+  handle('agents:open', (session) => agents.open(session));
+  handle('agents:stop', (session) => agents.stop(session));
 
   handle('mcp:answer', (id, answer) => confirmations.settle(Number(id), answer === true));
 

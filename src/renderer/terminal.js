@@ -36,12 +36,13 @@ export class TerminalPanel {
     this.onFindResults = null;
 
     api.term.onData((/** @type {number} */ id, /** @type {string} */ data) => this.sessions.get(id)?.term.write(data));
-    api.term.onExit((/** @type {number} */ id, /** @type {number} */ code) => {
+    api.term.onExit((/** @type {number} */ id, /** @type {number} */ code, /** @type {string | undefined} */ reason) => {
       const s = this.sessions.get(id);
       if (!s) return;
       s.exited = true;
       s.tab.classList.add('exited');
-      s.term.write(`\r\n\x1b[90m[process exited with code ${code}]\x1b[0m\r\n`);
+      // A contained session ends with the Core's reason (stopped, exit 0, timeout) instead of a code.
+      s.term.write(`\r\n\x1b[90m[${reason || `process exited with code ${code}`}]\x1b[0m\r\n`);
     });
 
     new ResizeObserver(() => this.fitActive()).observe(host);
@@ -89,7 +90,8 @@ export class TerminalPanel {
   }
 
   /**
-   * @param {{ id: number, cwd: string, shell: string, powershell?: boolean, ws?: string, run?: boolean }} info
+   * @param {{ id: number, cwd: string, shell: string, powershell?: boolean, ws?: string, run?: boolean, agent?: string }} info
+   *   agent: a contained session the Core runs, titled with its identity
    * @param {Terminal} term @param {FitAddon} fit @param {SearchAddon} search @param {HTMLElement} pane
    */
   wire(info, term, fit, search, pane) {
@@ -97,12 +99,13 @@ export class TerminalPanel {
     search.onDidChangeResults((r) => { if (id === this.activeId) this.onFindResults?.(r); });
 
     const tab = document.createElement('div');
-    tab.className = `term-tab${info.run ? ' run' : ''}`;
+    tab.className = `term-tab${info.run ? ' run' : ''}${info.agent ? ' agent' : ''}`;
     tab.setAttribute('role', 'tab');
-    // A run's × is its Cancel while it runs.
-    tab.title = info.run ? `Run in ${info.cwd}. Closing it while it runs cancels it.` : info.cwd;
+    // A run's × is its Cancel while it runs; an agent's stops its session.
+    tab.title = info.run ? `Run in ${info.cwd}. Closing it while it runs cancels it.`
+      : info.agent ? `${info.agent}, contained, in ${info.cwd}. Closing it stops the session.` : info.cwd;
     tab.innerHTML = '<span class="title"></span><button class="close" aria-label="Close terminal">×</button>';
-    /** @type {HTMLElement} */ (tab.querySelector('.title')).textContent = `${info.run ? 'run' : info.shell} · ${shortDir(info.cwd)}`;
+    /** @type {HTMLElement} */ (tab.querySelector('.title')).textContent = `${info.run ? 'run' : info.agent ? `🛡 ${info.agent}` : info.shell} · ${shortDir(info.cwd)}`;
     tab.addEventListener('click', (e) => {
       if (/** @type {HTMLElement} */ (e.target).closest('.close')) this.close(id);
       else this.activate(id);
@@ -111,8 +114,8 @@ export class TerminalPanel {
 
     term.onData((data) => this.api.term.write(id, data));
     term.onResize(({ cols, rows }) => this.api.term.resize(id, cols, rows));
-    // A run keeps its "run" label; PowerShell would retitle it with its own path.
-    if (!info.run) {
+    // A run keeps its "run" label and an agent its identity; PowerShell or the CLI would retitle them.
+    if (!info.run && !info.agent) {
       term.onTitleChange((title) => {
         /** @type {HTMLElement} */ (tab.querySelector('.title')).textContent = title.split(/[\\/]/).pop() || title;
       });

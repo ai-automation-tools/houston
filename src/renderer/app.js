@@ -443,7 +443,11 @@ api.tabs.onFound((/** @type {number} */ id, /** @type {{ active: number, total: 
 
 // ---- sidebar -----------------------------------------------------------------
 
-const sidebar = new Sidebar({ api, layout, openUrl, openTerminal: (cwd) => openTerminal(cwd), viewDoc, openCronsole });
+const sidebar = new Sidebar({
+  api, layout, openUrl, openTerminal: (cwd) => openTerminal(cwd), viewDoc, openCronsole,
+  // An agent session's tab: main opened it (term:opened) or it was already open.
+  focusTerminal: (id) => { setTerminalOpen(true); terminals.activate(id); },
+});
 
 // ---- address-bar suggestions -------------------------------------------------
 // Pages from Recent, Hub's favorites and the sidebar's bookmark source that match

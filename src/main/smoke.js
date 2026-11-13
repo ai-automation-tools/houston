@@ -7,9 +7,12 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { installExtension } from 'electron-chrome-web-store';
+import { callControl } from '../../core/client.js';
+import { onPath } from './env.js';
 import { listExtensions } from './extensions.js';
 import { cleanOutput } from '../shared/output.js';
 import { docsTasks } from '../shared/cronsole.js';
@@ -739,6 +742,90 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         && devRun.page && /^acc:\/\/dev\/\d+$/.test(devRun.page.url) && devRun.page.text.includes('Local: http://127.0.0.1:') && devRun.page.scripts === 0
         && devRun.after?.restarted?.state === 'ready' && devRun.after.restarted.newPid && devRun.after.restarted.sameId
         && devRun.after.state === 'stopped' && devRun.closed === true), devRun);
+    // The Agents tab against a throwaway Core, never the operator's: an identity with a write
+    // grant on a folder outside the profile (sessions are denied the profile), Start from its
+    // row, type into the contained shell, then Stop from the session row. Windows only.
+    if (process.platform === 'win32') {
+      /** @type {any} */
+      let agentRun = null;
+      const root = path.join(fileURLToPath(new URL('../../.test-tmp/', import.meta.url)), `smoke-agents-${process.pid}`);
+      const coreDir = path.join(root, 'core');
+      const ws = path.join(root, 'ws');
+      const saved = process.env.HOUSTON_CORE_DATA;
+      /** @type {import('node:child_process').ChildProcess | null} */
+      let coreProc = null;
+      try {
+        fs.mkdirSync(ws, { recursive: true });
+        const node = onPath('node.exe');
+        if (!node) throw new Error('node.exe is not on PATH, so no Core can start');
+        // src/main/core.js reads this at every call, so the window talks to this Core.
+        process.env.HOUSTON_CORE_DATA = coreDir;
+        coreProc = spawn(node, [fileURLToPath(new URL('../../core/main.js', import.meta.url))], {
+          env: { ...process.env, HOUSTON_SESSION_TEMP: path.join(root, 'sessions') }, stdio: 'ignore', windowsHide: true,
+        });
+        for (let i = 0; i < 150 && !fs.existsSync(path.join(coreDir, 'control.json')); i++) await wait(100);
+        const ctl = (/** @type {string} */ m, /** @type {object} */ p) => callControl(coreDir, m, p);
+        await ctl('identity.create', { id: 'local:smoke-shell', kind: 'ai-agent', displayName: 'Smoke shell' });
+        await ctl('grant.add', { identity: 'local:smoke-shell', resource: `file:${ws.replaceAll('\\', '/')}/**`, permission: 'write' });
+        await ctl('identity.activate', { id: 'local:smoke-shell' });
+        agentRun = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          await window.acc.workspace.add({ folder: ${JSON.stringify(ws)}, name: 'Agents smoke' });
+          await pause(1500);
+          document.querySelector('.side-tabs [data-panel="agents"]').click();
+          for (let i = 0; i < 50 && !document.querySelector('#agents-list .dev-server'); i++) await pause(100);
+          const row = document.querySelector('#agents-list .dev-server');
+          const before = { name: row?.querySelector('.name').textContent, sub: row?.querySelector('.sub').textContent, buttons: [...(row?.querySelectorAll('.acts button') ?? [])].map((b) => b.textContent) };
+          [...(row?.querySelectorAll('.acts button') ?? [])].find((b) => b.textContent === 'Start')?.click();
+          let tab = null;
+          for (let i = 0; i < 150 && !(tab = document.querySelector('.term-tab.agent.active')); i++) await pause(200);
+          return { before, tab: tab?.querySelector('.title').textContent ?? null };
+        })()`);
+        const t = terminals.listSessions().find((s) => s.session);
+        if (!t) throw new Error('no contained session tab');
+        // Typed with a variable cut to nothing, so the echoed command line can't pass for the output.
+        const lines = () => cleanOutput(terminals.read(t.id)?.raw ?? '').split(/\r?\n/).map((l) => l.trim());
+        // The container takes a moment to start; type once cmd shows its prompt.
+        for (let i = 0; i < 100 && !lines().some((l) => l.endsWith('>')); i++) await wait(100);
+        agentRun.prompt = lines().some((l) => l.endsWith('>'));
+        // Typed in the tab's terminal, run in the container, and seen from outside it: the file it wrote.
+        const proof = path.join(ws, 'agent-smoke.txt');
+        terminals.write(t.id, 'echo agent-smoke-ok> agent-smoke.txt\r');
+        for (let i = 0; i < 100 && !fs.existsSync(proof); i++) await wait(100);
+        await wait(200);
+        agentRun.wrote = fs.existsSync(proof) ? fs.readFileSync(proof, 'utf8').trim() : null;
+        // The folder the Core started it in, as main recorded it from session.list.
+        agentRun.cwd = t.cwd;
+        agentRun.after = await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const stop = () => [...document.querySelectorAll('#agents-list .dev-server .acts button')].find((x) => x.textContent === 'Stop');
+          for (let i = 0; i < 50 && !stop(); i++) await pause(100);
+          stop()?.click();
+          let info = null;
+          for (let i = 0; i < 100; i++) { info = await window.acc.agents.info(); if (!info.rows?.[0]?.sessions.length) break; await pause(100); }
+          for (let i = 0; i < 50 && !document.querySelector('.term-tab.agent.exited'); i++) await pause(100);
+          return { sessions: info?.rows?.[0]?.sessions.length ?? null, exited: Boolean(document.querySelector('.term-tab.agent.exited')) };
+        })()`);
+        const { events } = await ctl('audit.query', { type: 'session.end' });
+        agentRun.ended = events.map((/** @type {any} */ e) => e.decision?.reasons?.[0] ?? e.outcome?.error_code);
+        await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
+      } catch (err) {
+        agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
+      } finally {
+        // The contained session's tab, and the plain terminal the workspace switch opened in its folder.
+        for (const s of terminals.listSessions().filter((x) => x.session || x.ws === 'agents-smoke')) terminals.kill(s.id);
+        await wc.executeJavaScript(`document.querySelectorAll('.term-tab.agent .close').forEach((b) => b.click())`).catch(() => {});
+        coreProc?.kill();
+        await wait(500);
+        if (saved === undefined) delete process.env.HOUSTON_CORE_DATA; else process.env.HOUSTON_CORE_DATA = saved;
+        try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (err) { console.warn(`[smoke] couldn't remove ${root}: ${err instanceof Error ? err.message : err}`); }
+      }
+      console.log(`[smoke] agents=${JSON.stringify(agentRun)}`);
+      check('the Agents tab starts a contained shell for an identity in the workspace folder, types into it, and Stop ends it',
+        Boolean(agentRun?.before?.name === 'Smoke shell' && agentRun.before.buttons.includes('Start') && /Smoke shell/.test(agentRun.tab ?? '')
+          && agentRun.prompt && agentRun.wrote === 'agent-smoke-ok' && agentRun.cwd?.toLowerCase() === ws.toLowerCase()
+          && agentRun.after?.sessions === 0 && agentRun.after.exited && agentRun.ended?.includes('stopped')), agentRun);
+    }
     // Last, so it shows terminal_run's output in the terminal.
     await wait(1500);
     await shot('shell.png', wc);

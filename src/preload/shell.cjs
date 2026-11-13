@@ -126,6 +126,15 @@ contextBridge.exposeInMainWorld('acc', {
     history: invoke('cronsole:history'),
   },
 
+  /** Identities and contained sessions from the harness's Core. */
+  agents: {
+    info: invoke('agents:info'),
+    start: invoke('agents:start'),
+    open: invoke('agents:open'),
+    stop: invoke('agents:stop'),
+    onChanged: listen('agents:changed'),
+  },
+
   connections: { check: invoke('connections:check') },
 
   git: { status: invoke('git:status') },
