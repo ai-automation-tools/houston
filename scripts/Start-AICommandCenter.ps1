@@ -10,7 +10,16 @@
 
     If the app is already running, the new instance hands off to it and it comes
     to the front (single-instance lock in src/main/main.js).
+
+.PARAMETER Quit
+    Ask the running app to quit, as File > Quit does (it saves its tabs and ends its
+    terminals), instead of starting it. Returns once the hand-off is made; the app
+    may take a few seconds more to exit. Does nothing when the app isn't running.
+    The Stop-Houston task uses this.
 #>
+[CmdletBinding()]
+param([switch] $Quit)
+
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -27,6 +36,12 @@ if (-not (Test-Path $exe)) {
 
 # Set by some Node tooling; it would make electron.exe behave as plain Node.
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+
+if ($Quit) {
+    # A second instance that passes --quit to the first and exits (src/main/main.js).
+    Start-Process -FilePath $exe -ArgumentList "`"$root`"", '--quit' -WorkingDirectory $root -Wait -WindowStyle Hidden
+    return
+}
 
 # electron.exe writes its logs to the parent console on Windows; send them to files
 # instead so the terminal this ran from stays clean. Overwritten each launch.

@@ -39,6 +39,8 @@ npm start
 pwsh -NoProfile -WindowStyle Hidden -File <repo>\scripts\Start-AICommandCenter.ps1
 ```
 
+`-Quit` asks the running app to quit, as File → Quit does, instead of starting it: closing the window only hides it to the tray. It saves the session and ends the terminals; the Core and its agent sessions keep running. With no app running it does nothing.
+
 ## Settings
 
 Per-machine settings live in `%APPDATA%\ai-command-center\settings.json`. You only need it if the defaults don't fit:
