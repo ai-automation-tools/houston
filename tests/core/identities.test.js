@@ -61,6 +61,7 @@ test('create refuses what the identity contract forbids', (t) => {
     [{ ...base, owner: 'local:nobody' }, /owner/], [{ ...base, kind: 'sub-agent' }, /parent/], [{ ...base, parent: 'local:nobody' }, /parent/],
     [{ ...base, containment: 'vm' }, /containment/], [{ ...base, expiresAt: '2020-01-01' }, /past/], [{ ...base, expiresAt: 'soon' }, /date/],
     [{ ...base, tags: 'a' }, /tags/], [{ ...base, purpose: 'x'.repeat(301) }, /purpose/],
+    [{ ...base, backend: 'gemini' }, /backend is one of claude-code, codex/], [{ ...base, backend: 'constructor' }, /backend/],
   ]) assert.throws(() => s.reg.create(spec, OPERATOR), fails('bad_request', re), JSON.stringify(spec));
   s.agent('local:x');
   assert.throws(() => s.agent('local:x'), fails('conflict', /exists/));

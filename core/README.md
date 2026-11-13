@@ -1,11 +1,11 @@
 <h1 align="center">🛡️ Core</h1>
 
 <p align="center">
-  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, keeps a registry of identities and their grants, starts contained sessions on a terminal behind an egress proxy, and takes orders from the operator over a named pipe.</em>
+  <em>The harness's companion process. It will launch agents, decide policy, hold secrets and write audit; today it starts, locks and migrates its database, keeps a hash-chained audit log, answers policy checks, keeps a registry of identities and their grants, starts contained sessions on a terminal behind an egress proxy, starts Claude Code and Codex from their manifests, and takes orders from the operator over a named pipe.</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/milestone-Harness_H1-8B5CF6?style=for-the-badge" alt="Milestone: Harness H1">
+  <img src="https://img.shields.io/badge/milestone-Harness_H2-8B5CF6?style=for-the-badge" alt="Milestone: Harness H2">
   <img src="https://img.shields.io/badge/schema-v3-2ea44f?style=for-the-badge" alt="Schema v3">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
@@ -36,6 +36,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
+| [**backends.js**](backends.js) | The adapter manifests for Claude Code and Codex: how each CLI starts in a container, with a home of its own. |
 | [**paths.js**](paths.js) | One spelling for every Windows path, and a refusal for the spellings that could name another file. |
 | [**schemas/**](schemas/) | The JSON contracts the owner accepted on 2026-11-12: identity, policy request and decision, audit event. |
 
@@ -297,6 +298,43 @@ session row: {"end_reason":"stopped"}    temp folder left: false    leftover pro
 
 Closing the terminal prints `Error: AttachConsole failed` from node-pty's console-list helper on stderr. It is noise: the session still ends cleanly.
 
+## 🤖 Backends
+
+An agent is someone else's CLI ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)). [`backends.js`](backends.js) holds one manifest per CLI, and an identity created with `backend` set to one of them runs it:
+
+```powershell
+npm run ctl -- identity.create id=local:dev-claude kind=ai-agent displayName="Dev Claude" backend=claude-code
+npm run ctl -- grant.add identity=local:dev-claude resource=file:D:/work/app/** permission=write
+npm run ctl -- grant.add identity=local:dev-claude resource=net:api.anthropic.com:443 permission=connect
+npm run ctl -- grant.add identity=local:dev-claude resource=net:platform.claude.com:443 permission=connect
+npm run ctl -- identity.activate id=local:dev-claude
+npm run ctl -- session.start identity=local:dev-claude workspace=D:\work\app
+```
+
+| | Claude Code (`claude-code`) | Codex (`codex`) |
+|:---|:---|:---|
+| Program, read-only | `%USERPROFILE%\.local\bin\claude.exe` (the file) | the native `codex.exe`'s folder under the npm global `@openai/codex` (not the Node wrapper, S3) |
+| Arguments | `--strict-mcp-config` | `--sandbox danger-full-access` (its own Windows sandbox can't be set up in a container), no update check, no analytics |
+| Home | `CLAUDE_CONFIG_DIR` | `CODEX_HOME` |
+| Also | Git Bash: Git's folder read-only, `CLAUDE_CODE_GIT_BASH_PATH`; no telemetry or self-update | |
+| Hosts it needs | `api.anthropic.com:443`, `platform.claude.com:443` (sign-in token) | `chatgpt.com:443`, `auth.openai.com:443`, `api.openai.com:443` |
+| Sign in | `/login`, then paste the code from the browser | device code |
+
+**A home of its own.** Each identity gets `houston-agents\<id>\<backend>` beside the Core's data folder (`%LOCALAPPDATA%\houston-agents`), restricted to the operator at every start like the data folder, and granted read-write to that identity's sessions only. It signs in there once; the home outlives its sessions. The operator's own `~/.claude` and `~/.codex` are never granted: besides the sign-in they hold the operator's MCP list, with tokens in its env blocks, plus hooks and history. A fresh home also starts with no MCP servers, which the manifest could not have done otherwise: Codex's `-c mcp_servers={}` adds to the list instead of replacing it. The agent can read its own sign-in, as ADR-004 says; nothing else of the operator's.
+
+**What the runner does with it.** A backend identity's `session.start` takes no `command`: the manifest sets it, and passing one is refused. The program must be installed now (`backend.list` says which are). The manifest's environment wins over the caller's `program.env`, so a caller can't point the CLI at another home; the caller's `program` still adds toolchain folders. The CLI's own permission prompts stay on as its UX; the container is the boundary. The hosts are declared, not granted: `session.start`'s `launch.backend.missingHosts` lists those the identity has no `allow` for, and the proxy refuses them like any other.
+
+Checked on this machine on 2026-11-12 with [`spikes/h2-backends.mjs`](../spikes/h2-backends.mjs): each CLI started in a real container with its manifest's hosts granted and nothing typed, for 25 seconds:
+
+```text
+claude-code  first screen: "Welcome to Claude Code v2.1.323 ... Choose the text style"   home: .claude.json, sessions
+             egress: allow api.anthropic.com:443, allow platform.claude.com:443
+codex        first screen: "Welcome to Codex ... 1. Sign in with ChatGPT  2. Sign in with Device Code"
+             egress: allow chatgpt.com:443; deny raw.githubusercontent.com, github.com, api.github.com, files.openai.com
+```
+
+Codex reaches for GitHub even with its update check off; those calls are refused and logged, and it carries on. Grant them only if something turns out to need them.
+
 ## 🪪 Identity registry
 
 [`identities.js`](identities.js) is who may act and what they may touch. Each change is an audit event with the policy version it produced: `identity.lifecycle` (with a `lifecycle` field, `{ from, to, reason? }`) or `grant.change` (with the `grant`).
@@ -367,14 +405,15 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | Method | Params | Result |
 |:---|:---|:---|
 | `core.status` | none | `{ pid, startedAt, schema, containment, sessions }`: `containment` is the rung sessions run on (`container`) and `sessions` how many run. Houston's Connections row shows it |
-| `session.start` | `identity`, `workspace`, `command`; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
+| `session.start` | `identity`, `workspace`; `command` unless the identity has a backend; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
+| `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
 | `session.stop` | `id` | `{ reason, exitCode }` |
 | `session.list` | none | the running sessions |
 | `stop.all` | none | `{ stopped }`, the number stopped |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `identity.list` | optional `status` | identities with their grants |
 | `identity.get` | `id` | one identity with its grants |
-| `identity.create` | `id`, `kind`, `displayName`; optional `owner`, `parent`, `purpose`, `backend`, `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
+| `identity.create` | `id`, `kind`, `displayName`; optional `owner`, `parent`, `purpose`, `backend` (`claude-code` or `codex`), `containment`, `expiresAt`, `tags` | the new identity, in `draft` |
 | `identity.activate` | `id`; optional `reason` | the identity |
 | `identity.suspend`, `identity.retire` | `id`; optional `reason` | `{ identity, stopped }`: its running sessions are stopped |
 | `grant.add` | `identity`, `resource`, `permission`; optional `effect` (default `allow`), `expiresAt` | the grant, with its id |

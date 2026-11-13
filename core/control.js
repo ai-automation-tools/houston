@@ -20,7 +20,7 @@ import { CONTAINMENT, RunnerError } from './runner.js';
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
-  'grant.add', 'grant.remove',
+  'grant.add', 'grant.remove', 'backend.list',
 ];
 const MAX_LINE = 1024 * 1024;
 
@@ -102,7 +102,8 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
       if (typeof program !== 'object' || Array.isArray(program)) throw new ControlError('bad_request', 'program is an object');
       if (p.attended !== undefined && typeof p.attended !== 'boolean') throw new ControlError('bad_request', 'attended is true or false');
       const s = await runner.start({
-        identity: str(p.identity, 'identity'), workspace: str(p.workspace, 'workspace'), command: str(p.command, 'command'),
+        // No command for an identity with a backend: its manifest sets it.
+        identity: str(p.identity, 'identity'), workspace: str(p.workspace, 'workspace'), command: p.command === undefined ? undefined : str(p.command, 'command'),
         attended: p.attended, size: p.size,
         program: { readonly: strings(program.readonly, 'program.readonly'), pathDirs: strings(program.pathDirs, 'program.pathDirs'), env: program.env },
       });
@@ -110,6 +111,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0 })
       s.output.resume();
       return { id: s.id, identity: s.identity, workspace: s.workspace, startedAt: s.startedAt };
     },
+    'backend.list': () => runner.backends(),
     'session.stop': async (p) => {
       const s = runner.get(str(p.id, 'id'));
       if (!s) throw new ControlError('not_found', 'no running session has that id');

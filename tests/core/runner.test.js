@@ -69,7 +69,7 @@ function fakeSdk({ fail } = {}) {
 }
 
 /** A Core-shaped setup in a scratch folder: database, audit log, operator, one agent. */
-function setup(t, { status = 'active', containment = 'container', grants = [] } = {}) {
+function setup(t, { status = 'active', containment = 'container', grants = [], backend = null, isFile } = {}) {
   fs.mkdirSync(SCRATCH, { recursive: true });
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(SCRATCH, 'runner-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -79,14 +79,17 @@ function setup(t, { status = 'active', containment = 'container', grants = [] } 
   t.after(() => audit.close());
   const at = '2026-01-01T00:00:00Z';
   db.prepare("INSERT INTO identities (id, kind, display_name, containment, created_at, status) VALUES ('local:me', 'operator', 'Me', 'unconfined', ?, 'active')").run(at);
-  db.prepare("INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status) VALUES ('local:dev', 'ai-agent', 'Dev', 'local:me', ?, ?, ?)").run(containment, at, status);
+  db.prepare("INSERT INTO identities (id, kind, display_name, owner, containment, created_at, status, backend) VALUES ('local:dev', 'ai-agent', 'Dev', 'local:me', ?, ?, ?, ?)").run(containment, at, status, backend);
   const ws = path.join(root, 'ws');
   fs.mkdirSync(ws);
   for (const [id, resource, permission, effect = 'allow'] of [['ws', `file:${ws}/**`, 'write'], ...grants]) {
     db.prepare("INSERT INTO grants (id, identity_id, resource, permission, effect, granted_at, granted_by) VALUES (?, 'local:dev', ?, ?, ?, ?, 'local:me')").run(id, resource.replaceAll('\\', '/'), permission, effect, at);
   }
   const sdk = fakeSdk();
-  const runner = createRunner({ db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk });
+  const runner = createRunner({
+    db, audit, coreDir: path.join(root, 'core'), tempRoot: path.join(root, 'sessions'), agentsRoot: path.join(root, 'agents'), home: 'C:\\Users\\nobody-here', sdk, isFile,
+    where: { home: 'C:\\Users\\nobody-here', appData: 'C:\\Users\\nobody-here\\AppData\\Roaming', PATH: 'C:\\Program Files\\Git\\cmd' },
+  });
   const events = () => [...audit.events()].map((e) => e);
   return { root, db, audit, ws, sdk, runner, events };
 }
@@ -167,6 +170,39 @@ test('start refuses, and writes a session.start deny, for each thing that would 
     assert.ok(!fs.existsSync(path.join(s.root, 'sessions')) || fs.readdirSync(path.join(s.root, 'sessions')).length === 0, 'temp left behind');
   }
   await assert.rejects(setup(t).runner.start({ identity: '', workspace: 'D:\\w', command: 'x' }), /identity is an id/);
+});
+
+test('a backend identity runs its manifest: command, its own home, the program, and the hosts it lacks', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const claude = 'C:\\Users\\nobody-here\\.local\\bin\\claude.exe';
+  const isFile = (p) => [claude, 'C:\\Program Files\\Git\\cmd\\git.exe', 'C:\\Program Files\\Git\\bin\\bash.exe'].includes(p);
+  const s = setup(t, { backend: 'claude-code', isFile, grants: [['anthropic', 'net:api.anthropic.com:443', 'connect']] });
+  const session = await s.runner.start({ identity: 'local:dev', workspace: s.ws, program: { env: { CLAUDE_CONFIG_DIR: 'C:\\elsewhere', EXTRA: '1' } } });
+  const { request } = s.sdk.calls[0];
+  const home = path.join(s.root, 'agents', 'dev', 'claude-code');
+  assert.equal(request.command, `${claude} --strict-mcp-config`);
+  assert.ok(fs.existsSync(home));
+  assert.ok(request.filesystem.readwritePaths.some((p) => p.toLowerCase() === home.toLowerCase()));
+  assert.ok(request.filesystem.readonlyPaths.includes(claude));
+  // The manifest's variables win over the caller's.
+  assert.equal(request.environment.CLAUDE_CONFIG_DIR.toLowerCase(), home.toLowerCase());
+  assert.equal(request.environment.EXTRA, '1');
+  assert.match(request.environment.PATH, /\\\.local\\bin;C:\\Program Files\\Git\\cmd$/);
+  const { launch } = s.events()[0];
+  assert.deepEqual([launch.backend.name, launch.backend.missingHosts], ['claude-code', ['platform.claude.com:443']]);
+  await session.stop();
+  // The home outlives the session: it holds the identity's sign-in.
+  assert.ok(fs.existsSync(home));
+});
+
+test('a backend identity refuses a command, a missing program, and a runner with no agents folder', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const s = setup(t, { backend: 'codex', isFile: () => false });
+  await assert.rejects(s.runner.start({ identity: 'local:dev', workspace: s.ws, command: 'cmd.exe' }), /manifest sets the command/);
+  await assert.rejects(s.runner.start({ identity: 'local:dev', workspace: s.ws }), /Codex is not installed/);
+  const bare = createRunner({ db: s.db, audit: s.audit, coreDir: path.join(s.root, 'core'), tempRoot: path.join(s.root, 'sessions'), home: 'C:\\Users\\nobody-here', sdk: fakeSdk() });
+  await assert.rejects(bare.start({ identity: 'local:dev', workspace: s.ws }), /no agents folder/);
+  assert.deepEqual(s.events().map((e) => e.decision.result), ['deny', 'deny', 'deny']);
+  // An identity with no backend still names its command.
+  await assert.rejects(setup(t).runner.start({ identity: 'local:dev', workspace: s.ws }), /a command is required/);
 });
 
 test('a container that fails to start ends the session and cleans up', { skip: !WIN && 'the Core is Windows only' }, async (t) => {

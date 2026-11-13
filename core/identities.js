@@ -10,6 +10,7 @@
 // Only an active identity can start a session (the runner checks).
 
 import crypto from 'node:crypto';
+import { BACKENDS } from './backends.js';
 import { ACTIONS, compile, policyVersion } from './policy.js';
 
 export const OPERATOR = 'local:operator';
@@ -120,7 +121,7 @@ export function createRegistry({ db, audit, globals = [], now = () => new Date()
       if (!KINDS.includes(kind)) throw bad(`kind is one of ${KINDS.join(', ')} (there is one operator, made by the Core)`);
       text(displayName, 'displayName', 80);
       if (purpose !== null) text(purpose, 'purpose', 300);
-      if (backend !== null) text(backend, 'backend', 40);
+      if (backend !== null && !Object.hasOwn(BACKENDS, backend)) throw bad(`backend is one of ${Object.keys(BACKENDS).join(', ')}, or null`);
       if (!CONTAINMENT.includes(containment)) throw bad(`containment is one of ${CONTAINMENT.join(', ')}`);
       if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string' && t.length <= 40) || tags.length > 20) throw bad('tags is a list of up to 20 short strings');
       const expires = future(expiresAt, 'expiresAt', now());

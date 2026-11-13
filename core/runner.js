@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { BackendError, listBackends, resolveBackend } from './backends.js';
 import { startEgressProxy } from './egress.js';
 import { LaunchError, launchRequest } from './launch.js';
 import { PathError, canonicalPath, pathKey, resolvePath } from './paths.js';
@@ -91,16 +92,19 @@ export function compileGrants(grants, now = new Date()) {
  * @property {ReturnType<typeof import('./audit.js').openAudit>} audit
  * @property {string} coreDir the Core's data folder, denied to every session
  * @property {string} tempRoot where session temp folders go; outside the user profile
+ * @property {string} [agentsRoot] where each identity's CLI home goes (backends.js); required to start a backend identity
  * @property {string} [home]
+ * @property {import('./backends.js').Where} [where] the operator's folders, to find backend programs; defaults from the environment
+ * @property {(p: string) => boolean} [isFile] for tests
  * @property {{ spawnWithPty: Function }} [sdk] defaults to @microsoft/mxc-sdk/v1
  * @property {() => Date} [now]
  *
  * @typedef {object} StartSpec
  * @property {string} identity  e.g. 'local:dev-codex'
  * @property {string} workspace  the identity must hold an allow write grant on it
- * @property {string} command
+ * @property {string} [command] required unless the identity has a backend, whose manifest sets it
  * @property {boolean} [attended]
- * @property {{ readonly?: string[], pathDirs?: string[], env?: Record<string, string> }} [program]  what the backend needs (H2: from its manifest)
+ * @property {{ readonly?: string[], pathDirs?: string[], env?: Record<string, string> }} [program]  toolchain folders and environment; a backend's manifest adds its own
  * @property {{ rows: number, columns: number }} [size]
  */
 
@@ -108,7 +112,10 @@ export function compileGrants(grants, now = new Date()) {
 export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */
-export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir(), sdk, now = () => new Date() }) {
+export function createRunner({
+  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile,
+  where = { home, appData: process.env.APPDATA ?? path.win32.join(home, 'AppData', 'Roaming'), PATH: process.env.PATH ?? '' },
+}) {
   const globals = globalDenies({ home, coreDir });
   /** @type {Map<string, Session>} */
   const live = new Map();
@@ -139,11 +146,23 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
       return new RunnerError(reason);
     };
 
-    const who = /** @type {any} */ (db.prepare('SELECT status, containment, expires_at FROM identities WHERE id = ?').get(identity));
+    const who = /** @type {any} */ (db.prepare('SELECT status, containment, expires_at, backend FROM identities WHERE id = ?').get(identity));
     if (!who) throw refuse('unknown identity');
     if (who.status !== 'active') throw refuse(`the identity is ${who.status}`);
     if (who.expires_at != null && !(Date.parse(who.expires_at) > now().getTime())) throw refuse('the identity has expired');
     if (who.containment !== 'container') throw refuse(`the identity runs ${who.containment}; this runner starts containers only`);
+
+    // A backend identity runs its manifest's command, with its CLI home; anything else names its command.
+    let backend = null;
+    if (who.backend != null) {
+      if (command !== undefined) throw refuse(`the ${who.backend} backend's manifest sets the command`);
+      if (!agentsRoot) throw refuse('this runner has no agents folder for backend homes');
+      try { backend = resolveBackend(who.backend, { identity, agentsRoot, where, isFile }); } catch (e) {
+        if (e instanceof BackendError) throw refuse(e.message);
+        throw e;
+      }
+      command = backend.command;
+    } else if (typeof command !== 'string' || !command) throw refuse('a command is required for an identity with no backend');
 
     const grants = /** @type {Grant[]} */ (db.prepare('SELECT id, resource, permission, effect, expires_at FROM grants WHERE identity_id = ?').all(identity));
     let ws;
@@ -171,6 +190,8 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
     let req;
     try {
       fs.mkdirSync(win(temp), { recursive: true });
+      // Kept between sessions: the CLI's sign-in, settings and history for this identity.
+      if (backend) fs.mkdirSync(backend.home, { recursive: true });
       if (compiled.net.length) {
         proxy = await startEgressProxy({
           check: ({ host, port }) => decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() }),
@@ -185,8 +206,11 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
       req = {
         ...launchRequest({
           command, workspace: ws, temp, home, globals,
-          readwrite: compiled.readwrite, readonly: [...compiled.readonly, ...(program.readonly ?? [])], denied: compiled.denied,
-          pathDirs: program.pathDirs, env: program.env, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
+          readwrite: [...compiled.readwrite, ...(backend?.readwrite ?? [])],
+          readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? [])], denied: compiled.denied,
+          pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
+          // The manifest's variables win: a caller can't point the CLI at another home.
+          env: { ...program.env, ...backend?.env }, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
         }),
         containerName: containerName(id),
       };
@@ -201,6 +225,8 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
       network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)) } : { proxy: false },
       skipped: compiled.skipped,
+      // Hosts the manifest needs that no allow grant covers: the session will be refused them.
+      ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
     };
     db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt);
@@ -251,6 +277,8 @@ export function createRunner({ db, audit, coreDir, tempRoot, home = os.homedir()
     get: (id) => live.get(id),
     list: () => [...live.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt })),
     stopAll: () => Promise.all([...live.values()].map((s) => s.stop())),
+    /** The backend manifests, and whether each program is installed on this machine. */
+    backends: () => listBackends(where, isFile),
   };
 }
 
