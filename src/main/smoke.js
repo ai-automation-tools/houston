@@ -1024,6 +1024,16 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         }
         const me = await ctl('identity.get', { id: 'local:smoke-shell' });
         agentRun.lifecycle.core = { status: me.status, reviewBy: me.reviewBy, actions: (await ctl('audit.query', { type: 'identity.lifecycle' })).events.map((/** @type {any} */ e) => e.action) };
+
+        // Profiles (H5): another profile's identity is not listed here, and Start refuses it whatever the renderer sends.
+        await ctl('profile.create', { id: 'smoke-lab', displayName: 'Smoke lab' });
+        await ctl('identity.create', { id: 'local:smoke-lab-agent', kind: 'ai-agent', displayName: 'Lab agent', profile: 'smoke-lab' });
+        agentRun.profiles = await wc.executeJavaScript(`(async () => {
+          const p = await window.acc.profile.info();
+          const a = await window.acc.agents.info();
+          const start = await window.acc.agents.start('local:smoke-lab-agent').then(() => 'started', (e) => String(e.message || e));
+          return { active: p.active, list: p.list.map((x) => x.id), agents: a.rows.map((r) => r.name), start, button: document.getElementById('workspace').textContent };
+        })()`);
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -1058,7 +1068,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && lg.oneSession && lg.detail), lg);
       const st = agentRun?.settings;
       check('⚙ opens Settings: every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
-        Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile,Workspace: Agents smoke,Session'
+        Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile: Default,Workspace: Agents smoke,Session'
           && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
           && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
           && agentRun.settingsKey === 'CmdOrCtrl+,'), { ...st, key: agentRun?.settingsKey });
@@ -1077,6 +1087,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && lc.core.status === 'active' && due === 90 && lc.core.actions.slice(-3).join() === 'identity.review,identity.suspend,identity.activate'
           && lc.page?.h1 === 'Identity Center' && lc.page.scripts === 0 && lc.page.h2.includes('Smoke shell')
           && lc.page.h3.includes('What it can reach') && lc.page.text.includes('due in 90 days')), lc && { ...lc, page: lc.page && { ...lc.page, text: lc.page.text.slice(0, 400) } });
+      const pr = agentRun?.profiles;
+      check('the window runs as one profile: the 🧭 menu lists the Core\'s profiles, the Agents tab shows only this profile\'s identities, and Start refuses another profile\'s',
+        Boolean(pr?.active === 'default' && pr.list.join() === 'default,smoke-lab' && pr.agents.includes('Smoke shell') && !pr.agents.includes('Lab agent')
+          && /belongs to profile smoke-lab/.test(pr.start) && !pr.button.includes('·')), pr);
       const tr = agentRun?.transcript;
       check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
         Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0

@@ -112,6 +112,10 @@ contextBridge.exposeInMainWorld('acc', {
     onEvent: listen('chat:event'),
   },
 
+  profile: {
+    info: invoke('profile:info'),
+    switch: invoke('profile:switch'),
+  },
   workspace: {
     info: invoke('workspace:info'),
     switch: invoke('workspace:switch'),

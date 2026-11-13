@@ -511,6 +511,11 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     },
 
     // One workspace: the demo has no folders to add.
+    // Two made-up profiles; switching one restarts the desktop app, which the demo can't.
+    profile: {
+      info: async () => ({ active: 'default', name: 'Default', list: [{ id: 'default', displayName: 'Default' }, { id: 'quarantine', displayName: 'Quarantine' }] }),
+      switch: async () => { notify('Switching profiles restarts Houston in the other one; that needs the desktop app.'); return false; },
+    },
     workspace: {
       info: async () => DEMO_SPACE,
       switch: async () => DEMO_SPACE,

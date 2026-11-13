@@ -15,6 +15,7 @@ import { docPage, escapeHtml } from '../shared/docs.js';
 import { identitiesBody } from '../shared/identities.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { core } from './core.js';
+import { activeProfile } from './profile.js';
 
 /** Why a call to the Core failed, in words for the tab. @param {unknown} e */
 function why(e) {
@@ -43,7 +44,7 @@ export async function identitiesPage() {
   if (process.platform !== 'win32') throw new Error('Identities live in the Core, which runs on Windows only.');
   let identities, sessions, starts;
   try {
-    [identities, sessions, starts] = await Promise.all([core.call('identity.list'), core.call('session.list'), core.call('audit.query', { type: 'session.start', limit: 500 })]);
+    [identities, sessions, starts] = await Promise.all([core.call('identity.list', { profile: activeProfile() }), core.call('session.list'), core.call('audit.query', { type: 'session.start', limit: 500 })]);
   } catch (e) { throw new Error(why(e)); }
   /** @type {Record<string, any>} */
   const reach = {};
@@ -51,7 +52,8 @@ export async function identitiesPage() {
     // A Core from before H5 has no identity.reach.
     reach[i.id] = await core.call('identity.reach', { id: i.id }).catch((e) => ({ error: e.code === 'unknown_method' ? 'it runs older code than the app; end and run the Houston Core task' : why(e) }));
   }));
-  const body = identitiesBody({ identities, reach, sessions, starts: starts.events.slice().reverse(), now: Date.now() }, escapeHtml);
+  const mine = new Set(identities.map((/** @type {any} */ i) => i.id));
+  const body = identitiesBody({ identities, reach, sessions: sessions.filter((/** @type {any} */ s) => mine.has(s.identity)), starts: starts.events.slice().reverse(), now: Date.now() }, escapeHtml);
   return docPage({ title: 'Identity Center', trail: 'Houston › Identity Center', body });
 }
 
@@ -66,11 +68,12 @@ const LIFECYCLE = { activate: 'identity.activate', suspend: 'identity.suspend', 
 export async function coreSettings() {
   if (process.platform !== 'win32') return null;
   try {
-    const [status, identities, approvals] = await Promise.all([core.call('core.status', {}, 3000), core.call('identity.list'), core.call('approval.list')]);
+    const profile = activeProfile();
+    const [status, identities, approvals] = await Promise.all([core.call('core.status', {}, 3000), core.call('identity.list', { profile }), core.call('approval.list')]);
     if (!status.limits) return { error: 'it runs older code than the app; end and run the Houston Core task' };
     const grants = identities.flatMap((/** @type {any} */ i) => i.grants ?? []);
     // A Core from before the gateway (H3) has neither method: shown as needing a newer Core.
-    const [servers, secrets] = await Promise.all([core.call('mcp.list').catch(() => null), core.call('secret.list').catch(() => null)]);
+    const [servers, secrets] = await Promise.all([core.call('mcp.list', { profile }).catch(() => null), core.call('secret.list', { profile }).catch(() => null)]);
     return {
       dir: dataDir(), sessions: status.sessions, identities: identities.length, grants: grants.length,
       askGrants: grants.filter((/** @type {any} */ g) => g.effect === 'ask').length, approvals: approvals.length, limits: status.limits,
@@ -95,9 +98,10 @@ export const integrations = {
   async info() {
     if (process.platform !== 'win32') return { error: 'The gateway runs in the Core, which runs on Windows only.' };
     try {
-      const [servers, secrets, backends] = await Promise.all([core.call('mcp.list'), core.call('secret.list'), core.call('backend.list')]);
+      const profile = activeProfile();
+      const [servers, secrets, backends] = await Promise.all([core.call('mcp.list', { profile }), core.call('secret.list', { profile }), core.call('backend.list')]);
       // A Core from before H4 has no standing grants: null, and the tab says so.
-      const standing = await core.call('standing.list').catch(() => null);
+      const standing = await core.call('standing.list', { profile }).catch(() => null);
       return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends), standing: standing && standingRows(standing, Date.now()) };
     } catch (e) {
       return { error: /** @type {any} */ (e).code === 'unknown_method' ? 'The Core runs older code than the app: end and run the Houston Core task.' : why(e) };
@@ -168,7 +172,7 @@ export function createAgents({ terminals, send, workspace }) {
     async info() {
       if (process.platform !== 'win32') return { error: 'Agents run in Windows containers, so the Core runs on Windows only.' };
       try {
-        const [identities, sessions, backends] = await Promise.all([core.call('identity.list'), core.call('session.list'), core.call('backend.list')]);
+        const [identities, sessions, backends] = await Promise.all([core.call('identity.list', { profile: activeProfile() }), core.call('session.list'), core.call('backend.list')]);
         const rows = agentRows(identities, sessions, backends);
         for (const r of rows) for (const s of /** @type {any[]} */ (r.sessions)) s.shown = terminals.bySession(s.id) !== undefined;
         return { folder: workspace().folder, rows };
@@ -186,12 +190,15 @@ export function createAgents({ terminals, send, workspace }) {
       const f = logFilter(filter);
       try {
         const [found, identities, starts] = await Promise.all([
-          core.call('audit.query', f), core.call('identity.list'), core.call('audit.query', { type: 'session.start', limit: 50 }),
+          core.call('audit.query', f), core.call('identity.list', { profile: activeProfile() }), core.call('audit.query', { type: 'session.start', limit: 50 }),
         ]);
+        // ponytail: filtered after the query, so a page can come back short; a profile filter in audit.query if that matters.
+        const mine = new Set(identities.map((/** @type {any} */ i) => i.id));
+        const ours = (/** @type {any} */ e) => !e.identity?.subject || mine.has(e.identity.subject);
         return {
-          events: found.events.reverse(), truncated: found.truncated,
+          events: found.events.filter(ours).reverse(), truncated: found.truncated,
           identities: identities.map((/** @type {any} */ i) => ({ id: i.id, name: i.displayName })),
-          sessions: sessionChoices(starts.events),
+          sessions: sessionChoices(starts.events.filter(ours)),
         };
       } catch (e) {
         return { error: why(e) };
@@ -204,6 +211,7 @@ export function createAgents({ terminals, send, workspace }) {
       const { folder } = workspace();
       if (!folder) throw new Error('This workspace has no folder. Switch to one that does, or add one from Files.');
       const me = /** @type {any} */ (await core.call('identity.get', { id: who }));
+      if ((me.profile ?? 'default') !== activeProfile()) throw new Error(`${me.displayName} belongs to profile ${me.profile}; switch to it from the 🧭 menu to start it.`);
       const s = await core.call('session.start', {
         identity: who, workspace: folder, size: { rows: 30, columns: 120 },
         ...(me.backend ? {} : { command: SHELL_COMMAND }),

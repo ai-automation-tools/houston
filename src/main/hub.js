@@ -8,10 +8,12 @@ import { hubAuth } from '../shared/settings.js';
 import { feedSse } from '../shared/events.js';
 import { toggleFavorite } from '../shared/favorites.js';
 
-// settings.json's hubUrl, or ACC_HUB_URL (src/shared/settings.js).
-const HUB = store.settings().hubUrl;
-// ACC_HUB_TOKEN from .env, as a bearer header on every request, when Hub asks for one.
-const AUTH = hubAuth(HUB, env.ACC_HUB_TOKEN);
+// settings.json's hubUrl, or ACC_HUB_URL (src/shared/settings.js), and ACC_HUB_TOKEN from .env as a bearer
+// header on every request when Hub asks for one. Read on first use, not at import: the profile's
+// settings.json is only known once main has set the userData folder (H5).
+/** @type {{ url: string, auth: ReturnType<typeof hubAuth> } | null} */
+let conf = null;
+const hubConf = () => (conf ??= { url: store.settings().hubUrl, auth: hubAuth(store.settings().hubUrl, env.ACC_HUB_TOKEN) });
 const TIMEOUT_MS = 30_000; // a cold scan of every workspace takes ~12 s
 const RETRY_MS = 3_000; // Hub's /api/events stream advertises retry: 3000
 
@@ -31,7 +33,7 @@ async function hubFetch(path, init = {}, read = (res) => res.json()) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(HUB + path, { ...init, headers: { ...AUTH.headers, ...init.headers }, signal: ctrl.signal });
+    const res = await fetch(hubConf().url + path, { ...init, headers: { ...hubConf().auth.headers, ...init.headers }, signal: ctrl.signal });
     if (!res.ok && res.status !== 204) {
       const text = await res.text().catch(() => '');
       throw new Error(`Project Hub ${path} returned ${res.status}${text ? `: ${text}` : ''}`);
@@ -39,7 +41,7 @@ async function hubFetch(path, init = {}, read = (res) => res.json()) {
     return await read(res);
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') throw new Error(`Project Hub didn't answer ${path} within ${TIMEOUT_MS / 1000} s`);
-    if (err instanceof TypeError) throw new Error(`Project Hub isn't reachable at ${HUB}. Is it running?`);
+    if (err instanceof TypeError) throw new Error(`Project Hub isn't reachable at ${hubConf().url}. Is it running?`);
     throw err;
   } finally {
     clearTimeout(timer);
@@ -50,9 +52,9 @@ async function hubFetch(path, init = {}, read = (res) => res.json()) {
 let favoriteQueue = Promise.resolve();
 
 export const hub = {
-  url: HUB,
+  get url() { return hubConf().url; },
   /** Whether an access token goes with each request: none set, sent, or withheld (a plain-http remote Hub). */
-  token: AUTH.state,
+  get token() { return hubConf().auth.state; },
 
   async health() {
     try {
@@ -147,7 +149,7 @@ export function subscribeHubEvents(onChange) {
     while (!stopped) {
       controller = new AbortController();
       try {
-        const res = await fetch(HUB + '/api/events', { headers: AUTH.headers, signal: controller.signal });
+        const res = await fetch(hubConf().url + '/api/events', { headers: hubConf().auth.headers, signal: controller.signal });
         if (!res.ok || !res.body) throw new Error(`Project Hub /api/events returned ${res.status}`);
         const reader = res.body.getReader();
         const decoder = new TextDecoder();

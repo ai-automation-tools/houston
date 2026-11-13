@@ -43,7 +43,7 @@ pwsh -NoProfile -WindowStyle Hidden -File <repo>\scripts\Start-AICommandCenter.p
 
 ## Settings
 
-Per-machine settings live in `%APPDATA%\ai-command-center\settings.json`. You only need it if the defaults don't fit:
+Per-machine settings live in `%APPDATA%\ai-command-center\settings.json` (another [profile](features.md#-profiles)'s in `profiles\<id>\settings.json` under it). You only need it if the defaults don't fit:
 
 ```json
 {

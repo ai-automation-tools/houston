@@ -42,7 +42,17 @@
 - The name at the top of the sidebar switches workspaces, or removes one. Removing never touches the folder.
 - A switch closes the tabs and opens the other workspace's. Terminals keep running, hidden. A workspace's saved folders open as fresh shells, so nothing is ever re-run.
 - **Default** is the whole Project Hub tree.
-- Saved in `%APPDATA%\ai-command-center\workspaces.json`.
+- Saved in `%APPDATA%\ai-command-center\workspaces.json` (another profile's in its own folder; below).
+
+## 👥 Profiles
+
+A profile keeps one workstream apart from another: its own agent identities, MCP servers and secrets in the Core, and its own window: settings (`settings.json`, so its Project Hub address, quick links and news sources), workspaces, tabs, recent items, run history, chat conversations, bookmarks source, and browser storage (cookies, sign-ins, cache). Nothing is shared between profiles.
+
+- The top of the **🧭 Houston** menu lists the profiles, with the one this window runs as checked. Picking another restarts Houston in it, so everything loads fresh for that profile; your agent sessions keep running in the Core.
+- The 🧭 button shows the profile's name when it isn't **Default**.
+- The Agents, Integrations, Logs and Identity Center views show only this profile's identities, servers, secrets, standing grants and events; **Start** refuses another profile's identity. **Stop All** still stops every session, whatever its profile.
+- Make one with `npm run ctl -- profile.create id=lab displayName=Lab`, then pick it in the menu. Make its agents with `identity.create ... profile=lab` ([core/README.md](../../core/README.md#-profiles)).
+- **Default** keeps its files where they always were, in `%APPDATA%\ai-command-center\`; another profile's are in `profiles\<id>\` under it, and `profile.json` there says which one the next start runs as. Houston's own MCP server is registered in Default, so only Default's agents see its tools.
 
 ## ⚡ Command palette
 

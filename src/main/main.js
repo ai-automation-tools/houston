@@ -12,6 +12,8 @@ import { chat } from './chat.js';
 import { cronsole } from './cronsole.js';
 import { mcpLog, startMcp } from './mcp.js';
 import { store } from './store.js';
+import { activeProfile, setNextProfile } from './profile.js';
+import { browsePartition } from '../shared/profiles.js';
 import { Tabs } from './tabs.js';
 import { Terminals } from './terminal.js';
 import { extensionsMenu, listExtensions, setupExtensions } from './extensions.js';
@@ -43,7 +45,6 @@ import { conversationText, isConversationId, removeConversation, renameConversat
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
-const BROWSE_PARTITION = 'persist:browse';
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 
 // acc://shell/... serves the shell UI. Mapped prefixes only, and every resolved path is
@@ -63,6 +64,10 @@ protocol.registerSchemesAsPrivileged([
 // ACC_USER_DATA: run on another profile (npm run smoke's throwaway one). Before the
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
+
+// The active profile's browser storage (H5): another profile's cookies and sign-ins are never loaded.
+// After the userData folder is final: profile.json is read from it.
+const BROWSE_PARTITION = browsePartition(activeProfile());
 
 // Before any renderer or service worker starts: they read navigator.userAgent from this.
 app.userAgentFallback = chromeUserAgent(app.userAgentFallback);
@@ -359,6 +364,13 @@ async function createWindow() {
     r.changed = changedFiles(await before, await gitFiles(r.cwd));
     saveRuns();
   };
+  /** The active profile and the Core's list, for the 🧭 menu and Settings. The list is just the active one when the Core is down. */
+  const profileInfo = async () => {
+    const id = activeProfile();
+    const list = process.platform === 'win32' ? await core.call('profile.list', {}, 3000).catch(() => null) : null;
+    const all = /** @type {{ id: string, displayName: string }[]} */ (list ?? [{ id, displayName: id }]).map((p) => ({ id: p.id, displayName: p.displayName }));
+    return { active: id, name: all.find((p) => p.id === id)?.displayName ?? id, list: all };
+  };
   /** The acc://settings/ page: every control, its value now, its scope and where it's changed. */
   const settingsPage = async () => {
     const settings = store.settings();
@@ -371,6 +383,7 @@ async function createWindow() {
       workspaces: spaces.list.length,
       workspace: { name: ws.name, folder: ws.folder ?? '', tabs: tabs.list().length, terminals: terminals.listSessions().filter((t) => t.ws === spaces.active).length },
       core: await coreSettings(),
+      profile: await profileInfo(),
     }, escapeHtml);
     return docPage({ title: 'Settings', trail: 'Houston › Settings', body });
   };
@@ -442,6 +455,18 @@ async function createWindow() {
     return out;
   };
   handle('workspace:info', () => workspaceInfo());
+  handle('profile:info', () => profileInfo());
+  // Switching relaunches: every file, the browser partition and every Core query start over in the new profile.
+  handle('profile:switch', async (id) => {
+    const want = String(id);
+    if (want === activeProfile()) return false;
+    const known = await core.call('profile.list').catch(() => []);
+    if (!known.some((/** @type {any} */ p) => p.id === want)) throw new Error(`The Core has no profile ${want}. Make one with npm run ctl -- profile.create.`);
+    setNextProfile(want);
+    app.relaunch();
+    app.quit();
+    return true;
+  });
   handle('workspace:switch', (id) => switchTo(String(id)));
   handle('workspace:add', (input) => {
     const { folder, name, hubId } = input && typeof input === 'object' ? input : {};
