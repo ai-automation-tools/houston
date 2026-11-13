@@ -15,13 +15,16 @@ import * as at02 from './tests/at02-links.js';
 import * as at03 from './tests/at03-path-forms.js';
 import * as at04 from './tests/at04-hosts.js';
 import * as at05 from './tests/at05-loopback-apps.js';
+import * as at06 from './tests/at06-gateway-scope.js';
+import * as at07 from './tests/at07-vault-sweep.js';
+import * as at08 from './tests/at08-pinned-change.js';
 import * as at12 from './tests/at12-stop-all.js';
 import * as at14 from './tests/at14-audit-edit.js';
 import * as at15 from './tests/at15-secret-in-output.js';
 import * as at16 from './tests/at16-core-killed.js';
 
 // AT-16 and AT-14 restart the Core, so they go last; AT-14 edits the log, so it is last of all.
-const TESTS = [at01, at02, at03, at04, at05, at12, at15, at16, at14];
+const TESTS = [at01, at02, at03, at04, at05, at06, at07, at08, at12, at15, at16, at14];
 
 if (process.platform !== 'win32' || !process.env.H1_ROOT || !process.env.LOCALAPPDATA) {
   console.error('Run on Windows from PowerShell, with H1_ROOT set to a scratch folder outside your user profile.');
@@ -56,6 +59,8 @@ for (const t of tests) {
   for (const n of r.notes) console.log(`  note: ${anonymize(h, n)}`);
 }
 await h.close();
+// The gateway tests' MCP server had a home in the agents folder beside the Core's data folder.
+fs.rmSync(path.join(path.dirname(h.data), 'houston-agents', 'mcp+abuse-stub'), { recursive: true, force: true });
 
 // The record.
 const winver = spawnSync('cmd.exe', ['/d', '/c', 'ver'], { encoding: 'utf8', windowsHide: true }).stdout.trim();
