@@ -13,6 +13,7 @@ import { cycleTab, pickTab } from './shared/session.js';
 import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
 import { describeAsk, secondsLeft } from './shared/approvals.js';
+import { SETTINGS_URL } from './shared/scopes.js';
 
 /** @type {any} */
 const api = /** @type {any} */ (window).acc;
@@ -212,6 +213,7 @@ api.approvals.list().then((/** @type {any[]} */ list) => { approvalCards = list;
 
 // Stop All: no confirm, it's the emergency button. Main does the work; the toast comes back the
 // same way for the button, the hotkey and the tray.
+$('settings-open').addEventListener('click', () => runAction('settings'));
 $('stop-all').addEventListener('click', () => { api.agents.stopAll().catch((/** @type {unknown} */ err) => toast(errText(err))); });
 api.agents.onStopped((/** @type {{ stopped?: number, error?: string }} */ r) => {
   toast(r.error ? `Stop All: ${r.error}`
@@ -638,6 +640,7 @@ const ACTIONS = [
   ['Toggle terminal', 'Ctrl+`', 'toggle-terminal'],
   ['Toggle sidebar', 'Ctrl+B', 'toggle-sidebar'],
   ['Toggle chat', 'Ctrl+Shift+L', 'toggle-chat'],
+  ['Settings: every control and its scope', 'Ctrl+,', 'settings'],
   ['Search everything', 'Ctrl+Shift+F', 'focus-search'],
   ['Open Cronsole', 'pinned tab', 'open-cronsole'],
   ['Connections', 'Hub, Cronsole, shells, chat, MCP', 'connections'],
@@ -701,6 +704,7 @@ function errText(err) {
 function runAction(action) {
   if (action === 'palette') palette.open();
   if (action === 'connections') connections.open();
+  if (action === 'settings') openUrl(SETTINGS_URL);
   if (action === 'open-cronsole') openCronsole();
   if (action.startsWith('panel-')) {
     appEl.classList.remove('no-sidebar');

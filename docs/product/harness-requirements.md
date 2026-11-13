@@ -117,7 +117,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SET-04 | Custom folder icons | Could | Next | Project Hub already stores them |
 | SET-05 | Customisable buttons and tabs | Could | Later | Extends quick links |
 | SET-06 | Customisable home page | Should | Next | Cards the operator can reorder or hide |
-| SET-07 | Clear scoping rules | Must | MVP | The scope table above, shown beside each setting |
+| SET-07 | Clear scoping rules | Must | MVP; built (H2) | The scope table above, shown beside each setting |
 
 ### Logging
 

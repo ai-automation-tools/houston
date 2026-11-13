@@ -904,6 +904,22 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           agentRun.transcript = await tView.view.webContents.executeJavaScript(`({ url: location.href, h1: document.querySelector('h1')?.textContent, text: document.querySelector('pre')?.textContent ?? '', scripts: document.scripts.length })`);
           tabs.close(tTab.id);
         }
+
+        // Settings: the ⚙ button opens every control with its scope, the Core's rows from this Core.
+        await wc.executeJavaScript(`document.getElementById('settings-open').click()`);
+        for (let i = 0; i < 40 && !tabs.list().some((x) => x.url.startsWith('acc://settings/')); i++) await wait(250);
+        const sTab = tabs.list().find((x) => x.url.startsWith('acc://settings/'));
+        const sView = sTab && tabs.tabs.get(sTab.id);
+        if (sView) {
+          for (let i = 0; i < 40 && sView.view.webContents.isLoading(); i++) await wait(100);
+          agentRun.settings = await sView.view.webContents.executeJavaScript(`({
+            h2: [...document.querySelectorAll('h2')].map((h) => h.textContent),
+            rows: Object.fromEntries([...document.querySelectorAll('tbody tr')].map((r) => [r.cells[0].textContent, r.cells[1].textContent])),
+            scripts: document.scripts.length,
+          })`);
+          tabs.close(sTab.id);
+        }
+        agentRun.settingsKey = Menu.getApplicationMenu()?.items.flatMap((m) => m.submenu?.items ?? []).find((m) => m.label === 'Settings')?.accelerator ?? null;
         await wc.executeJavaScript(`(async () => { await window.acc.workspace.switch('default'); await window.acc.workspace.remove('agents-smoke'); })()`).catch(() => {});
       } catch (err) {
         agentRun = { ...agentRun, error: err instanceof Error ? err.message : String(err) };
@@ -936,6 +952,12 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         Boolean(lg?.all > 5 && lg.stopAll && lg.identities.includes('local:smoke-shell') && lg.sessions === 3
           && lg.denied.includes('egress.connect example.org:443') && lg.deniedClasses.every((/** @type {string} */ c) => c.endsWith(' deny'))
           && lg.oneSession && lg.detail), lg);
+      const st = agentRun?.settings;
+      check('⚙ opens Settings: every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
+        Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile,Workspace: Agents smoke,Session'
+          && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
+          && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
+          && agentRun.settingsKey === 'CmdOrCtrl+,'), { ...st, key: agentRun?.settingsKey });
       const tr = agentRun?.transcript;
       check('a session\'s transcript opens from the Logs tab as a script-free page, with what it printed and a typed key replaced by its marker',
         Boolean(tr?.url?.endsWith(String(agentRun?.sessionId)) && tr.h1 === 'Session transcript' && tr.scripts === 0

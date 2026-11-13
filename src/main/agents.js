@@ -36,6 +36,26 @@ export async function transcriptPage(url) {
 }
 
 /**
+ * The Core's part of the Settings page: its data folder, the limits it runs with, and how many
+ * identities, grants, waiting cards and sessions it has. Null off Windows.
+ * @returns {Promise<import('../shared/scopes.js').Snapshot['core']>}
+ */
+export async function coreSettings() {
+  if (process.platform !== 'win32') return null;
+  try {
+    const [status, identities, approvals] = await Promise.all([core.call('core.status', {}, 3000), core.call('identity.list'), core.call('approval.list')]);
+    if (!status.limits) return { error: 'it runs older code than the app; end and run the Houston Core task' };
+    const grants = identities.flatMap((/** @type {any} */ i) => i.grants ?? []);
+    return {
+      dir: dataDir(), sessions: status.sessions, identities: identities.length, grants: grants.length,
+      askGrants: grants.filter((/** @type {any} */ g) => g.effect === 'ask').length, approvals: approvals.length, limits: status.limits,
+    };
+  } catch (e) {
+    return { error: why(e) };
+  }
+}
+
+/**
  * @param {{
  *   terminals: import('./terminal.js').Terminals,
  *   send: (channel: string, ...args: unknown[]) => void,
