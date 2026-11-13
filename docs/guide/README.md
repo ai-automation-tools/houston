@@ -17,7 +17,7 @@ The [repository README](../../README.md) has the short version. These pages have
 |:---|:---|
 | [**🚀 setup.md**](setup.md) | Prerequisites, install, the no-console launcher, `settings.json`, where the app keeps its files and logs. |
 | [**✨ features.md**](features.md) | The browser, terminals, workspaces, the command palette, Files, Bookmarks, Recent and search, in full. |
-| [**🤖 claude-code.md**](claude-code.md) | Register the app's MCP server with Claude Code, and what each of its twelve tools does. |
+| [**🤖 claude-code.md**](claude-code.md) | Register the app's MCP server with Claude Code, and what each of its sixteen tools does. |
 | [**💬 chat.md**](chat.md) | The Chat tab: the key and model in `.env`, the context tray, Stop, saved conversations. |
 | [**⏱️ cronsole.md**](cronsole.md) | Cronsole's scheduled tasks in the Cron tab, its run pages, and its UI in a pinned tab. |
 | [**🔒 security-model.md**](security-model.md) | What a web page, an agent and the app's own processes can and can't do. |

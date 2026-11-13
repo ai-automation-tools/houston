@@ -21,7 +21,7 @@ Start with the roadmap if you want to know what's next, or the decisions folder 
 | Folder | What's inside |
 |:---|:---|
 | [**📖 guide/**](guide/README.md) | Setup, every feature in full, connecting Claude Code, the Chat and Cron tabs, the security model, and contributing. |
-| [**🤖 mcp-server.md**](mcp-server.md) | The app's MCP server on one page: entry file, transport, install line, all twelve tools and the variables they read. |
+| [**🤖 mcp-server.md**](mcp-server.md) | The app's MCP server on one page: entry file, transport, install line, all sixteen tools and the variables they read. |
 
 ## 🗺️ Planning
 
