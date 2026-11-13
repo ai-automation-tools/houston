@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/milestone-Harness_H4_next-8B5CF6?style=for-the-badge" alt="Milestone: Harness H4 next">
-  <img src="https://img.shields.io/badge/schema-v5-2ea44f?style=for-the-badge" alt="Schema v5">
+  <img src="https://img.shields.io/badge/milestone-Harness_H4-8B5CF6?style=for-the-badge" alt="Milestone: Harness H4">
+  <img src="https://img.shields.io/badge/schema-v6-2ea44f?style=for-the-badge" alt="Schema v6">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
@@ -40,6 +40,8 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
 | [**client.js**](client.js) | The client side: `dataDir()`, `callControl()` and `attachSession()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
+| [**standing.js**](standing.js) | Standing grants: the operator's leave for an identity to run one command unattended, with a budget and an expiry, refused once the identity's grants change. |
+| [**harness.js**](harness.js) | `harness run --grant <id>`: what a scheduled task runs. Asks the Core for the run, waits, prints the transcript, and exits with the session's code or one that says why it didn't run. |
 | [**runner.js**](runner.js) | Starts a session: checks the identity and workspace, compiles grants to a container, starts the proxy, opens a PTY, and records start and end. |
 | [**launch.js**](launch.js) | The container request every session starts from, with the defaults the spikes found. |
 | [**backends.js**](backends.js) | The adapter manifests for Claude Code and Codex: how each CLI starts in a container, with a home of its own. |
@@ -72,13 +74,14 @@ There is no lock file. The Core opens `core.db` with `PRAGMA locking_mode = EXCL
 
 The cost: nothing else can open `core.db` while the Core runs, the `sqlite3` command line included. That is the intent. Other programs ask the Core; they don't read its database.
 
-## 🧱 Schema v5
+## 🧱 Schema v6
 
 | Table | Holds |
 |:---|:---|
 | `identities` | One row per principal, shaped like [`identity.schema.json`](schemas/identity.schema.json) with snake_case columns. Every identity but the operator needs an owner, and there is one operator (v3). A row can't be deleted, and `retired` can't be undone, because an id is never reused. |
 | `grants` | One permission for one identity: a typed resource (`file:`, `net:`, `tool:`, `command:`, `secret:`, `session:`), a permission, and `allow`, `ask` or `deny` (`deny` since v2). No row means deny. |
-| `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end. |
+| `sessions` | One launch of an identity: workspace, containment rung, attended or not, the policy version it ran under, start and end, and since v6 the standing grant it ran under. |
+| `standing_grants` | The operator's leave for an unattended run (v6): id, identity, workspace, command, program folders, the identity's grants hash when approved, budget in minutes, expiry, and active, paused or revoked. |
 | `secrets` | The vault (v4): a name and a DPAPI blob; the value is in no other column. |
 | `mcp_servers` | The gateway's registrations (v4): name, the `mcp-server` identity it runs as, its command (an http server's URL), env (text or `secret:<name>`), program folders, state, the tool list as last read, its hash, and the hash the operator pinned. Since v5, its `transport`: `container`, `host` or `http`. |
 
@@ -485,6 +488,42 @@ Checked on 2026-11-13 by [`spikes/h3-host-servers.mjs`](../spikes/h3-host-server
 
 **A result.** Every vault value is redacted, the first content block says it is untrusted content from that server, `_meta["houston/untrusted-content"]` says the same, and anything over 1 MB is cut block by block. Checked in real containers by [`spikes/h3-gateway.mjs`](../spikes/h3-gateway.mjs) on 2026-11-12: a contained agent listed and called the stub server's tools through its proxy and straight at the port, the ungranted tool was refused, and the server's injected token came back only as its marker; the value was in neither the agent's environment nor the audit log.
 
+## ⏰ Standing grants
+
+[`standing.js`](standing.js) is the operator's leave for one identity to run one command in one folder with nobody watching (CORE-15, H4). Cronsole owns the schedule (ADR-004): a scheduled task runs [`harness.js`](harness.js), `node core/harness.js run --grant <id>`, and the Core checks the standing grant at every run.
+
+- **What one holds.** An id (what the task names), the identity, the workspace, the full command and its program folders, a budget in minutes (1 to 1440) and an expiry (at most a year away). It also holds the hash of the identity's grants (resource, permission, effect, expiry) when the operator approved it.
+- **Who makes one.** Only the Control API: `standing.create`, `standing.update` (approve again, with the identity's grants as they are now, and optionally a new budget or expiry), `standing.pause`, `standing.resume` and `standing.revoke` (for good: the id stays taken). Only the operator holds the token, and a contained session can reach neither the pipe nor the token (AT-11).
+- **For now, a command identity.** One with a backend (Claude Code, Codex) is refused: their manifests start the interactive CLI, and an unattended start for them comes with the first signed-in backend.
+- **A run.** `standing.run` refuses, as a `standing.run` deny event, a grant that is paused, revoked or expired, one whose identity's grants differ from what was approved, and one with a run still going. Otherwise it starts a session for the identity, **unattended**, so every `ask` is a deny and no card is shown. The budget is the runner's timer: at the budget the container is ended and the session ends as `timeout`. The session carries `standing_grant` in its `session.start` event and the `sessions` row, and has a transcript like any other.
+- **Stop All** pauses every active standing grant before it stops the sessions, so no scheduled run starts in between (SEC-10). Each comes back only with `standing.resume`; the window's Stop All message says how many it paused.
+
+`harness run` waits for the session to end, prints its transcript (already redacted, plain text) for the task's log, and exits with the session's exit code, or one of these:
+
+| Exit | Meaning |
+|:-:|:---|
+| 64 | Usage: `run --grant <id>` |
+| 69 | The Core isn't reachable, or runs older code (restart it) |
+| 70 | The run was stopped (Stop All, the operator) or lost |
+| 71 | It reached its budget |
+| 72 | Refused: no such grant, revoked, the identity's grants changed, or the runner said no (the identity suspended, the workspace not writable) |
+| 73 | The grant has expired |
+| 74 | A run under the same grant is still going |
+| 75 | The grant is paused |
+
+A command's own exit code from 64 to 75, or a negative one, comes out as 1, so a code from this table always means what it says.
+
+```powershell
+npm run ctl -- identity.create id=local:nightly-docs kind=ai-agent displayName="Nightly docs"
+npm run ctl -- grant.add identity=local:nightly-docs resource=file:D:/work/docs/** permission=write
+npm run ctl -- identity.activate id=local:nightly-docs
+npm run ctl -- standing.create id=nightly-docs identity=local:nightly-docs workspace=D:\work\docs command='cmd.exe /d /c build-docs.cmd' maxMinutes=30 expiresAt=2027-01-31T00:00:00Z
+# The scheduled task's action (Cronsole or Task Scheduler), as the operator:
+node <houston>\core\harness.js run --grant nightly-docs
+```
+
+Checked on 2026-11-13 by [`spikes/h4-standing.mjs`](../spikes/h4-standing.mjs) against a real Core and real containers: a run printed its output and passed on its exit code 3; its `ask` host was refused with no card; a second run while one was going got 74; Stop All ended the first (70) and paused both grants (75); a new grant on the identity gave 72 until it was approved again; an expired grant gave 73; a run past its 1-minute budget was ended at 61 s (71); and with no Core, 69. AT-11 is in [`abuse/`](../abuse/README.md).
+
 ## 🎛️ Control API
 
 [`control.js`](control.js) is how the operator's client drives the Core. The client side is [`client.js`](client.js): Houston's main process uses it through [`src/main/core.js`](../src/main/core.js), and tests, scripts and `ctl.js` call it directly.
@@ -508,7 +547,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `approval.decide` | `id`, `answer` (`once`, `session` or `deny`) | `{ result }`; `not_found` once it was answered, timed out or its session ended |
 | `session.list` | none | the running sessions |
 | `transcript.get` | `id` | `{ id, text, bytes, truncated }`: the session's transcript, its newest 1 MB, already redacted; `not_found` when there is none ([Transcripts](#-transcripts)) |
-| `stop.all` | none | `{ stopped }`, the number stopped. One `stop.all` audit event (resource `Core` / `sessions`) by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
+| `stop.all` | none | `{ stopped, paused }`: the sessions stopped and the standing grants paused (first, so no scheduled run starts in between). One `stop.all` audit event (resource `Core` / `sessions`) by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `identity.list` | optional `status` | identities with their grants |
 | `identity.get` | `id` | one identity with its grants |
@@ -526,8 +565,13 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `secret.set` | `name`, `value` | `{ name, created_at, updated_at, last_used_at }`, never the value. `ctl` reads the value from stdin ([Vault](#-vault)) |
 | `secret.list` | none | names and dates |
 | `secret.delete` | `name` | `{ name, deleted }` |
+| `standing.list`, `standing.get` | `id` for get | standing grants: `id`, `identity`, `workspace`, `command`, `pathDirs`, `maxMinutes`, `expiresAt`, `status`, `lastRunAt`, `grantsChanged` (a run is refused until it is approved again), `running` (its live session) ([Standing grants](#-standing-grants)) |
+| `standing.create` | `id`, `identity`, `workspace`, `command`, `maxMinutes`, `expiresAt`; optional `pathDirs` | the standing grant, active, approving the identity's grants as they are now |
+| `standing.update` | `id`; optional `maxMinutes`, `expiresAt` | approved again with the identity's grants as they are now |
+| `standing.pause`, `standing.resume`, `standing.revoke` | `id` | the standing grant; revoked is for good |
+| `standing.run` | `id` | `{ id, identity, workspace, startedAt, standingGrant }` of the unattended session it started. Refusals have the codes `not_found`, `revoked`, `paused`, `expired`, `changed`, `overlap` and `refused`, each a `standing.run` deny event. `harness.js` is its caller |
 
-Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `conflict` (the lifecycle doesn't allow it, or the id exists), `refused` (the runner said no, with its reason), `internal`. Every call acts as the operator: only the operator holds the token.
+Error codes: `unauthorized`, `bad_request`, `unknown_method`, `not_found`, `conflict` (the lifecycle doesn't allow it, or the id exists), `refused` (the runner said no, with its reason), `internal`, and `standing.run`'s own (above). Every call acts as the operator: only the operator holds the token.
 
 ### A session's terminal
 
@@ -572,7 +616,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. Next on the [roadmap](../docs/ROADMAP.md): H4, standing grants and unattended runs. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. H4 is under way: standing grants and `harness run` are in, and AT-11 passes. Next on the [roadmap](../docs/ROADMAP.md): the Cron tab showing each task's identity and standing grant, then an unattended start for Claude Code and Codex. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 

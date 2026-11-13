@@ -133,10 +133,10 @@ const STOP_ALL_KEY = 'CmdOrCtrl+Shift+Backspace';
  * Stop All (SEC-10): end every session the Core runs. The hotkey, the tray and the toolbar button
  * all land here, in the main process; the tray needs no page, so it works with the window hung.
  * The window shows the result.
- * @returns {Promise<{ stopped: number } | { error: string }>}
+ * @returns {Promise<{ stopped: number, paused?: number } | { error: string }>} paused: standing grants Stop All paused
  */
 async function stopAllSessions() {
-  /** @type {{ stopped: number } | { error: string }} */
+  /** @type {{ stopped: number, paused?: number } | { error: string }} */
   let r;
   try {
     r = await core.call('stop.all', {}, 15_000);

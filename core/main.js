@@ -15,6 +15,7 @@ import { startControl } from './control.js';
 import { createRegistry, ensureOperator } from './identities.js';
 import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
+import { createStanding } from './standing.js';
 import { createTranscripts } from './transcripts.js';
 import { openVault } from './vault.js';
 
@@ -132,8 +133,9 @@ if (import.meta.main) {
     const where = { coreDir: core.dir, tempRoot: win32 ? sessionTemp() : '', agentsRoot: win32 ? agentsRoot(core.dir) : '' };
     const gateway = vault && registry ? createGateway({ db: core.db, audit: core.audit, vault, registry, approvals, ...where, version: VERSION }) : undefined;
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway }) : null;
+    const standing = runner ? createStanding({ db: core.db, audit: core.audit, runner }) : undefined;
     const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
-    const control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault }) : null;
+    const control = runner && registry ? await startControl({ dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts, registry, gateway, vault, standing }) : null;
     if (!control) setInterval(() => {}, 2 ** 30);
     const line = { event: 'core.start', pid: process.pid, dir: core.dir, schema: core.schema, auditBreaks: core.audit.breaks.length, interrupted: core.interrupted.length, pipe: control?.pipe ?? null };
     console.log(JSON.stringify(line));

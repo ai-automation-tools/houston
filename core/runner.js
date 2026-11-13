@@ -108,6 +108,8 @@ export function compileGrants(grants, now = new Date()) {
  * @property {boolean} [attended]
  * @property {{ readonly?: string[], pathDirs?: string[], env?: Record<string, string> }} [program]  toolchain folders and environment; a backend's manifest adds its own
  * @property {{ rows: number, columns: number }} [size]
+ * @property {number} [timeoutMs]  the container is ended after this long (a standing grant's budget); a day by default
+ * @property {string} [standingGrant]  the standing grant it runs under (standing.js), recorded on the session
  */
 
 /** The containment rung this runner starts sessions on; the fallback rung is H7. */
@@ -124,7 +126,7 @@ export function createRunner({
   const root = canonicalPath(tempRoot);
 
   /**
-   * @typedef {{ id: string, identity: string, workspace: string, startedAt: string, input: import('node:stream').Writable, output: import('node:stream').Readable, resize: (size: { rows: number, columns: number }) => void, stop: () => Promise<{ reason: string }>, done: Promise<{ reason: string, exitCode: number | null }> }} Session
+   * @typedef {{ id: string, identity: string, workspace: string, startedAt: string, standingGrant: string | null, input: import('node:stream').Writable, output: import('node:stream').Readable, resize: (size: { rows: number, columns: number }) => void, stop: () => Promise<{ reason: string }>, done: Promise<{ reason: string, exitCode: number | null }> }} Session
    */
 
   /** @param {string} type @param {string} identity @param {string} sessionId @param {object} decision @param {object} [extra] */
@@ -139,7 +141,7 @@ export function createRunner({
    * @returns {Promise<Session>}
    * @throws {RunnerError} with a session.start deny event written first
    */
-  async function start({ identity, workspace, command, attended = true, program = {}, size }) {
+  async function start({ identity, workspace, command, attended = true, program = {}, size, timeoutMs = 24 * 60 * 60_000, standingGrant }) {
     if (typeof identity !== 'string' || !identity) throw new RunnerError('identity is an id like local:dev-codex');
     const id = crypto.randomUUID();
     const version = policyVersion(db, globals);
@@ -232,7 +234,8 @@ export function createRunner({
           readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? [])], denied: compiled.denied,
           pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
           // The manifest's variables win: a caller can't point the CLI at another home, or the session at another gateway.
-          env: { ...program.env, ...backend?.env, ...mcp }, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
+          env: { ...program.env, ...backend?.env, ...mcp }, // The runner ends it at its budget (below); the SDK's own timeout, a minute later, is the backstop.
+          proxyPort: proxy?.port, timeoutMs: timeoutMs + 60_000,
         }),
         containerName: containerName(id),
       };
@@ -250,10 +253,10 @@ export function createRunner({
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),
     };
-    db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt);
+    db.prepare('INSERT INTO sessions (id, identity_id, workspace, containment, attended, policy_version, started_at, standing_grant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, identity, ws, 'container', attended ? 1 : 0, version, startedAt, standingGrant ?? null);
     db.prepare('UPDATE identities SET last_used_at = ? WHERE id = ?').run(startedAt, identity);
-    event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch });
+    event('session.start', identity, id, { result: 'allow', policy_version: version, policy_ids: onWs.determining_policies, reasons: ['started'] }, { launch, ...(standingGrant ? { standing_grant: standingGrant } : {}) });
 
     /** @param {string} reason @param {number | null} exitCode */
     const finish = async (reason, exitCode) => {
@@ -278,14 +281,20 @@ export function createRunner({
     const input = term.input;
     const output = term.output;
     let stopping = false;
+    // Its budget: the SDK reports a PTY session's own timeout as exit -1 (H4 check, 2026-11-13), so the runner keeps time.
+    let overBudget = false;
+    const budget = setTimeout(() => { overBudget = true; try { term.kill(); } catch { /* already exited */ } }, timeoutMs);
     const done = term.wait().then(
-      (/** @type {{ exitCode: number, timedOut: boolean }} */ r) => finish(stopping ? 'stopped' : r.timedOut ? 'timeout' : `exit ${r.exitCode}`, stopping ? null : r.exitCode),
+      (/** @type {{ exitCode: number, timedOut: boolean }} */ r) => {
+        const timedOut = overBudget || r.timedOut;
+        return finish(timedOut ? 'timeout' : stopping ? 'stopped' : `exit ${r.exitCode}`, timedOut || stopping ? null : r.exitCode);
+      },
       (/** @type {Error} */ e) => finish(`lost: ${e.message}`, null),
-    ).finally(() => { try { term.dispose(); } catch { /* already gone */ } });
+    ).finally(() => { clearTimeout(budget); try { term.dispose(); } catch { /* already gone */ } });
 
     /** @type {Session} */
     const session = {
-      id, identity, workspace: ws, startedAt, input, output, done,
+      id, identity, workspace: ws, startedAt, standingGrant: standingGrant ?? null, input, output, done,
       resize: (size) => term.resize(size),
       // Closing the container ends every process in it.
       stop: async () => { stopping = true; try { term.kill(); } catch { /* already exited */ } return done; },
@@ -298,7 +307,7 @@ export function createRunner({
     start,
     /** @param {string} id */
     get: (id) => live.get(id),
-    list: () => [...live.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt })),
+    list: () => [...live.values()].map(({ id, identity, workspace, startedAt, standingGrant }) => ({ id, identity, workspace, startedAt, standingGrant })),
     stopAll: () => Promise.all([...live.values()].map((s) => s.stop())),
     /** The backend manifests, and whether each program is installed on this machine. */
     backends: () => listBackends(where, isFile),
