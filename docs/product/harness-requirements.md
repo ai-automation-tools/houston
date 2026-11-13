@@ -66,7 +66,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-16 | Local LLM support | Should | Next | Discovery of local OpenAI-compatible runtimes, passed to backends that take a base URL |
 | CORE-17 | External model providers | Must | MVP | Whatever the backends support; provider hosts on the session's network allowlist |
 | CORE-18 | Memory | Should | Next | A curated per-profile store with provenance and a review queue |
-| CORE-19 | Conversation history | Must | MVP | Session transcripts; chat history exists today |
+| CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |
 | CORE-20 | Native plugins | Should | MVP | First-party MCP servers behind the gateway |
 | CORE-21 | Third-party plugins | Could | MCP servers MVP, packages Later | A manifest with declared needs; always contained |
 | CORE-22 | MCP integrations | Must | MVP | The gateway |
@@ -123,10 +123,10 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
-| LOG-01 | Conversation logs on by default | Must | MVP | Session transcripts |
+| LOG-01 | Conversation logs on by default | Must | MVP; built (H2) | Session transcripts |
 | LOG-02 | Application logs on by default | Must | Done for the app; Core log MVP | `logs\app.log` and a Core log |
 | LOG-03 | Security and audit logs on by default | Must | MVP | The audit event log |
-| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction, limits, export MVP; rest Next | Redact before write; a size cap; chain check on start |
+| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction, limits, export MVP; rest Next; redaction and caps built for transcripts (H2) | Redact before write; a size cap; chain check on start |
 
 ## Acceptance criteria for the MVP musts
 

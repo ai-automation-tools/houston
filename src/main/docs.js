@@ -69,13 +69,15 @@ async function serveAppPage(req, kind, title, render) {
  * @param {(url: string) => Promise<string>} gitPage acc://git pages, from src/main/git.js
  * @param {(url: string) => Promise<string>} devPage acc://dev pages, from src/main/devservers.js
  * @param {(url: string) => Promise<string>} runLogPage acc://runlog pages, from the run history in src/main/main.js
+ * @param {(url: string) => Promise<string>} transcriptPage acc://transcript pages, from the Core (src/main/agents.js)
  */
-export function serveDocs(session, runPage, gitPage, devPage, runLogPage) {
+export function serveDocs(session, runPage, gitPage, devPage, runLogPage, transcriptPage) {
   session.protocol.handle('acc', async (req) => {
     if (/^acc:\/\/run\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/run\//i, 'Cronsole run', runPage);
     if (/^acc:\/\/git\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/git\//i, 'Git diff', gitPage);
     if (/^acc:\/\/dev\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/dev\//i, 'Dev server', devPage);
     if (/^acc:\/\/runlog\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/runlog\//i, 'Run', runLogPage);
+    if (/^acc:\/\/transcript\//i.test(req.url)) return serveAppPage(req, /^acc:\/\/transcript\//i, 'Transcript', transcriptPage);
     let id;
     try {
       id = docIdFromUrl(req.url);

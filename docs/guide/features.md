@@ -101,6 +101,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 - Pick an identity, a session (the recent ones, by who and when they started) or a decision (allowed, asked, denied) to narrow it. It shows the newest 300 that match and says when there are more.
 - Each row is the event and what it acted on, such as `egress.connect example.org:443` or `approval.decided example.org:443 (deny)`, with who and when. Green allowed, amber asked, red denied; hover for the reasons.
 - Click a row for the whole event as the Core wrote it. **Only this session** (on hover) narrows to that row's session.
+- **Transcript** (on hover, on a session's start and end rows) opens what that session's terminal showed as a page: plain text, with keys, tokens and passwords already replaced by `[REDACTED:…]` when the Core wrote it. A transcript keeps up to 100 MB; past 5 GB in all, the oldest go first. The page shows the newest 1 MB.
 - It only reads. The log itself is `audit/` in the Core's data folder, a hash chain the Core checks at every start ([core/README.md](../../core/README.md)).
 
 ## 🔌 Connections

@@ -32,6 +32,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
+| [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
 | [**control.js**](control.js) | The Control API on a named pipe: sessions, identities, grants and the audit log, each request with the token from `control.json`. |
 | [**client.js**](client.js) | The client side: `dataDir()`, `callControl()` and `attachSession()`, with nothing but Node built-ins, so Houston's window and `ctl.js` don't load the Core. |
 | [**ctl.js**](ctl.js) | `npm run ctl -- <method> key=value ...`: the Control API from a terminal. |
@@ -57,7 +58,7 @@ The Core uses the folder's long, final spelling (`realpathSync.native`): the pat
 
 It sits under the user profile on purpose. A session container is denied the profile, so an agent cannot read the database or, later, the vault. Abuse test AT-01 will check that. Don't point `HOUSTON_CORE_DATA` at a folder any identity is granted.
 
-The folder holds `core.db` (plus its `-wal` file while the Core runs), the `audit\` folder and, while the Core runs, `control.json`.
+The folder holds `core.db` (plus its `-wal` file while the Core runs), the `audit\` folder, the `transcripts\` folder and, while the Core runs, `control.json`.
 
 **Only the operator can read it.** At every start the Core removes the folder's inherited access and grants full control to the operator and SYSTEM alone (`secureDir`, with `icacls`; `chmod 700` elsewhere). Inherited access can name other local accounts: on the dev machine, `%LOCALAPPDATA%` was readable by a `CodexSandboxUsers` group. Entries set directly on the folder are kept: one you chose with `HOUSTON_CORE_DATA` may have some on purpose, and a folder made by an elevated process carries one for Administrators, who are outside the threat model anyway ([ADR-004](../docs/decisions/adr-004-core-companion-process.md)).
 
@@ -409,6 +410,17 @@ Each ask is an `approval.requested` audit event (decision `ask`, the approval id
 
 Checked by `npm run smoke` against a throwaway Core on 2026-11-12: a contained `curl.exe` to an `ask` host showed a card with the identity, `connect to example.org:443` and the workspace; **Deny** gave curl a `403`. Two identical requests to another `ask` host asked once; **Allow for this session** let both through.
 
+## 📼 Transcripts
+
+[`transcripts.js`](transcripts.js) keeps what each session's terminal showed, on by default (CORE-19, LOG-01). One file per session, `transcripts\<session id>.txt` in the data folder, so only the operator can read it. It starts with a `# session` line (id, identity, workspace, start) and ends with `# ended: <reason>`.
+
+- **Plain text.** The terminal's escape sequences are resolved the way the window's own output reader does it (one line at a time), so it reads like the screen did, minus colours.
+- **Redacted before write** (LOG-04). Text is held until its line ends, so a secret split across two chunks is caught whole, and each line is checked before it reaches the disk: Anthropic, OpenAI, GitHub, Slack, AWS and Google key shapes, JWTs, `Bearer`/`Basic` credentials and `NAME=value` where the name ends in KEY, TOKEN, SECRET, PASSWORD or similar become `[REDACTED:<kind>]`; a private key block, over however many lines, becomes one `[REDACTED:private-key]`. A secret with no telltale shape gets through; the vault (H3) adds exact-value redaction for what it injects.
+- **Caps.** One transcript stops at 100 MB with a line saying so (the session runs on). The folder is kept under 5 GB: past it, the oldest finished transcripts are deleted first, each a `log.deleted` audit event by `local:core`. A running session's transcript is never deleted, and the audit log is never rotated here.
+- **Reading one.** `transcript.get` gives a session's newest 1 MB (from a whole line), running or ended. Houston opens it as an `acc://transcript/<id>` page from the Logs tab's **Transcript** button.
+
+A disk error stops that transcript, not the session. Checked by `npm run smoke` on 2026-11-12: a made-up Anthropic key echoed in a contained shell shows only as its marker on the transcript page.
+
 ## 🎛️ Control API
 
 [`control.js`](control.js) is how the operator's client drives the Core. The client side is [`client.js`](client.js): Houston's main process uses it through [`src/main/core.js`](../src/main/core.js), and tests, scripts and `ctl.js` call it directly.
@@ -431,6 +443,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `approval.list` | none | the asks waiting, oldest first: `id`, `identity`, `session_id`, `workspace`, `action`, `resource`, `createdAt`, `expiresAt` |
 | `approval.decide` | `id`, `answer` (`once`, `session` or `deny`) | `{ result }`; `not_found` once it was answered, timed out or its session ended |
 | `session.list` | none | the running sessions |
+| `transcript.get` | `id` | `{ id, text, bytes, truncated }`: the session's transcript, its newest 1 MB, already redacted; `not_found` when there is none ([Transcripts](#-transcripts)) |
 | `stop.all` | none | `{ stopped }`, the number stopped. One `stop.all` audit event (resource `Core` / `sessions`) by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `identity.list` | optional `status` | identities with their grants |
@@ -486,7 +499,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox, Stop All and the Logs tab are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (transcripts, the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
+H1 is done and H2 is under way: backends, the window's Agents tab, the approval inbox, Stop All, the Logs tab and transcripts are in. What comes next is the rest of [Harness H2 to H7](../docs/ROADMAP.md) (the MCP gateway and vault, standing grants, profiles). The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

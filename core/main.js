@@ -14,6 +14,7 @@ import { startControl } from './control.js';
 import { createRegistry, ensureOperator } from './identities.js';
 import { globalDenies } from './policy.js';
 import { createRunner, markInterrupted } from './runner.js';
+import { createTranscripts } from './transcripts.js';
 
 export { dataDir };
 
@@ -121,8 +122,9 @@ if (import.meta.main) {
     const win32 = process.platform === 'win32';
     const approvals = createApprovals({ audit: core.audit });
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, coreDir: core.dir, tempRoot: sessionTemp(), agentsRoot: agentsRoot(core.dir), approvals }) : null;
+    const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit }) : undefined;
     const control = runner ? await startControl({
-      dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals,
+      dir: core.dir, runner, audit: core.audit, schema: core.schema.to, approvals, transcripts,
       // The same globals the runner uses, so both record the same policy version.
       registry: createRegistry({ db: core.db, audit: core.audit, globals: globalDenies({ home: os.homedir(), coreDir: core.dir }) }),
     }) : null;

@@ -22,7 +22,7 @@ import { CONTAINMENT, RunnerError } from './runner.js';
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
-  'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide',
+  'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
 ];
 const MAX_LINE = 1024 * 1024;
 /** How much of a session's recent output an attach replays first. */
@@ -86,11 +86,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0, approvals }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -108,19 +108,28 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
    * Keep a session's output: the newest TAIL characters for the next attach, and every chunk to
    * the connections attached now. Read whether or not anyone is attached, so the session never
    * stalls on a full buffer. When it ends, each attached connection gets `{ end }` and is closed.
-   * @param {{ id: string, output: import('node:stream').Readable, done: Promise<{ reason: string, exitCode: number | null }> }} s
+   * @param {{ id: string, identity: string, workspace: string, startedAt: string, output: import('node:stream').Readable, done: Promise<{ reason: string, exitCode: number | null }> }} s
    */
   function tap(s) {
     const t = { tail: '', subs: new Set() };
     terms.set(s.id, t);
     const decoder = new StringDecoder('utf8');
+    // Its transcript, redacted before write (transcripts.js). A disk error stops the transcript, not the session.
+    /** @type {ReturnType<NonNullable<typeof transcripts>['open']> | undefined} */
+    let script;
+    const safely = (/** @type {() => void} */ fn) => {
+      try { fn(); } catch (e) { script = undefined; console.error(`transcript ${s.id} stopped: ${/** @type {Error} */ (e).message}`); }
+    };
+    safely(() => { script = transcripts?.open(s); });
     s.output.on('data', (chunk) => {
       const data = decoder.write(chunk);
       if (!data) return;
       t.tail = (t.tail + data).slice(-TAIL);
       for (const sub of t.subs) send(sub, { data });
+      if (script) safely(() => script?.write(data));
     });
     void s.done.then((end) => {
+      if (script) safely(() => script?.close(end.reason));
       terms.delete(s.id);
       for (const sub of t.subs) { send(sub, { end }); sub.end(); }
     });
@@ -165,6 +174,12 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'backend.list': () => runner.backends(),
     // The approval inbox: what waits for the operator, and their answer (approvals.js).
     'approval.list': () => approvals?.list() ?? [],
+    // A session's transcript, running or ended: its newest MB, already redacted.
+    'transcript.get': (p) => {
+      const r = transcripts?.read(str(p.id, 'id'));
+      if (!r) throw new ControlError('not_found', 'no transcript has that session id');
+      return r;
+    },
     'approval.decide': (p) => {
       if (!approvals) throw new ControlError('not_found', 'this Core has no approval inbox');
       return approvals.decide(str(p.id, 'id'), p.answer);
