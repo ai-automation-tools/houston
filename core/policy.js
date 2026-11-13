@@ -31,8 +31,9 @@ export const ACTIONS = {
  */
 
 /**
- * Folders no grant can open (scope rules: credential folders, the Core's own data, other
- * profiles' folders). The runner adds the same list to every container's denied paths.
+ * Folders no grant can open (scope rules: credential folders, the Core's own data, every
+ * profile's folder, beside the data folder). The runner adds the same list to every container's
+ * denied paths.
  *
  * @param {{ home: string, coreDir: string, otherProfileDirs?: string[] }} where
  * @returns {GlobalDeny[]}
@@ -41,6 +42,10 @@ export function globalDenies({ home, coreDir, otherProfileDirs = [] }) {
   const under = (...p) => `file:${canonicalPath(path.win32.join(home, ...p))}/**`;
   return [
     { id: 'global:core-data', resource: `file:${canonicalPath(coreDir)}/**` },
+    // Every profile's folder (profiles.js), so no grant reaches another profile's data (H5). Not the
+    // CLI homes beside it: launch.js refuses any folder a launch opens that overlaps a global deny,
+    // and each session opens its own home there.
+    { id: 'global:profiles', resource: `file:${canonicalPath(path.win32.join(path.win32.dirname(coreDir), 'houston-profiles'))}/**` },
     { id: 'global:ssh', resource: under('.ssh') },
     { id: 'global:gnupg', resource: under('.gnupg') },
     { id: 'global:aws', resource: under('.aws') },

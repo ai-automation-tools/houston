@@ -29,6 +29,7 @@ import path from 'node:path';
 import { canonical } from './audit.js';
 import { startEgressProxy } from './egress.js';
 import { OPERATOR } from './identities.js';
+import { DEFAULT_PROFILE, profileOf } from './profiles.js';
 import { LaunchError, launchRequest, systemEnv } from './launch.js';
 import { LEGACY_VERSIONS, META, PROTOCOL_VERSIONS, bearerMatches, checkRequest, isLoopbackHost, isLoopbackOrigin, isObject, rpcError } from './mcp-protocol.js';
 import { PathError, canonicalPath, pathKey } from './paths.js';
@@ -144,6 +145,8 @@ export function createGateway({
 
   /** @param {string} name */
   const row = (name) => /** @type {any} */ (db.prepare('SELECT * FROM mcp_servers WHERE name = ?').get(name));
+  /** A server's profile is its identity's (H5). @param {{ identity_id: string }} reg */
+  const profileOfServer = (reg) => /** @type {any} */ (db.prepare('SELECT profile_id FROM identities WHERE id = ?').get(reg.identity_id))?.profile_id ?? DEFAULT_PROFILE;
   /** @param {unknown} name */
   const must = (name) => {
     if (typeof name !== 'string' || !SERVER_NAME.test(name)) throw new GatewayError('bad_request', 'a server name is lower-case letters, digits, - and _, up to 40, e.g. github');
@@ -196,7 +199,7 @@ export function createGateway({
       const ok = d.decision === 'allow';
       let reason = ok ? `into ${k}` : `no use grant on secret:${name} (${d.reasons.join('; ')})`;
       if (ok) {
-        try { env[k] = (ref[1] ?? '') + vault.reveal(name); } catch (e) { reason = /** @type {Error} */ (e).message; }
+        try { env[k] = (ref[1] ?? '') + vault.reveal(name, profileOfServer(reg)); } catch (e) { reason = /** @type {Error} */ (e).message; }
       }
       event('credential.inject', 'secret.use', reg.identity_id, sessionId, { type: 'Secret', id: name },
         { result: env[k] !== undefined ? 'allow' : 'deny', policy_version: pv, policy_ids: d.determining_policies, reasons: [reason] }, { server: reg.name });
@@ -361,10 +364,11 @@ export function createGateway({
   /**
    * One session's view of the gateway: its token, and the handler its egress proxy hands
    * every origin-form request.
-   * @param {{ id: string, identity: string, workspace: string, attended: boolean, policy: { grants: any[], globals: any[], policyVersion: string } }} s
-   *   policy: the session's frozen grants (runner.js)
+   * @param {{ id: string, identity: string, profile?: string, workspace: string, attended: boolean, policy: { grants: any[], globals: any[], policyVersion: string } }} s
+   *   policy: the session's frozen grants (runner.js); profile: the identity's. Only that profile's servers exist for it.
    */
   function forSession(s) {
+    const profile = s.profile ?? DEFAULT_PROFILE;
     const token = crypto.randomBytes(32).toString('base64url');
     /** Servers started for this session, by name. @type {Map<string, Promise<Awaited<ReturnType<typeof launch>>>>} */
     const running = new Map();
@@ -377,7 +381,8 @@ export function createGateway({
     /** Pinned servers' tools this identity isn't denied. */
     function visibleTools() {
       const out = [];
-      for (const r of /** @type {any[]} */ (db.prepare("SELECT name, tools FROM mcp_servers WHERE state = 'pinned' ORDER BY name").all())) {
+      for (const r of /** @type {any[]} */ (db.prepare("SELECT name, tools, identity_id FROM mcp_servers WHERE state = 'pinned' ORDER BY name").all())) {
+        if (profileOfServer(r) !== profile) continue;
         for (const t of JSON.parse(r.tools ?? '[]')) {
           if (typeof t?.name !== 'string' || check('tool.list', `${r.name}/${t.name}`).decision === 'deny') continue;
           out.push({ ...t, name: `${r.name}.${t.name}` });
@@ -438,7 +443,9 @@ export function createGateway({
       };
 
       if (!isObject(args)) return refuse('arguments must be an object');
-      const reg = server ? row(server) : null;
+      const found = server ? row(server) : null;
+      // Another profile's server is as good as missing: the refusal doesn't say it exists.
+      const reg = found && profileOfServer(found) === profile ? found : null;
       if (!reg) return refuse(`no MCP server named '${server.slice(0, 40)}'`);
       if (reg.state !== 'pinned') return refuse(`${server} is ${reg.state.replace('_', ' ')}, not pinned`);
       if (!JSON.parse(reg.tools ?? '[]').some((/** @type {any} */ t) => t?.name === tool)) return refuse(`${server} has no pinned tool '${tool.slice(0, 80)}'`);
@@ -557,7 +564,11 @@ export function createGateway({
   return {
     forSession,
 
-    list: () => /** @type {any[]} */ (db.prepare('SELECT * FROM mcp_servers ORDER BY name').all()).map(shape),
+    /** @param {unknown} [profile] only that profile's servers */
+    list(profile = undefined) {
+      const p = profile === undefined ? null : profileOf(db, profile, (c, m) => new GatewayError(c, m));
+      return /** @type {any[]} */ (db.prepare('SELECT * FROM mcp_servers ORDER BY name').all()).filter((r) => !p || profileOfServer(r) === p).map(shape);
+    },
     /** @param {unknown} name */
     get: (name) => shape(must(name)),
 
@@ -567,7 +578,7 @@ export function createGateway({
      * http server's identity is unconfined, and says so wherever it appears.
      * @param {any} spec name; transport (container, the default; host; http); command (the full
      *   line) or, for http, url; env ({ VAR: text or 'secret:<name>' }; for http, request
-     *   headers, where 'Bearer secret:<name>' works too); pathDirs (program folders)
+     *   headers, where 'Bearer secret:<name>' works too); pathDirs (program folders); profile (default 'default')
      */
     add(spec) {
       if (!isObject(spec)) throw new GatewayError('bad_request', 'the server is an object');
@@ -590,7 +601,7 @@ export function createGateway({
       try { dirs = pathDirs.map((p) => win(canonicalPath(p))); } catch (e) { throw new GatewayError('bad_request', `pathDirs: ${/** @type {Error} */ (e).message}`); }
       const identity = `local:mcp/${name}`;
       const containment = transport === 'container' ? 'container' : 'unconfined';
-      registry.create({ id: identity, kind: 'mcp-server', displayName: `MCP server ${name}`, purpose: `Runs the MCP server ${name} for the gateway`, containment }, OPERATOR);
+      registry.create({ id: identity, kind: 'mcp-server', displayName: `MCP server ${name}`, purpose: `Runs the MCP server ${name} for the gateway`, containment, profile: spec.profile }, OPERATOR);
       registry.setStatus(identity, 'active', OPERATOR, 'registered as an MCP server');
       const t = now().toISOString();
       db.prepare("INSERT INTO mcp_servers (name, identity_id, transport, command, env, path_dirs, state, added_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'discovered', ?, ?)")

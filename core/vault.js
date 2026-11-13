@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { OPERATOR } from './identities.js';
+import { DEFAULT_PROFILE, profileOf } from './profiles.js';
 
 export class VaultError extends Error {
   /** @param {string} code @param {string} message */
@@ -133,25 +134,32 @@ export async function openVault({ db, dir, audit, sealer, now = () => new Date()
 
   return {
     /**
-     * Store or replace a secret. Never echoes the value.
-     * @param {unknown} name @param {unknown} value @param {string} [by]
+     * Store or replace a secret. Never echoes the value. A name is one secret across all profiles,
+     * so replacing one in another profile is refused rather than moving it.
+     * @param {unknown} name @param {unknown} value @param {string} [by] @param {unknown} [profile] default 'default'
      */
-    set(name, value, by = OPERATOR) {
+    set(name, value, by = OPERATOR, profile = undefined) {
       const n = checkName(name);
+      const p = profileOf(db, profile, (c, m) => new VaultError(c, m));
+      const had = /** @type {any} */ (db.prepare('SELECT profile_id FROM secrets WHERE name = ?').get(n));
+      if (had && had.profile_id !== p) throw new VaultError('conflict', `${n} is a secret in profile ${had.profile_id}; names are unique across profiles`);
       if (typeof value !== 'string' || !value || value.length > MAX_VALUE || /[\0\r\n]/.test(value)) {
         throw new VaultError('bad_request', 'a secret value is one line of text, up to 16 KB');
       }
       const t = now().toISOString();
-      db.prepare(`INSERT INTO secrets (name, blob, created_at, updated_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(name) DO UPDATE SET blob = excluded.blob, updated_at = excluded.updated_at`).run(n, box.seal(Buffer.from(value, 'utf8')), t, t);
+      db.prepare(`INSERT INTO secrets (name, blob, created_at, updated_at, profile_id) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET blob = excluded.blob, updated_at = excluded.updated_at`).run(n, box.seal(Buffer.from(value, 'utf8')), t, t, p);
       known = null;
       record(n, 'set', by);
-      return /** @type {any} */ (db.prepare('SELECT name, created_at, updated_at, last_used_at FROM secrets WHERE name = ?').get(n));
+      return /** @type {any} */ (db.prepare('SELECT name, profile_id AS profile, created_at, updated_at, last_used_at FROM secrets WHERE name = ?').get(n));
     },
 
-    /** Names and dates only. */
-    list: () => /** @type {{ name: string, created_at: string, updated_at: string, last_used_at: string | null }[]} */ (
-      db.prepare('SELECT name, created_at, updated_at, last_used_at FROM secrets ORDER BY name').all()),
+    /** Names, profiles and dates only. @param {unknown} [profile] only that profile's */
+    list(profile = undefined) {
+      const p = profile === undefined ? null : profileOf(db, profile, (c, m) => new VaultError(c, m));
+      return /** @type {{ name: string, profile: string, created_at: string, updated_at: string, last_used_at: string | null }[]} */ (
+        db.prepare('SELECT name, profile_id AS profile, created_at, updated_at, last_used_at FROM secrets ORDER BY name').all()).filter((s) => !p || s.profile === p);
+    },
 
     /** @param {unknown} name @param {string} [by] */
     remove(name, by = OPERATOR) {
@@ -164,13 +172,15 @@ export async function openVault({ db, dir, audit, sealer, now = () => new Date()
 
     /**
      * A value, for the gateway to put into an MCP server's environment. Never for the Control API.
-     * @param {string} name
+     * Only a secret in the server's own profile: another profile's is as good as missing.
+     * @param {string} name @param {string} [profile] the server's
      * @returns {string}
      * @throws {VaultError} not_found
      */
-    reveal(name) {
-      const v = openOne(checkName(name));
-      if (v === null) throw new VaultError('not_found', `no secret named ${name}`);
+    reveal(name, profile = DEFAULT_PROFILE) {
+      const mine = /** @type {any} */ (db.prepare('SELECT profile_id FROM secrets WHERE name = ?').get(checkName(name)));
+      const v = mine?.profile_id === profile ? openOne(name) : null;
+      if (v === null) throw new VaultError('not_found', `no secret named ${name} in profile ${profile}`);
       db.prepare('UPDATE secrets SET last_used_at = ? WHERE name = ?').run(now().toISOString(), name);
       return v;
     },

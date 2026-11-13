@@ -20,10 +20,12 @@ import { GatewayError } from './gateway.js';
 import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
 import { StandingError } from './standing.js';
+import { ProfileError } from './profiles.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
+  'profile.list', 'profile.create',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
@@ -91,11 +93,11 @@ const address = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\${n
  *
  * Every caller holds the operator's token, so every call acts as the operator.
  *
- * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>>, standing?: ReturnType<typeof import('./standing.js').createStanding> }} opts
+ * @param {{ dir: string, runner: ReturnType<typeof import('./runner.js').createRunner>, registry: ReturnType<typeof import('./identities.js').createRegistry>, audit: ReturnType<typeof import('./audit.js').openAudit>, schema?: number, approvals?: ReturnType<typeof import('./approvals.js').createApprovals>, transcripts?: ReturnType<typeof import('./transcripts.js').createTranscripts>, gateway?: ReturnType<typeof import('./gateway.js').createGateway>, vault?: Awaited<ReturnType<typeof import('./vault.js').openVault>>, standing?: ReturnType<typeof import('./standing.js').createStanding>, profiles?: ReturnType<typeof import('./profiles.js').createProfiles> }} opts
  *   schema: the database's schema version, for core.status
  * @returns {Promise<{ pipe: string, file: string, close: () => Promise<void> }>}
  */
-export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault, standing }) {
+export async function startControl({ dir, runner, registry, audit, schema = 0, approvals, transcripts, gateway, vault, standing, profiles }) {
   const startedAt = new Date().toISOString();
   const pipe = address(dir, `houston-core-${crypto.randomBytes(16).toString('hex')}`);
   const token = Buffer.from(crypto.randomBytes(32).toString('base64url'));
@@ -212,7 +214,9 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     },
     'audit.query': (p) => queryAudit(audit, p),
 
-    'identity.list': (p) => registry.list({ status: p.status }),
+    'profile.list': () => need(profiles, 'profiles').list(),
+    'profile.create': (p) => need(profiles, 'profiles').create(p),
+    'identity.list': (p) => registry.list({ status: p.status, profile: p.profile }),
     'identity.get': (p) => registry.get(str(p.id, 'id')),
     'identity.create': (p) => registry.create(p, OPERATOR),
     'identity.activate': (p) => registry.setStatus(str(p.id, 'id'), 'active', OPERATOR, p.reason),
@@ -227,7 +231,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
     // The MCP gateway's servers (gateway.js): add shows the command, install runs it once to read
     // its tools, pin accepts that list by its hash.
-    'mcp.list': () => need(gateway, 'gateway').list(),
+    'mcp.list': (p) => need(gateway, 'gateway').list(p.profile),
     'mcp.get': (p) => need(gateway, 'gateway').get(p.name),
     'mcp.add': (p) => need(gateway, 'gateway').add(p),
     'mcp.update': (p) => need(gateway, 'gateway').update(p.name, p.url),
@@ -235,12 +239,12 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'mcp.pin': (p) => need(gateway, 'gateway').pin(p.name, p.hash),
     'mcp.disable': (p) => need(gateway, 'gateway').disable(p.name),
     // The vault (vault.js): names and dates out, values only in. There is no secret.get.
-    'secret.list': () => need(vault, 'vault').list(),
-    'secret.set': (p) => need(vault, 'vault').set(p.name, p.value),
+    'secret.list': (p) => need(vault, 'vault').list(p.profile),
+    'secret.set': (p) => need(vault, 'vault').set(p.name, p.value, undefined, p.profile),
     'secret.delete': (p) => need(vault, 'vault').remove(p.name),
     // Standing grants (standing.js): made and changed here only, by the operator; standing.run is what
     // `harness run --grant <id>` (harness.js) calls for a scheduled task. Its session is tapped like any other, transcript included.
-    'standing.list': () => need(standing, 'standing grants').list(),
+    'standing.list': (p) => need(standing, 'standing grants').list(p.profile),
     'standing.get': (p) => need(standing, 'standing grants').get(p.id),
     'standing.create': (p) => need(standing, 'standing grants').create(p),
     'standing.update': (p) => need(standing, 'standing grants').update(p.id, p),
@@ -310,7 +314,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       send(sock, { id, result: await fn(params) });
     } catch (e) {
       const err = /** @type {Error & { code?: string }} */ (e);
-      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError || e instanceof StandingError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
+      const code = e instanceof ControlError || e instanceof RegistryError || e instanceof ApprovalError || e instanceof GatewayError || e instanceof VaultError || e instanceof StandingError || e instanceof ProfileError ? err.code : e instanceof RunnerError ? 'refused' : 'internal';
       send(sock, { id, error: { code, message: err.message } });
     }
   }

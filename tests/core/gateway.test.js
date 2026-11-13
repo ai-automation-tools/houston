@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createApprovals } from '../../core/approvals.js';
 import { openAudit } from '../../core/audit.js';
 import { migrate, openDb } from '../../core/db.js';
+import { createProfiles } from '../../core/profiles.js';
 import { GatewayError, MAX_RESULT, createGateway, shapeResult, toolsHash } from '../../core/gateway.js';
 import { OPERATOR, createRegistry, ensureOperator } from '../../core/identities.js';
 import { globalDenies, policyVersion } from '../../core/policy.js';
@@ -94,11 +95,11 @@ async function setup(t) {
   const events = () => [...audit.events()];
 
   /** A session of `identity` and its gateway, behind a plain loopback HTTP server. */
-  async function session(identity, { attended = true } = {}) {
+  async function session(identity, { attended = true, profile = undefined } = {}) {
     const grants = /** @type {any[]} */ (db.prepare('SELECT id, resource, permission, effect, expires_at FROM grants WHERE identity_id = ?').all(identity));
     const globals = globalDenies({ home: os.homedir(), coreDir });
     const id = `sess-${Math.random().toString(16).slice(2)}`;
-    const gw = gateway.forSession({ id, identity, workspace: 'D:/work', attended, policy: { grants, globals, policyVersion: policyVersion(db, globals) } });
+    const gw = gateway.forSession({ id, identity, profile, workspace: 'D:/work', attended, policy: { grants, globals, policyVersion: policyVersion(db, globals) } });
     const server = http.createServer(gw.handle);
     await new Promise((r) => server.listen(0, '127.0.0.1', () => r(undefined)));
     const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
@@ -372,4 +373,22 @@ test('an http server on loopback is reached with its header from the vault; its 
   assert.ok(events().some((e) => e.action === 'mcp.update' && e.server.was === 'http://127.0.0.1:1/mcp'));
   assert.ok(!JSON.stringify(events()).includes(appToken), 'the app\'s token is in no audit event');
   assert.throws(() => gateway.update('nope', url), /no MCP server/);
+});
+
+test('a session sees only its own profile\'s servers: another profile\'s is neither listed nor callable', { skip: !WIN && 'the Core is Windows only' }, async (t) => {
+  const { db, audit, registry, gateway, session, pinnedStub, agent } = await setup(t);
+  createProfiles({ db, audit }).create({ id: 'lab', displayName: 'Lab' });
+  await pinnedStub();
+  registry.create({ id: 'local:lab-dev', kind: 'ai-agent', displayName: 'Lab dev', profile: 'lab' }, OPERATOR);
+  registry.setStatus('local:lab-dev', 'active', OPERATOR);
+  registry.addGrant({ identity: 'local:lab-dev', resource: 'tool:stub/echo', permission: 'call' }, OPERATOR);
+  const lab = await session('local:lab-dev', { profile: 'lab' });
+  assert.deepEqual((await lab.rpc('tools/list')).body.result.tools, []);
+  const call = await lab.rpc('tools/call', { name: 'stub.echo', arguments: { text: 'hi' } });
+  assert.equal(call.body.result.isError, true);
+  assert.match(call.body.result.content[0].text, /no MCP server named 'stub'/);
+  assert.deepEqual([gateway.list('lab').length, gateway.list('default').map((s) => s.name)], [0, ['stub']]);
+  // The control: the same grant in the server's own profile sees it.
+  agent('local:home-dev', [['tool:stub/echo', 'call']]);
+  assert.deepEqual((await (await session('local:home-dev')).rpc('tools/list')).body.result.tools.map((/** @type {any} */ x) => x.name), ['stub.echo']);
 });
