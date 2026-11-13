@@ -415,7 +415,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-In roadmap order ([Harness H1](../docs/ROADMAP.md)): the abuse suite, and starting at logon.
+In roadmap order ([Harness H1](../docs/ROADMAP.md)): starting at logon. The abuse tests H1 can run are in [`abuse/`](../abuse/README.md) and pass.
 
 Module rules that apply as those arrive: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` touches secret values; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port.
 

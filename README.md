@@ -120,6 +120,7 @@ How to contribute: [contributing.md](docs/guide/contributing.md).
 | [**📚 docs/**](docs/README.md) | Roadmap, changelog, design decisions, architecture diagram |
 | [**🧩 src/**](src/README.md) | The app's code |
 | [**🛡️ core/**](core/README.md) | The harness's Core process, partway through H1: SQLite database and single-instance lock, hash-chained audit log, policy check with canonical Windows paths, container launch defaults, the per-session egress proxy, the runner, the identity registry and the Control API on a named pipe. The data contracts are in [`core/schemas/`](core/schemas/). Nothing in the window starts a session yet |
+| [**🥊 abuse/**](abuse/README.md) | The abuse suite: scripted attacks on the Core in real containers (AT-01 to AT-04, AT-12, AT-14, AT-16), run by hand with `node abuse/run.js`; each run is saved in `abuse/results/` |
 | **🧪 spikes/** | Scripts run by hand against the real container SDK: the H0 spikes (`s1` to `s5`) and the H1 checks (`h1-*`). Nothing imports them |
 | [**🧪 tests/**](tests/README.md) | Unit tests and the scripted launch check |
 | **📜 scripts/** | Smoke run, lint, demo build, diagram build, launcher |
