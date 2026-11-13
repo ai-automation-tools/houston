@@ -6,6 +6,7 @@ import { ANSWERS as CORE_ANSWERS } from '../core/approvals.js';
 test('describeAsk says exactly what was asked', () => {
   assert.equal(describeAsk({ action: 'net.connect', resource: { type: 'Host', id: 'example.com:443' } }), 'connect to example.com:443');
   assert.equal(describeAsk({ action: 'tool.call', resource: { type: 'Tool', id: 'github/create_issue' } }), 'call the tool github/create_issue');
+  assert.equal(describeAsk({ action: 'tool.call', resource: { type: 'Tool', id: 'github/create_issue', args_preview: '{"title":"x"}' } }), 'call the tool github/create_issue with {"title":"x"}');
   assert.equal(describeAsk({ action: 'command.run', resource: { type: 'Command', id: 'git push' } }), 'run git push');
   assert.equal(describeAsk({ action: 'secret.use', resource: { type: 'Secret', id: 'gh' } }), 'secret.use on Secret gh');
 });

@@ -131,7 +131,14 @@ export function createEgressProxy({
   // this to fetch revocation lists (H1 egress check); a session reaches only the http hosts
   // its policy names (`net:c.pki.goog:80`).
   const server = http.createServer(async (req, res) => {
-    if (req.url?.startsWith('/')) {
+    // A client that sends even loopback through HTTP_PROXY asks for this port in absolute form.
+    let own = false;
+    try {
+      const u = new URL(req.url ?? '');
+      own = u.protocol === 'http:' && /^(127\.0\.0\.1|localhost|\[::1\])$/i.test(u.hostname) && Number(u.port) === /** @type {net.AddressInfo} */ (server.address())?.port;
+      if (own) req.url = `${u.pathname}${u.search}`;
+    } catch { /* origin-form or malformed: below */ }
+    if (own || req.url?.startsWith('/')) {
       if (fallback) return fallback(req, res);
       res.writeHead(404).end();
       return;
@@ -198,6 +205,15 @@ export function createEgressProxy({
 
     const kind = /** @type {const} */ ({ scheme: 'https' });
     const target = parseAuthority(req.url);
+    // Node's own proxy support tunnels plain HTTP too, so a session calling its gateway asks to
+    // CONNECT to this very port. The tunnel goes nowhere: this server reads it, and the request
+    // inside reaches `fallback` like any origin-form one. Every other loopback target is refused below.
+    if (fallback && target && /^(127\.0\.0\.1|localhost|::1)$/i.test(target.host) && target.port === /** @type {net.AddressInfo} */ (server.address())?.port) {
+      client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      if (head?.length) client.unshift(head);
+      server.emit('connection', client);
+      return;
+    }
     if (!target) {
       emit({ type: 'egress.connect', host: String(req.url ?? '').slice(0, 300), port: 0, ...kind, decision: 'deny', reason: 'malformed target' });
       return refuse(400, 'The target is host:port.');

@@ -269,7 +269,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
           chat: { model: '', missing: ['ACC_CHAT_API_KEY', 'ACC_CHAT_MODEL'] }, cronsole: { configured: true, ui: 'http://localhost:7373' }, mcpUrl: 'http://127.0.0.1:52011/mcp',
           workspaces: 2, workspace: { name: 'acme-api', folder: WS.replaceAll('/', '\\'), tabs: 2, terminals: 1 + [...sessions.values()].filter((s) => s.term).length },
           core: { dir: 'C:\\Users\\dev\\AppData\\Local\\houston-core', sessions: sessions.size, identities: IDENTITIES.length, grants: grants.length, askGrants: grants.filter((g) => g.effect === 'ask').length, approvals: pending.length,
-            limits: { approvalSeconds: APPROVAL_MS / 1000, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 } },
+            limits: { approvalSeconds: APPROVAL_MS / 1000, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: 0, pinned: 0, review: 0 }, secrets: 0 },
         }, escapeHtml);
       }
       const id = transcriptIdFromUrl(url);

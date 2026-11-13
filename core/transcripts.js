@@ -90,9 +90,11 @@ const ID = /^[A-Za-z0-9-]{1,64}$/;
  *   audit: { append: (e: object) => unknown },
  *   capBytes?: number,
  *   sessionCapBytes?: number,
+ *   exact?: (line: string) => string,
  * }} opts
+ *   exact: the vault's redaction of its own stored values (vault.js), run after the shapes
  */
-export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessionCapBytes = SESSION_CAP }) {
+export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessionCapBytes = SESSION_CAP, exact = (l) => l }) {
   fs.mkdirSync(dir, { recursive: true });
   /** Sessions being written now: never rotated out. @type {Set<string>} */
   const open = new Set();
@@ -144,8 +146,8 @@ export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessi
         for (const line of lines) {
           // A private key block is one marker, however many lines and chunks it spans.
           if (pem) { if (PEM_END.test(line)) pem = false; continue; }
-          if (PEM_BEGIN.test(line)) { out.push(redact(line.replace(/-----BEGIN[\s\S]*/, '')) + '[REDACTED:private-key]'); pem = !PEM_END.test(line); continue; }
-          out.push(redact(line));
+          if (PEM_BEGIN.test(line)) { out.push(exact(redact(line.replace(/-----BEGIN[\s\S]*/, ''))) + '[REDACTED:private-key]'); pem = !PEM_END.test(line); continue; }
+          out.push(exact(redact(line)));
         }
         if (!out.length) return;
         let text = out.join('\n') + '\n';

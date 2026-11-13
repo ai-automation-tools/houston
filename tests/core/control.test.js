@@ -321,3 +321,33 @@ test("Houston's client finds the Core through HOUSTON_CORE_DATA, and says ENOENT
   await assert.rejects(core.call('session.list'), (e) => e.code === 'ENOENT');
   if (process.platform === 'win32') assert.equal((await core.status())?.code, 'ENOENT');
 });
+test('secrets go in through secret.set (ctl reads the value from stdin) and never come out; mcp.* and secret.* need their parts', async (t) => {
+  const s = await setup(t);
+  assert.equal((await s.call('mcp.list', {}).catch((e) => e)).code, 'not_found');
+  assert.equal((await s.call('secret.list', {}).catch((e) => e)).code, 'not_found');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-ctl-vault-'));
+  const db = openDb(':memory:');
+  migrate(db);
+  ensureOperator(db, s.audit);
+  const vault = await (await import('../../core/vault.js')).openVault({ db, dir: path.join(dir), audit: s.audit });
+  const v = await startControl({ dir, runner: fakeRunner(), registry: createRegistry({ db, audit: s.audit }), audit: s.audit, vault });
+  t.after(async () => { await v.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const call = (method, params) => callControl(dir, method, params, { timeoutMs: 5000 });
+  const value = ['sk', 'ctltest', 'Zr7KpL0xQ8w2abcd'].join('-');
+
+  const piped = await new Promise((resolve) => {
+    const child = execFile(process.execPath, [CTL, 'secret.set', 'name=api-key'], { env: { ...process.env, HOUSTON_CORE_DATA: dir } }, (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout, stderr }));
+    child.stdin.end(`${value}\n`);
+  });
+  assert.equal(piped.code, 0, piped.stderr);
+  assert.ok(!piped.stdout.includes(value));
+  assert.equal(vault.reveal('api-key'), value, 'the trailing newline is not part of it');
+  const listed = await call('secret.list', {});
+  assert.deepEqual(listed.map((x) => x.name), ['api-key']);
+  assert.ok(!JSON.stringify(listed).includes(value));
+  assert.equal((await call('secret.get', { name: 'api-key' }).catch((e) => e)).code, 'unknown_method');
+  assert.equal((await call('secret.set', { name: 'Bad Name', value }).catch((e) => e)).code, 'bad_request');
+  assert.deepEqual(await call('secret.delete', { name: 'api-key' }), { name: 'api-key', deleted: true });
+  assert.ok(![...s.audit.events()].some((e) => JSON.stringify(e).includes(value)));
+});

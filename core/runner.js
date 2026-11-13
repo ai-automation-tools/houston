@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { BackendError, listBackends, resolveBackend } from './backends.js';
+import { BackendError, gatewayArgs, listBackends, resolveBackend } from './backends.js';
 import { startEgressProxy } from './egress.js';
 import { LaunchError, launchRequest } from './launch.js';
 import { PathError, canonicalPath, pathKey, resolvePath } from './paths.js';
@@ -97,6 +97,7 @@ export function compileGrants(grants, now = new Date()) {
  * @property {import('./backends.js').Where} [where] the operator's folders, to find backend programs; defaults from the environment
  * @property {(p: string) => boolean} [isFile] for tests
  * @property {ReturnType<typeof import('./approvals.js').createApprovals>} [approvals] where an `ask` waits; without it, `ask` is deny
+ * @property {{ forSession: ReturnType<typeof import('./gateway.js').createGateway>['forSession'] }} [gateway] the MCP gateway; every session then gets one on its proxy port
  * @property {{ spawnWithPty: Function }} [sdk] defaults to @microsoft/mxc-sdk/v1
  * @property {() => Date} [now]
  *
@@ -114,7 +115,7 @@ export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */
 export function createRunner({
-  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals,
+  db, audit, coreDir, tempRoot, agentsRoot, home = os.homedir(), sdk, now = () => new Date(), isFile, approvals, gateway,
   where = { home, appData: process.env.APPDATA ?? path.win32.join(home, 'AppData', 'Roaming'), PATH: process.env.PATH ?? '' },
 }) {
   const globals = globalDenies({ home, coreDir });
@@ -182,7 +183,10 @@ export function createRunner({
     const temp = canonicalPath(path.join(win(root), id, 'tmp'));
     /** @type {Awaited<ReturnType<typeof startEgressProxy>> | null} */
     let proxy = null;
+    // The session's view of the MCP gateway, served on its proxy port; its token dies with it.
+    const gw = gateway?.forSession({ id, identity, workspace: ws, attended, policy });
     const cleanup = async () => {
+      await gw?.close();
       if (proxy) await proxy.close();
       // Only ever this session's own folder under tempRoot.
       const mine = path.join(win(root), id);
@@ -195,8 +199,9 @@ export function createRunner({
       fs.mkdirSync(win(temp), { recursive: true });
       // Kept between sessions: the CLI's sign-in, settings and history for this identity.
       if (backend) fs.mkdirSync(backend.home, { recursive: true });
-      if (compiled.net.length || askHosts.length) {
+      if (compiled.net.length || askHosts.length || gw) {
         proxy = await startEgressProxy({
+          fallback: gw?.handle,
           // An `ask` waits in the approval inbox, holding the request, until the operator answers or it times out.
           check: async ({ host, port }) => {
             const d = decide(request('net.connect', 'Host', `${host}:${port}`), { ...policy, now: now() });
@@ -215,14 +220,19 @@ export function createRunner({
           }),
         });
       }
+      const mcp = gw && proxy ? { HOUSTON_MCP_URL: `http://127.0.0.1:${proxy.port}/mcp`, HOUSTON_MCP_TOKEN: gw.token } : {};
+      if (backend && mcp.HOUSTON_MCP_URL) {
+        const extra = gatewayArgs(/** @type {string} */ (who.backend), mcp.HOUSTON_MCP_URL, win(temp));
+        if (extra) command = `${command} ${extra}`;
+      }
       req = {
         ...launchRequest({
           command, workspace: ws, temp, home, globals,
           readwrite: [...compiled.readwrite, ...(backend?.readwrite ?? [])],
           readonly: [...compiled.readonly, ...(backend?.readonly ?? []), ...(program.readonly ?? [])], denied: compiled.denied,
           pathDirs: [...(backend?.pathDirs ?? []), ...(program.pathDirs ?? [])],
-          // The manifest's variables win: a caller can't point the CLI at another home.
-          env: { ...program.env, ...backend?.env }, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
+          // The manifest's variables win: a caller can't point the CLI at another home, or the session at another gateway.
+          env: { ...program.env, ...backend?.env, ...mcp }, proxyPort: proxy?.port, timeoutMs: 24 * 60 * 60_000,
         }),
         containerName: containerName(id),
       };
@@ -235,7 +245,7 @@ export function createRunner({
     const launch = {
       command, container: req.containerName,
       readwrite: req.filesystem.readwritePaths, readonly: req.filesystem.readonlyPaths, denied: req.filesystem.deniedPaths,
-      network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}) } : { proxy: false },
+      network: proxy ? { proxy: true, hosts: compiled.net.map((g) => g.resource.slice(4)), ...(askHosts.length ? { ask: askHosts } : {}), ...(gw ? { gateway: true } : {}) } : { proxy: false },
       skipped: compiled.skipped,
       // Hosts the manifest needs that no allow grant covers: the session will be refused them.
       ...(backend ? { backend: { name: who.backend, home: backend.home, missingHosts: backend.hosts.filter((h) => decide(request('net.connect', 'Host', h), policy).decision !== 'allow') } } : {}),

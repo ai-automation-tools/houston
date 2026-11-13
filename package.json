@@ -28,7 +28,8 @@
   },
   "devDependencies": {
     "@microsoft/mxc-sdk": "^1.0.1",
-    "electron": "^45.2.3"
+    "electron": "^45.2.3",
+    "koffi": "^3.3.7"
   },
   "overrides": {
     "adm-zip": "^0.6.1"

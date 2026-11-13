@@ -69,7 +69,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |
 | CORE-20 | Native plugins | Should | MVP | First-party MCP servers behind the gateway |
 | CORE-21 | Third-party plugins | Could | MCP servers MVP, packages Later | A manifest with declared needs; always contained |
-| CORE-22 | MCP integrations | Must | MVP | The gateway |
+| CORE-22 | MCP integrations | Must | MVP; gateway built (H3), screen next | The gateway |
 
 ### Existing tools
 
@@ -86,12 +86,12 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
-| SEC-01 | MCP proxy and gateway | Must | MVP | Core gateway: discovery, validation, policy, credential injection, audit |
+| SEC-01 | MCP proxy and gateway | Must | MVP; gateway built (H3) | Core gateway: discovery, validation, policy, credential injection, audit |
 | SEC-02 | Identity Center: agents as identities with attributes, access, permissions and lifecycle | Must | Registry MVP, full screen Next | Core identity registry |
 | SEC-03 | Permissions | Must | MVP | Default-deny grants over files, commands, network, tools, secrets |
 | SEC-04 | Sandboxing | Must | MVP | An OS container per session (ADR-004) |
 | SEC-05 | Approvals | Must | MVP; inbox built (H2) | An approval inbox (`core/approvals.js`); decided in the shell, executed by the Core |
-| SEC-06 | Secrets management | Must | MVP | A Core vault; credentials reach MCP servers, never an agent |
+| SEC-06 | Secrets management | Must | MVP; vault built (H3) | A Core vault; credentials reach MCP servers, never an agent |
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
 | SEC-08 | Governance | Should | Next | Policy versions, expiry, grant review, lifecycle states, export |
 | SEC-09 | Controls enforced at execution boundaries | Must | MVP | Container policy and gateway checks. A prompt or a UI toggle is never the control |

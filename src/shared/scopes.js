@@ -29,6 +29,8 @@ export const SCOPES = {
  *   core: null | { error: string } | {
  *     dir: string, sessions: number, identities: number, grants: number, askGrants: number, approvals: number,
  *     limits: { approvalSeconds: number, transcriptBytes: number, sessionTranscriptBytes: number },
+ *     mcp?: null | { servers: number, pinned: number, review: number },  null: a Core from before the gateway
+ *     secrets?: null | number,
  *   },
  * }} Snapshot
  */
@@ -63,6 +65,8 @@ export function controls(s) {
     { label: 'Close to tray', scope: 'global', value: s.closeToTray ? 'on' : 'off', where: 'File menu, or the tray menu' },
     // Profile: one profile until H5.
     { label: 'Agent identities and grants', scope: 'profile', value: fromCore((c) => `${count(c.identities, 'identity', 'identities')}, ${count(c.grants, 'grant')} (${c.askGrants} ask)`), where: 'npm run ctl -- identity.* / grant.* (the Identity Center comes in H5); the Agents tab lists them' },
+    { label: 'MCP servers (gateway)', scope: 'profile', value: fromCore((c) => (c.mcp ? `${count(c.mcp.servers, 'server')} registered, ${c.mcp.pinned} pinned${c.mcp.review ? `, ${c.mcp.review} need review` : ''}` : 'needs a newer Core')), where: 'npm run ctl -- mcp.add / mcp.install / mcp.pin (an Integrations screen is next); each agent session reaches them through its own gateway, HOUSTON_MCP_URL' },
+    { label: 'Secrets (vault)', scope: 'profile', value: fromCore((c) => (typeof c.secrets === 'number' ? `${count(c.secrets, 'secret')} stored; values are never shown` : 'needs a newer Core')), where: 'npm run ctl -- secret.set name=<name> (the value from stdin); only an MCP server with a secret: use grant receives one' },
     { label: 'Project Hub', scope: 'profile', value: `${s.hubUrl}${s.hubToken === 'sent' ? ', with its access token' : s.hubToken === 'withheld' ? ', access token withheld (plain http to another machine)' : ''}`, where: 'settings.json hubUrl, or ACC_HUB_URL in .env; its access token is ACC_HUB_TOKEN in .env' },
     { label: 'Workspaces', scope: 'profile', value: count(s.workspaces, 'workspace'), where: 'The 🧭 Houston menu; add one by right-clicking a folder in Files' },
     { label: 'Bookmarks source', scope: 'profile', value: s.bookmarkSource || 'the first browser found', where: 'The picker at the top of the Bookmarks tab' },
