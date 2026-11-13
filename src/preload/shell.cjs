@@ -141,6 +141,14 @@ contextBridge.exposeInMainWorld('acc', {
   /** The Core's audit log, filtered by identity, session and decision. */
   logs: { query: invoke('logs:query') },
 
+  /** The Core's MCP servers, secret names and backends; install, pin and disable a server by name. */
+  integrations: {
+    info: invoke('integrations:info'),
+    install: invoke('integrations:install'),
+    pin: invoke('integrations:pin'),
+    disable: invoke('integrations:disable'),
+  },
+
   /** The Core's approval inbox: cards waiting for the operator, and their answers. */
   approvals: {
     list: invoke('approvals:list'),

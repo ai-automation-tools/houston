@@ -70,7 +70,7 @@ export const ABOUT_HTML = `<article class="demo-doc">
       <tr><td><b>🧰 Workbench</b></td><td>Browser tabs, PowerShell terminals, Project Hub's files and bookmarks, Cronsole's tasks, Git and dev servers, a chat pane, and an MCP server whose actions wait for your click.</td></tr>
     </tbody>
   </table>
-  <p>Still to come: an MCP gateway and credential vault, so agents reach tools and secrets only through the Core; standing grants; profiles; and a fallback for machines without containers.</p>
+  <p>Agents reach MCP tools only through the Core's gateway, from servers you pinned, and the servers get their credentials from a vault no agent can read (the Integrations tab). Still to come: standing grants for unattended runs, profiles, and a fallback for machines without containers.</p>
 
   <hr>
 

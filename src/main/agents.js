@@ -9,6 +9,7 @@
 import os from 'node:os';
 import { attachSession, dataDir } from '../../core/client.js';
 import { SHELL_COMMAND, agentRows } from '../shared/agents.js';
+import { backendRows, secretRows, serverName, serverRows, toolsHashArg } from '../shared/integrations.js';
 import { toolchainPath } from '../shared/toolchain.js';
 import { docPage, escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
@@ -62,6 +63,31 @@ export async function coreSettings() {
     return { error: why(e) };
   }
 }
+
+/**
+ * The Integrations tab's main-process side (H3): the Core's MCP servers, vault secret names and
+ * agent backends, and the three things the operator does to a server from the window. The
+ * renderer names a server, and to pin, the hash of the list it showed; the Core refuses a pin
+ * whose hash isn't the list as last read.
+ */
+export const integrations = {
+  async info() {
+    if (process.platform !== 'win32') return { error: 'The gateway runs in the Core, which runs on Windows only.' };
+    try {
+      const [servers, secrets, backends] = await Promise.all([core.call('mcp.list'), core.call('secret.list'), core.call('backend.list')]);
+      return { servers: serverRows(servers), secrets: secretRows(secrets), backends: backendRows(backends) };
+    } catch (e) {
+      return { error: /** @type {any} */ (e).code === 'unknown_method' ? 'The Core runs older code than the app: end and run the Houston Core task.' : why(e) };
+    }
+  },
+  // Longer than the gateway's own start timeout, so its reason comes back rather than ours.
+  /** @param {unknown} name */
+  install: (name) => core.call('mcp.install', { name: serverName(name) }, 180_000).then(() => true),
+  /** @param {unknown} name @param {unknown} hash */
+  pin: (name, hash) => core.call('mcp.pin', { name: serverName(name), hash: toolsHashArg(hash) }).then(() => true),
+  /** @param {unknown} name */
+  disable: (name) => core.call('mcp.disable', { name: serverName(name) }).then(() => true),
+};
 
 /**
  * @param {{

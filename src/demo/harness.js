@@ -1,9 +1,10 @@
 // The demo's stand-in for the Houston Core: made-up agent identities and grants, one session
 // already running, contained terminal tabs, the approval inbox, the audit log, transcripts and
-// the Settings page. It runs the window's own rules (src/shared/agents.js, logs.js, scopes.js,
+// the Settings page and the Integrations tab. It runs the window's own rules (src/shared/agents.js, logs.js, scopes.js,
 // approvals.js) on fabricated state, in the browser tab. Nothing runs, nothing is fetched.
 
 import { agentRows } from '../shared/agents.js';
+import { backendRows, secretRows, serverName, serverRows } from '../shared/integrations.js';
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
@@ -28,6 +29,22 @@ const IDENTITIES = [
 const BACKENDS = [
   { name: 'claude-code', displayName: 'Claude Code', hosts: ['api.anthropic.com:443'], signIn: 'Run /login in the session, once; it signs in to a home of its own.', installed: true },
   { name: 'codex', displayName: 'Codex', hosts: ['chatgpt.com:443'], signIn: 'Sign in with ChatGPT in the session, once.', installed: true },
+];
+const hash = (/** @type {string} */ c) => c.repeat(64);
+const tool = (/** @type {string} */ name, /** @type {string} */ description) => ({ name, description });
+const HOUSTON_TOOLS = [tool('list_tabs', 'The open browser tabs.'), tool('open_tab', 'Open a URL in a new tab.'), tool('terminal_run', 'Run a command in a terminal, after the user clicks Run.')];
+const GITHUB_TOOLS = [tool('list_issues', 'List issues in a repository.'), tool('create_pull_request', 'Open a pull request.')];
+const CRONSOLE_TOOLS = [tool('list_tasks', 'List scheduled tasks.'), tool('run_task', 'Run a task now.'), tool('get_task_history', "A task's recent runs.")];
+/** Made-up registrations: the app's own server, a contained one, and one read but not yet pinned. */
+const SERVERS = () => [
+  { name: 'houston', identity: 'local:mcp/houston', transport: 'http', url: 'http://127.0.0.1:52011/mcp', command: null, env: { Authorization: 'Bearer secret:houston-mcp' }, pathDirs: [], state: 'pinned', tools: HOUSTON_TOOLS, toolsHash: hash('a'), pinnedHash: hash('a') },
+  { name: 'github', identity: 'local:mcp/github', transport: 'container', command: '"C:\\Program Files\\nodejs\\node.exe" D:\\mcp\\github\\dist\\index.js', env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'secret:github-token' }, pathDirs: ['C:\\Program Files\\nodejs'], state: 'pinned', tools: GITHUB_TOOLS, toolsHash: hash('b'), pinnedHash: hash('b') },
+  { name: 'cronsole', identity: 'local:mcp/cronsole', transport: 'host', command: '"C:\\Program Files\\nodejs\\node.exe" D:\\work\\cronsole\\mcp-server\\dist\\index.js', env: { CRONSOLE_TOKEN: 'secret:cronsole-token' }, pathDirs: ['C:\\Program Files\\nodejs'], state: 'installed', tools: CRONSOLE_TOOLS, toolsHash: hash('c'), pinnedHash: null },
+];
+const SECRETS = [
+  { name: 'cronsole-token', created_at: '2026-11-12T09:00:00Z', updated_at: '2026-11-12T09:00:00Z', last_used_at: null },
+  { name: 'github-token', created_at: '2026-11-12T09:00:00Z', updated_at: '2026-11-12T09:00:00Z', last_used_at: '2026-11-13T08:00:00Z' },
+  { name: 'houston-mcp', created_at: '2026-11-12T09:00:00Z', updated_at: '2026-11-13T08:00:00Z', last_used_at: '2026-11-13T08:05:00Z' },
 ];
 /** @param {string} id */
 const nameOf = (id) => IDENTITIES.find((i) => i.id === id)?.displayName ?? id;
@@ -207,6 +224,14 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     }, approvalAfterMs);
   }
 
+  const servers = SERVERS();
+  /** @param {unknown} name */
+  const server = (name) => {
+    const s = servers.find((x) => x.name === serverName(name));
+    if (!s) throw new Error(`no MCP server named ${String(name)}`);
+    return s;
+  };
+
   const list = () => [...sessions.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt }));
   const grants = IDENTITIES.flatMap((i) => i.grants);
 
@@ -236,6 +261,17 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
       },
     },
 
+    integrations: {
+      info: async () => ({ servers: serverRows(/** @type {any} */ (servers)), secrets: secretRows(SECRETS), backends: backendRows(BACKENDS) }),
+      install: async (/** @type {unknown} */ name) => {
+        const s = server(name);
+        s.state = s.state === 'discovered' ? 'installed' : s.state;
+        return true;
+      },
+      pin: async (/** @type {unknown} */ name) => { const s = server(name); s.state = 'pinned'; s.pinnedHash = s.toolsHash; return true; },
+      disable: async (/** @type {unknown} */ name) => { server(name).state = 'disabled'; return true; },
+    },
+
     approvals: {
       list: async () => [...pending],
       decide: async (/** @type {string} */ id, /** @type {string} */ answer) => {
@@ -259,7 +295,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
     },
 
     /** The Core's Connections row data. */
-    status: () => ({ pid: 4242, startedAt: iso(now() - 4 * 60 * MIN), schema: 3, containment: 'container', sessions: sessions.size }),
+    status: () => ({ pid: 4242, startedAt: iso(now() - 4 * 60 * MIN), schema: 5, containment: 'container', sessions: sessions.size }),
 
     /** The body of an app page the demo can show (Settings, a transcript), or null. @param {string} url */
     page(url) {
@@ -269,7 +305,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
           chat: { model: '', missing: ['ACC_CHAT_API_KEY', 'ACC_CHAT_MODEL'] }, cronsole: { configured: true, ui: 'http://localhost:7373' }, mcpUrl: 'http://127.0.0.1:52011/mcp',
           workspaces: 2, workspace: { name: 'acme-api', folder: WS.replaceAll('/', '\\'), tabs: 2, terminals: 1 + [...sessions.values()].filter((s) => s.term).length },
           core: { dir: 'C:\\Users\\dev\\AppData\\Local\\houston-core', sessions: sessions.size, identities: IDENTITIES.length, grants: grants.length, askGrants: grants.filter((g) => g.effect === 'ask').length, approvals: pending.length,
-            limits: { approvalSeconds: APPROVAL_MS / 1000, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: 0, pinned: 0, review: 0 }, secrets: 0 },
+            limits: { approvalSeconds: APPROVAL_MS / 1000, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: servers.length, pinned: servers.filter((x) => x.state === 'pinned').length, review: servers.filter((x) => x.state === 'needs_review').length }, secrets: SECRETS.length },
         }, escapeHtml);
       }
       const id = transcriptIdFromUrl(url);

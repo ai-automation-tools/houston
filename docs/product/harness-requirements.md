@@ -69,7 +69,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | CORE-19 | Conversation history | Must | MVP; transcripts built (H2) | Session transcripts; chat history exists today |
 | CORE-20 | Native plugins | Should | MVP; Houston's own MCP server behind the gateway (H3) | First-party MCP servers behind the gateway |
 | CORE-21 | Third-party plugins | Could | MCP servers MVP, packages Later | A manifest with declared needs; always contained |
-| CORE-22 | MCP integrations | Must | MVP; gateway built (H3), screen next | The gateway |
+| CORE-22 | MCP integrations | Must | MVP; gateway and Integrations tab built (H3) | The gateway |
 
 ### Existing tools
 

@@ -36,7 +36,7 @@ import { mergeNews, parseNews } from '../shared/news.js';
 import { addWorkspace, drivePath, removeWorkspace, saveWorkspace, workspaceSummary } from '../shared/workspaces.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { core } from './core.js';
-import { coreSettings, createAgents, transcriptPage } from './agents.js';
+import { coreSettings, createAgents, integrations, transcriptPage } from './agents.js';
 import { settingsBody } from '../shared/scopes.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
@@ -763,6 +763,10 @@ async function createWindow() {
   handle('agents:stop', (session) => agents.stop(session));
   handle('agents:stopAll', () => stopAllSessions());
   handle('logs:query', (filter) => agents.logs(filter));
+  handle('integrations:info', () => integrations.info());
+  handle('integrations:install', (name) => integrations.install(name));
+  handle('integrations:pin', (name, hash) => integrations.pin(name, hash));
+  handle('integrations:disable', (name) => integrations.disable(name));
   // The Core's approval inbox: what's waiting, and the operator's answer (approvals.js).
   const approvals = watchApprovals(send);
   handle('approvals:list', () => approvals.list());

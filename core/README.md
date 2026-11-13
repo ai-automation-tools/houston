@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/milestone-Harness_H3-8B5CF6?style=for-the-badge" alt="Milestone: Harness H3">
+  <img src="https://img.shields.io/badge/milestone-Harness_H4_next-8B5CF6?style=for-the-badge" alt="Milestone: Harness H4 next">
   <img src="https://img.shields.io/badge/schema-v5-2ea44f?style=for-the-badge" alt="Schema v5">
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
@@ -572,7 +572,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1 and H2 are done, and H3 is under way: the gateway, the vault, and Houston's own MCP server and Cronsole's behind the gateway are in, and DNS from a container is decided (see [Egress proxy](#-egress-proxy)). Next in [H3](../docs/ROADMAP.md): the Integrations screen. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
+H1 and H3 are done, and H2 waits only on the owner's items: H3 brought the gateway, the vault, Houston's own MCP server and Cronsole's behind the gateway, the DNS decision (see [Egress proxy](#-egress-proxy)) and the window's Integrations tab. Next on the [roadmap](../docs/ROADMAP.md): H4, standing grants and unattended runs. AT-06 to AT-08 pass in [`abuse/`](../abuse/README.md) with the rest of the suite.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 
