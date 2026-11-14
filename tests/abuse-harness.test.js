@@ -3,7 +3,63 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { anonymize, attempt, firstLine, removeDir } from '../abuse/harness.js';
+import { gateProblems, parseRecord, recordLine, requiredTests } from '../abuse/gate.js';
+import { anonymize, at13FromSmoke, attempt, firstLine, removeDir } from '../abuse/harness.js';
+
+const REQ = ['AT-01', 'AT-02', 'AT-13'];
+const NOW = { clean: true, ids: ['a1', 'b2'] };
+const good = () => ({ full: true, tests: REQ.map((id) => ({ id, pass: true })), attempts: 9, through: 0, source: { clean: true, ids: ['a1', 'b2'] } });
+
+test('the gate reads the required tests from the requirements table, each once', () => {
+  const md = '| ID | x |\n|:---|:---|\n| AT-02 | b |\n| AT-01 | a |\n| AT-01 | again |\nSee AT-09 in prose.\n  | AT-03 | indented, not a row |';
+  assert.deepEqual(requiredTests(md), ['AT-01', 'AT-02']);
+  assert.deepEqual(requiredTests(''), []);
+  assert.ok(requiredTests(fs.readFileSync(new URL('../docs/product/harness-requirements.md', import.meta.url), 'utf8')).length >= 16);
+});
+
+test('the gate record round-trips through a results file, and a missing or broken one is null', () => {
+  const r = good();
+  assert.deepEqual(parseRecord(`# Run\n\n| a | b |\n${recordLine(r)}\n`), r);
+  assert.equal(parseRecord('# Run\n'), null);
+  assert.equal(parseRecord('<!-- abuse-gate {not json} -->'), null);
+  assert.equal(parseRecord('<!-- abuse-gate {"tests":[]} -->'), null);
+  assert.equal(parseRecord('text <!-- abuse-gate {"tests":[],"source":{"ids":[]}} --> inline'), null);
+});
+
+test('the gate passes a full, clean, all-pass run on this code and refuses everything else', () => {
+  assert.deepEqual(gateProblems(good(), REQ, NOW), []);
+  assert.equal(gateProblems(null, REQ, NOW).length, 1);
+  /** @param {(r: ReturnType<typeof good>) => void} f @param {RegExp} re @param {typeof NOW} [now] */
+  const refused = (f, re, now = NOW) => { const r = good(); f(r); const p = gateProblems(r, REQ, now); assert.ok(p.some((x) => re.test(x)), p.join(' ')); };
+  refused((r) => { r.full = false; }, /full run/);
+  refused((r) => { r.tests = r.tests.filter((t) => t.id !== 'AT-13'); }, /Not run: AT-13/);
+  refused((r) => { r.tests[1].pass = false; }, /Failed: AT-02/);
+  refused((r) => { /** @type {any} */ (r.tests[0]).pass = 'true'; }, /Failed: AT-01/);
+  refused((r) => { r.through = 1; }, /got through/);
+  refused((r) => { r.attempts = 0; }, /No attempts/);
+  refused((r) => { r.source.clean = false; }, /uncommitted changes\.$/);
+  refused(() => {}, /checkout has uncommitted/, { clean: false, ids: NOW.ids });
+  refused((r) => { r.source.ids = ['a1', 'zz']; }, /other code/);
+  refused(() => {}, /other code/, { clean: true, ids: ['a1'] });
+});
+
+test('AT-13 comes from the smoke summary: every read refused or opaque and the tab still on the web page', () => {
+  const detail = { mcp: 'refused: Failed to fetch', mcpNoCors: 'opaque', controlFile: 'refused: x', settings: 'refused: x', transcript: 'refused: x', navigated: 'https://example.com/' };
+  const summary = (/** @type {object} */ d, result = 'pass') => ({ checks: [{ name: 'a tab loads', result: 'pass' }, { name: 'AT-13: a web page ...', result, detail: JSON.stringify(d) }] });
+  const ok = at13FromSmoke(summary(detail));
+  assert.equal(ok.pass, true);
+  assert.equal(ok.attempts.length, 6);
+  assert.ok(ok.attempts.every((a) => a.result === 'blocked'));
+  const read = at13FromSmoke(summary({ ...detail, settings: 'read 200: <html>' }));
+  assert.equal(read.pass, false);
+  assert.equal(read.attempts.filter((a) => a.result === 'got through').length, 1);
+  assert.equal(at13FromSmoke(summary({ ...detail, navigated: 'acc://settings/' })).pass, false);
+  assert.equal(at13FromSmoke(summary({ mcp: 'refused' })).pass, false, 'missing tries fail');
+  assert.equal(at13FromSmoke(summary(detail, 'fail')).pass, false);
+  for (const s of [null, {}, { checks: 'x' }, { checks: [null, { name: 'other' }] }, { checks: [{ name: 'AT-13', result: 'pass', detail: 'nope' }] }]) {
+    assert.equal(at13FromSmoke(s).pass, false);
+  }
+});
 
 test('removeDir deletes links, never what they point at', (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-abuse-'));

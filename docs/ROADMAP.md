@@ -183,7 +183,7 @@ Done when two identities finish a Roundtable conversation with correct attributi
 
 ### 🧰 Harness H7: hardening and release readiness
 
-- [ ] The full abuse suite as a release gate, run on a real machine with the output saved
+- [-] The full abuse suite as a release gate, run on a real machine with the output saved — claimed 2026-11-13 by houston-roadmap
 - [ ] The fallback containment rung, labelled "limited containment" wherever a session uses it
 - [ ] Installer and uninstaller; the uninstaller removes every ACL entry and task the app added
 - [ ] Signed updates that refuse unsigned or older packages and never apply while a session runs; one-release rollback

@@ -4,12 +4,15 @@
 // folder, in the profile as a real one is), both wiped first. It needs internet for AT-04's
 // control. It prints each test and writes the run, with names and paths anonymized, to
 // abuse/results/<date>.md. Exit code 0 only if every test it ran passed.
+// A full run (no test names, or AT-13 named) also runs `npm run smoke` for AT-13, which needs the
+// window, so it needs a desktop session. The results file ends with the record `npm run gate` reads.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AGENT, anonymize, createHarness } from './harness.js';
+import { recordLine, sourceNow } from './gate.js';
+import { AGENT, anonymize, at13FromSmoke, createHarness } from './harness.js';
 import * as at01 from './tests/at01-private-folders.js';
 import * as at02 from './tests/at02-links.js';
 import * as at03 from './tests/at03-path-forms.js';
@@ -35,7 +38,10 @@ if (process.platform !== 'win32' || !process.env.H1_ROOT || !process.env.LOCALAP
 }
 const wanted = process.argv.slice(2).map((a) => a.toUpperCase());
 const tests = wanted.length ? TESTS.filter((t) => wanted.includes(t.id)) : TESTS;
-if (!tests.length) { console.error(`No such test. Tests: ${TESTS.map((t) => t.id).join(', ')}`); process.exit(1); }
+const smoke = !wanted.length || wanted.includes('AT-13');
+if (!tests.length && !smoke) { console.error(`No such test. Tests: ${TESTS.map((t) => t.id).join(', ')}, AT-13`); process.exit(1); }
+// What the run is on, taken before it starts, for the gate.
+const source = sourceNow();
 
 const h = await createHarness({ root: path.join(process.env.H1_ROOT, 'houston-abuse'), data: path.join(process.env.LOCALAPPDATA, 'houston-core-abuse') });
 await h.startCore();
@@ -64,6 +70,20 @@ for (const t of tests) {
 await h.close();
 // The gateway tests' MCP server had a home in the agents folder beside the Core's data folder.
 fs.rmSync(path.join(path.dirname(h.data), 'houston-agents', 'mcp+abuse-stub'), { recursive: true, force: true });
+
+// AT-13 runs in the window: the smoke run's check, read from its summary.
+if (smoke) {
+  console.log('AT-13 through npm run smoke ...');
+  const summaryFile = fileURLToPath(new URL('../.smoke/summary.json', import.meta.url));
+  fs.rmSync(summaryFile, { force: true });
+  spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/smoke.js', import.meta.url))], { stdio: 'inherit', windowsHide: true });
+  let summary = null;
+  try { summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8')); } catch { /* no summary: AT-13 fails */ }
+  const r = at13FromSmoke(summary);
+  results.push(r);
+  console.log(`AT-13 ${r.pass ? 'PASS' : 'FAIL'}`);
+  for (const a of r.attempts) console.log(`  ${a.result.padEnd(12)} ${a.name}: ${anonymize(h, a.evidence)}`);
+}
 
 // The record.
 const winver = spawnSync('cmd.exe', ['/d', '/c', 'ver'], { encoding: 'utf8', windowsHide: true }).stdout.trim();
@@ -96,6 +116,8 @@ const md = [
     ...r.notes.map((n) => `- ${cell(n)}`),
     ...(r.notes.length ? [''] : []),
   ]),
+  recordLine({ full: !wanted.length, tests: results.map((r) => ({ id: r.id, pass: r.pass })), attempts: all.length, through, source }),
+  '',
 ].join('\n');
 const out = fileURLToPath(new URL(`./results/${date}.md`, import.meta.url));
 fs.mkdirSync(path.dirname(out), { recursive: true });
