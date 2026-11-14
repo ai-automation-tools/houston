@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { gateProblems, parseRecord, recordLine, requiredTests } from '../abuse/gate.js';
+import { codeLines, gateProblems, parseRecord, recordLine, requiredTests } from '../abuse/gate.js';
 import { anonymize, at13FromSmoke, attempt, firstLine, removeDir } from '../abuse/harness.js';
 
 const REQ = ['AT-01', 'AT-02', 'AT-13'];
@@ -41,6 +41,12 @@ test('the gate passes a full, clean, all-pass run on this code and refuses every
   refused(() => {}, /checkout has uncommitted/, { clean: false, ids: NOW.ids });
   refused((r) => { r.source.ids = ['a1', 'zz']; }, /other code/);
   refused(() => {}, /other code/, { clean: true, ids: ['a1'] });
+});
+
+test('the fingerprint leaves Markdown out, so a docs change needs no new run', () => {
+  const out = '100644 blob aa\tcore/README.md\n100644 blob bb\tcore/main.js\r\n M core/NOTES.MD\n?? "core/\\303\\251.md"\n\n M src/x.js\n';
+  assert.deepEqual(codeLines(out), ['100644 blob bb\tcore/main.js', ' M src/x.js']);
+  assert.deepEqual(codeLines(''), []);
 });
 
 test('AT-13 comes from the smoke summary: every read refused or opaque and the tab still on the web page', () => {

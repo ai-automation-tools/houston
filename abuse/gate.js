@@ -1,8 +1,10 @@
 // The release gate: `npm run gate`. Exit 0 only if the newest saved abuse run (abuse/results/)
 // was a full run of every AT-nn in harness-requirements.md, every test passed, no attempt got
-// through, and it ran on the code that is checked out now, committed (the fingerprint below).
+// through, and it ran on the code that is checked out now, committed (the fingerprint below;
+// Markdown files don't count, so a docs change needs no new run).
 // It runs nothing itself: `node abuse/run.js` is the run, on a real machine, and saves the record.
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,12 +56,15 @@ export function gateProblems(r, required, now) {
   return problems;
 }
 
-/** The checkout's fingerprint: HEAD's object id for each source path, and whether any has changes. */
+/** Lines that aren't about a Markdown file: docs don't change what a test ran. @param {string} out */
+export const codeLines = (out) => out.split('\n').map((l) => l.trimEnd()).filter((l) => l && !/\.md"?$/i.test(l));
+
+/** The checkout's fingerprint: for each source path, a hash of HEAD's blob ids under it, and whether any has changes. */
 export function sourceNow() {
-  const git = (/** @type {string[]} */ args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', windowsHide: true }).trim();
+  const git = (/** @type {string[]} */ args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', windowsHide: true });
   return {
-    clean: git(['status', '--porcelain', '--', ...SOURCE_PATHS]) === '',
-    ids: SOURCE_PATHS.map((p) => git(['rev-parse', `HEAD:${p}`])),
+    clean: codeLines(git(['status', '--porcelain', '--', ...SOURCE_PATHS])).length === 0,
+    ids: SOURCE_PATHS.map((p) => crypto.createHash('sha256').update(codeLines(git(['ls-tree', '-r', 'HEAD', '--', p])).join('\n')).digest('hex')),
   };
 }
 
