@@ -5,28 +5,32 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-AT--01_to_12,_14_to_16-8B5CF6?style=for-the-badge" alt="AT-01 to AT-12, AT-14 to AT-16">
-  <a href="results/"><img src="https://img.shields.io/badge/last_run-12%2F12_pass,_0%2F97_through-2ea44f?style=for-the-badge" alt="Last run: 12 of 12 pass, 0 of 97 attempts through"></a>
+  <img src="https://img.shields.io/badge/tests-AT--01_to_16-8B5CF6?style=for-the-badge" alt="AT-01 to AT-16">
+  <a href="results/"><img src="https://img.shields.io/badge/last_run-16%2F16_pass,_0%2F122_through-2ea44f?style=for-the-badge" alt="Last run: 16 of 16 pass, 0 of 122 attempts through"></a>
   <a href="../README.md"><img src="https://img.shields.io/badge/↩-repository_root-6B7280?style=for-the-badge" alt="Repository root"></a>
 </p>
 
 ---
 
-The abuse tests are defined in [harness-requirements.md](../docs/product/harness-requirements.md#abuse-tests). This folder runs the ones the Core alone can: AT-13 needs a browser tab, so `npm run smoke` runs it in the window.
+The abuse tests are defined in [harness-requirements.md](../docs/product/harness-requirements.md#abuse-tests). This folder runs all of them: AT-13 needs a browser tab, so a full run starts `npm run smoke` for it after the rest.
 
 ```powershell
 $env:H1_ROOT = 'D:\scratch'          # any folder outside your user profile
 node abuse/run.js                    # all of them; or name some: node abuse/run.js AT-01 AT-04
+npm run gate                         # before a release: exit 0 only if the newest saved run allows it
 ```
 
-It needs internet (AT-04's control host) and takes about two minutes. It starts the real Core (`node core/main.js`) with its data folder in `%LOCALAPPDATA%\houston-core-abuse` and works in `<H1_ROOT>\houston-abuse`, wiping both first. It never touches the real Core's data folder. It creates one identity, `local:abuse-agent`, through the Control API, with write on its workspace and one internet host, and every attack runs as that identity in its own container. The exit code is 0 only if every test passed, and the run is saved to [`results/<date>.md`](results/) with the user, machine and paths replaced.
+It needs internet (AT-04's control host) and takes about two minutes. It starts the real Core (`node core/main.js`) with its data folder in `%LOCALAPPDATA%\houston-core-abuse` and works in `<H1_ROOT>\houston-abuse`, wiping both first. It never touches the real Core's data folder. It creates one identity, `local:abuse-agent`, through the Control API, with write on its workspace and one internet host, and every attack runs as that identity in its own container. A full run (or one naming AT-13) also needs a desktop session, for the smoke run. The exit code is 0 only if every test passed, and the run is saved to [`results/<date>.md`](results/) with the user, machine and paths replaced.
+
+**The release gate.** Each results file ends with a one-line record: whether it was a full run, each test and whether it passed, the attempts and how many got through, and a hash of the files under `core`, `src`, the suite and `package-lock.json` at the commit it ran on (Markdown left out, so a docs change needs no new run), with whether any had uncommitted changes. `npm run gate` reads the newest results file and exits 1, saying why, unless that run covered every AT-nn in the [requirements' table](../docs/product/harness-requirements.md#abuse-tests), every test passed, no attempt got through, and it ran on committed code identical to what is checked out now. So any change to the Core, the window or the suite needs a fresh full run, committed, before a release. Commit the code first, run, then commit the results file.
 
 ## 📁 What's here
 
 | File | What it does |
 |:---|:---|
 | [**run.js**](run.js) | Starts the Core, makes the identity, runs the tests in order, prints them and writes the results file. |
-| [**harness.js**](harness.js) | The Core as a child process, Control API calls, attack scripts run as batch files in a session, process snapshots, and the anonymizer. |
+| [**harness.js**](harness.js) | The Core as a child process, Control API calls, attack scripts run as batch files in a session, process snapshots, AT-13's result from the smoke summary, and the anonymizer. |
+| [**gate.js**](gate.js) | `npm run gate`: the release gate over the newest results file's record. |
 | [**tests/**](tests/) | One file per abuse test, each exporting `id`, `title` and `run(h)`. |
 | [**results/**](results/) | One saved run per day, committed. |
 
@@ -52,9 +56,9 @@ It needs internet (AT-04's control host) and takes about two minutes. It starts 
 
 **How an attempt is judged.** Each one runs as a line of a batch file in the session and keeps its stdout, stderr and exit code in the workspace. A read "got through" only if it returned a token the test planted (or, where nothing can be planted, any content). Contents from protected places are never kept or printed: they are checked for the token or counted, then the files are deleted. Links are removed without following them.
 
-**Not covered yet.** A Core that crashes right after a spawn (AT-16's other half) needs a Core that crashes on cue; [`spikes/h1-dead-core.mjs`](../spikes/h1-dead-core.mjs) checks it. H3's bar of zero successes in at least 50 attempts across the MVP set is met: the run on 2026-11-12 had 97 attempts and none got through, and the run on 2026-11-13 with AT-11 had 107. The gateway tests (AT-06 to AT-08) set up their own MCP server, the stub from `tests/core/stub-mcp-server.js`, as `abuse-stub` with a random vault secret, and an identity `local:abuse-tools` to call it ([`tests/gateway-setup.js`](tests/gateway-setup.js)).
+**Not covered yet.** A Core that crashes right after a spawn (AT-16's other half) needs a Core that crashes on cue; [`spikes/h1-dead-core.mjs`](../spikes/h1-dead-core.mjs) checks it. H3's bar of zero successes in at least 50 attempts across the MVP set is met: the run on 2026-11-12 had 97 attempts and none got through, and the full run on 2026-11-13 had 122, AT-13 included. The gateway tests (AT-06 to AT-08) set up their own MCP server, the stub from `tests/core/stub-mcp-server.js`, as `abuse-stub` with a random vault secret, and an identity `local:abuse-tools` to call it ([`tests/gateway-setup.js`](tests/gateway-setup.js)).
 
-**AT-13 runs in the window.** `npm run smoke` has the real example.com page in a tab try the MCP server (with and without CORS), the Core's `control.json` as a `file:` URL, and Houston's own `acc://settings/` and `acc://transcript/` pages, then navigate to one: nothing comes back readable and the tab stays on the web page. The gateway half is a unit test (`tests/core/gateway.test.js`): a foreign Host or Origin is refused. The Control API is a named pipe, which a page can't open.
+**AT-13 runs in the window.** A full run starts `npm run smoke`, which has the real example.com page in a tab try the MCP server (with and without CORS), the Core's `control.json` as a `file:` URL, and Houston's own `acc://settings/` and `acc://transcript/` pages, then navigate to one: nothing comes back readable and the tab stays on the web page. Each of those six is an attempt in the results file. The gateway half is a unit test (`tests/core/gateway.test.js`): a foreign Host or Origin is refused. The Control API is a named pipe, which a page can't open.
 
 **What the runs found.** A contained process can resolve names through the system resolver, though it can't open a connection: a DNS query could carry data out. The containers SDK has no control for it, so it was accepted as a documented limit on 2026-11-13 ([Core README](../core/README.md#-egress-proxy)). AT-07 (2026-11-12) also lists the folder names under the session temp root (the drive enumeration S1 found), though it reads no file there.
 
