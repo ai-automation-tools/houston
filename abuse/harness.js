@@ -184,5 +184,29 @@ export function anonymize(h, s) {
   return out;
 }
 
+/**
+ * AT-13 from a smoke run's summary.json: each thing the page tried is an attempt, blocked unless
+ * it came back readable, and the tab must still show the web page after trying to leave for an app page.
+ * @param {unknown} summary @returns {Result}
+ */
+export function at13FromSmoke(summary) {
+  const id = 'AT-13';
+  const title = 'A web page in a browser tab requests the gateway and the Control API';
+  const checks = /** @type {{ checks?: { name?: unknown, result?: unknown, detail?: unknown }[] }} */ (summary ?? {}).checks;
+  const check = Array.isArray(checks) ? checks.find((c) => String(c?.name).startsWith('AT-13')) : undefined;
+  if (!check) return { id, title, pass: false, attempts: [], notes: ['The smoke run has no AT-13 check: it did not reach it, or ran with a URL.'] };
+  /** @type {Record<string, unknown>} */
+  let d = {};
+  try { d = JSON.parse(String(check.detail)); } catch { /* not JSON: no attempts, so it fails below */ }
+  /** @type {[string, string][]} */
+  const tries = [['mcp', 'POST tools/list to the MCP server'], ['mcpNoCors', 'the same with no-cors'], ['controlFile', "read the Core's control.json as a file: URL"],
+    ['settings', 'read acc://settings/'], ['transcript', 'read acc://transcript/<id>']];
+  /** @type {Attempt[]} */
+  const attempts = tries.filter(([k]) => k in d).map(([k, name]) => ({ name, result: String(d[k]).startsWith('read') ? 'got through' : 'blocked', evidence: String(d[k]) }));
+  if ('navigated' in d) attempts.push({ name: 'navigate the tab to acc://settings/', result: /^https:\/\/example\.com/.test(String(d.navigated)) ? 'blocked' : 'got through', evidence: `the tab shows ${d.navigated}` });
+  const pass = check.result === 'pass' && attempts.length === tries.length + 1 && attempts.every((a) => a.result === 'blocked');
+  return { id, title, pass, attempts, notes: ['Run in the window by `npm run smoke`, on a throwaway profile.'] };
+}
+
 /** The first line of an error, short. @param {string} s */
 export const firstLine = (s) => (s.split(/\r?\n/).find((l) => l.trim()) ?? '').trim().slice(0, 120);
