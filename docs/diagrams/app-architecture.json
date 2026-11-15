@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "b13690c086d4f291ddd32040303339977ac10e53"
+      "revision": "8c9a4aadb390f99cf1da9dfdaaa27cfa73decf99"
     }
   },
   "components": [
@@ -46,21 +46,21 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 246,
-          "end_line": 270,
+          "line": 285,
+          "end_line": 309,
           "label": "shell WebContentsView"
         },
         {
           "path": "src/preload/shell.cjs",
           "line": 22,
-          "end_line": 146,
+          "end_line": 192,
           "label": "window.acc preload"
         },
         {
           "path": "src/renderer/app.js",
-          "line": 132,
-          "end_line": 175,
-          "label": "confirm bar, run tabs"
+          "line": 138,
+          "end_line": 240,
+          "label": "confirm bar, approval inbox, run tabs"
         }
       ]
     },
@@ -81,14 +81,14 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 142,
-          "end_line": 167,
+          "line": 178,
+          "end_line": 203,
           "label": "handle() refuses other senders"
         },
         {
           "path": "src/main/main.js",
-          "line": 637,
-          "end_line": 714,
+          "line": 737,
+          "end_line": 840,
           "label": "IPC channels"
         }
       ]
@@ -122,8 +122,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 272,
-          "end_line": 277,
+          "line": 311,
+          "end_line": 316,
           "label": "deny-by-default permissions"
         }
       ]
@@ -144,14 +144,14 @@
       "sources": [
         {
           "path": "src/main/hub.js",
-          "line": 26,
-          "end_line": 75,
+          "line": 32,
+          "end_line": 82,
           "label": "scan, webmarks, favorites"
         },
         {
           "path": "src/main/hub.js",
-          "line": 134,
-          "end_line": 172,
+          "line": 142,
+          "end_line": 180,
           "label": "/api/events subscription"
         },
         {
@@ -179,7 +179,7 @@
         {
           "path": "src/main/cronsole.js",
           "line": 14,
-          "end_line": 70,
+          "end_line": 71,
           "label": "spawn on Electron as Node"
         },
         {
@@ -193,7 +193,7 @@
     {
       "id": "userdata",
       "type": "database",
-      "label": "userData JSON",
+      "label": "Profile JSON",
       "sublabel": "settings, workspaces, chats, runs",
       "pos": [
         780,
@@ -246,8 +246,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 569,
-          "end_line": 589,
+          "line": 657,
+          "end_line": 677,
           "label": "chat IPC"
         }
       ]
@@ -284,7 +284,7 @@
       "id": "terms",
       "type": "backend",
       "label": "Terminals",
-      "sublabel": "shells and managed runs",
+      "sublabel": "shells, runs, agent sessions",
       "tag": "fixed shells",
       "pos": [
         490,
@@ -298,7 +298,7 @@
         {
           "path": "src/main/terminal.js",
           "line": 62,
-          "end_line": 100,
+          "end_line": 90,
           "label": "pty.spawn: a shell or a run"
         },
         {
@@ -338,14 +338,14 @@
         },
         {
           "path": "src/shared/mcp.js",
-          "line": 221,
-          "end_line": 242,
+          "line": 129,
+          "end_line": 150,
           "label": "host and token check"
         },
         {
           "path": "src/main/main.js",
-          "line": 445,
-          "end_line": 538,
+          "line": 529,
+          "end_line": 626,
           "label": "tools over app sources"
         }
       ]
@@ -366,8 +366,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 530,
-          "end_line": 536,
+          "line": 617,
+          "end_line": 623,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -395,8 +395,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 460,
-          "end_line": 524,
+          "line": 544,
+          "end_line": 608,
           "label": "terminal_run, cron_run, tab_click, tab_fill"
         },
         {
@@ -587,8 +587,8 @@
       "title": "What keeps pages out",
       "items": [
         "Browser tabs are sandboxed, get only the extension-API and ad-block preloads and are denied every permission but fullscreen, pointer lock and clipboard writes",
-        "Every IPC channel refuses any sender but the shell view",
-        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs, terminal_run run logs) run no scripts; only documents may link to documents, the rest open from the app only"
+        "Every IPC channel refuses any sender but the shell view's main frame on acc://shell",
+        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs, terminal_run run logs, agent session transcripts, Settings, the Identity Center) run no scripts; only documents may link to documents, the rest open from the app only"
       ]
     },
     {
@@ -614,11 +614,13 @@
       "title": "Optional parts",
       "items": [
         "Without Project Hub the browser and terminals still work; Files and Bookmarks offer Retry",
+        "ACC_HUB_TOKEN from .env goes to Project Hub as a bearer header on every request when Hub asks for one",
         "The chat needs ACC_CHAT_API_KEY and ACC_CHAT_MODEL; there is no default model",
         "Cronsole starts only when ACC_CRONSOLE_MCP names its server script",
         "The News tab reads the sources listed in settings.json from the main process, an http(s) feed or a local .md file, with a 15 second deadline and a 2 MB cap; the page never names the address",
         "Closing the window hides Houston to the tray by default (layout.json closeToTray), so terminals, dev servers and the MCP server keep running; Quit exits",
-        "Dev servers and the Git tab need a workspace folder; git and npm are found on PATH"
+        "Dev servers and the Git tab need a workspace folder; git and npm are found on PATH",
+        "Agent sessions the harness's Core runs open as terminal tabs; each ask they raise waits in an approval bar that the Core denies if its countdown runs out"
       ]
     }
   ]
