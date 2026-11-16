@@ -62,6 +62,12 @@
       "required": ["segment", "line", "reason"],
       "properties": { "segment": { "type": "string" }, "line": { "type": "integer", "minimum": 0 }, "reason": { "type": "string" } }
     },
+    "migration": {
+      "description": "On a 'core.start' event whose start upgraded the database: the schema versions, and the copy made first (absent for a new database).",
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 1 }, "backup": { "type": "string" } }
+    },
     "audit": {
       "description": "The hash chain. hash = SHA-256 over prev_hash and this event's canonical JSON (keys sorted at every level) without the 'audit.hash' field.",
       "type": "object",
