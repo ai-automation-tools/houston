@@ -4,33 +4,33 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 
 ## Open
 
+## Answered
+
 ### Provider adapters: which second provider, and may the app start a CLI agent itself?
 
 - Asked: 2026-10-26 by ai-command-center-roadmap
 - Context: Milestone D's "Provider adapters" puts the model API and CLI agents behind one contract (health, capabilities, invoke, cancel, events), Claude first. With Claude's Messages API as the only provider, the contract is an interface with one implementation, and the chat already works through `src/shared/chat.js`. The CLI half means Houston launching `claude`, `codex` or `opencode` itself, a new kind of process start: today the only things the app runs are fixed shells (`src/shared/shells.js`), the managed run's fixed script, Cronsole's server and the Dev tab's package manager, each pinned in AGENTS.md. Options: (a) build the contract with the API adapter only, and add CLI adapters later; (b) name the second provider (a CLI agent run headless in a workspace folder, or another model API) and write an ADR for how the app may start it (fixed executable from PATH's absolute entries, fixed arguments, prompt passed how, which tools it gets); (c) drop it: CLI agents already run in Houston's terminals and reach the app over MCP. Recommendation: (c) for now, or (b) if you want the chat pane to drive a CLI agent.
 - Partly answered 2026-11-12 by [ADR-004](decisions/adr-004-core-companion-process.md): the Core starts agent CLIs and Houston asks it to. The second-provider half is still open.
-- Answer:
+- Answer: (c) Drop the second provider for now. ADR-004 already covers the Core starting agent CLIs. (Mike, 2026-11-16)
 
 ### Harness: which fallback if process containers fail on Windows 11 Home?
 
 - Asked: 2026-11-12 with ADR-004
 - Context: spike H0-S1 tests Microsoft Execution Containers on Home. If it fails, the options are (a) dedicated local Windows accounts plus firewall rules, which need a one-time admin setup, or (b) shrink the harness to the gateway, identities and audit with no file containment. Only needed if S1 fails.
 - Note 2026-11-12: S1 ran and containers work on Home ([results](decisions/spikes/2026-11-12-h0-spike-results.md)). This only matters if the slowdown below is rejected.
-- Answer:
+- Answer: Moot. Spike S1 passed on Windows 11 Home, so no fallback is chosen. Reopen only if the slowdown is rejected. (Mike, 2026-11-16)
 
 ### Harness: is a one-time admin setup acceptable later?
 
 - Asked: 2026-11-12 with ADR-004
 - Context: per-agent Windows accounts and runs while logged off both need admin rights once. The MVP needs none. Recommendation: not before H4 is in use.
-- Answer:
+- Answer: Acceptable, but not before H4 is in use. (Mike, 2026-11-16)
 
 ### Harness: which backends after Codex and Claude Code?
 
 - Asked: 2026-11-12 with ADR-004
 - Context: H2 ships adapters for Codex and Claude Code. Each further agent CLI is a manifest and a contract test. Recommendation: decide after a week of H2 use.
-- Answer:
-
-## Answered
+- Answer: Decide after a week of H2 use. (Mike, 2026-11-16)
 
 ### Harness: is the container slowdown acceptable?
 
