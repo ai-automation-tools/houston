@@ -220,9 +220,17 @@ async function readNewsSource(url) {
     .catch((err) => { throw new Error(err?.name === 'TimeoutError' ? `No answer within ${NEWS_TIMEOUT_MS / 1000} s` : "Couldn't reach it"); });
   if (!res.ok) throw new Error(`It returned ${res.status}`);
   if (Number(res.headers.get('content-length')) > NEWS_MAX_BYTES) throw new Error('The answer is over 2 MB');
-  const text = await res.text();
-  if (text.length > NEWS_MAX_BYTES) throw new Error('The answer is over 2 MB');
-  return text;
+  // Read with a running count: a body with no Content-Length stops at the cap instead of
+  // being buffered whole. Throwing inside the loop cancels the stream.
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of res.body ?? []) {
+    size += chunk.byteLength;
+    if (size > NEWS_MAX_BYTES) throw new Error('The answer is over 2 MB');
+    chunks.push(chunk);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 /** @param {Electron.MenuItemConstructorOptions[]} [extensions] the Extensions submenu, once they're set up */

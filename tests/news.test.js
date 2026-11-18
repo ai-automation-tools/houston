@@ -62,6 +62,19 @@ test('parseNews takes nothing from empty or odd input, and caps a source', () =>
   assert.equal(parseNews('<rss><item><title>a\u202eb\u0007c</title><link>https://example.com/</link></item></rss>', 'x')[0].title, 'a b c');
 });
 
+test('parseNews stays linear on unclosed tags a feed host controls', () => {
+  // Each of these took minutes with one lazy regex per opener; now well under a second together.
+  const n = 200_000;
+  const started = Date.now();
+  assert.deepEqual(parseNews(`<rss>${'<item>'.repeat(n)}`, 'x'), []);
+  assert.deepEqual(parseNews(`<rss>${'<item '.repeat(n)}`, 'x'), []);
+  assert.equal(parseNews(`<rss><item><title>${'<![CDATA[<'.repeat(n)}</title><link>https://example.com/</link></item></rss>`, 'x').length, 1);
+  assert.deepEqual(parseNews(`${'[](https://x'.repeat(n)}`, 'x'), []);
+  assert.ok(Date.now() - started < 3000, `took ${Date.now() - started} ms`);
+  // A closed item after unclosed ones of the other kind is still read.
+  assert.deepEqual(parseNews('<feed><item><entry><title>t</title><link href="https://example.com/"/></entry></feed>', 'x').map((i) => i.title), ['t']);
+});
+
 test('mergeNews sorts newest first, keeps undated in order, drops repeats and caps', () => {
   const a = [
     { title: 'old', url: 'https://example.com/1', at: 1, source: 'a' },

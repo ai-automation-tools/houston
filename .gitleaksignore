@@ -1,0 +1,6 @@
+# tests/core/transcripts.test.js: planted fake credentials (an all-sequential AWS ID, the jwt.io
+# sample token, "abcdef123456", a truncated OpenSSH header) that test the transcript redactor. Not secrets.
+679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:aws-access-token:27
+679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:jwt:29
+679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:generic-api-key:32
+679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:private-key:52
