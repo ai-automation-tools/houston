@@ -1,4 +1,5 @@
-<h1 align="center">📋 Changelog</h1>
+<h1 align="c- **Architecture diagram re-pinned** (2026-11-18). The news-source reader in `src/main/main.js` now counts bytes as it streams, which moved seven cited line ranges down by 8 lines; the diagram is pinned to 99532117 with no change to what it says.
+enter">📋 Changelog</h1>
 
 <p align="center">
   <em>Every change to the app, newest first.</em>
