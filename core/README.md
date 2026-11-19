@@ -38,6 +38,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**skills.js**](skills.js) | Skills: installing a skill folder into a profile with its content hash, and the skills a session gets (its `skill:` grants, unchanged ones only), linked into an agent CLI's home. |
 | [**quarantine.js**](quarantine.js) | The quarantine profile preset: where its work folder goes and the rules the Core holds everything in such a profile to. |
 | [**profiles.js**](profiles.js) | Profiles: the isolation unit each identity and secret belongs to, each with a folder of its own. |
+| [**profile-export.js**](profile-export.js) | A profile as one JSON document with no secret value in it, and back through the operator's own calls, as drafts and paused grants. |
 | [**approvals.js**](approvals.js) | The approval inbox: a policy `ask` waits here for the operator's once, session or deny, and denies at its timeout. |
 | [**transcripts.js**](transcripts.js) | Session transcripts: each session's terminal as plain text, secrets replaced by a marker before write, with a cap per transcript and for the folder. |
 | [**vault.js**](vault.js) | The vault: named secrets sealed with DPAPI and entropy only the Core holds. Set, list and delete from the Control API; values go only to the gateway, for an MCP server's environment. |
@@ -533,6 +534,22 @@ Then grant each agent `tool:roundtable/*` (permission `call`) and seed a convers
 
 AT-01 checks it: a file planted in a second profile's folder can't be read from a session, and a read grant on that folder is refused at `session.start`.
 
+### 📤 Export and restore
+
+[`profile-export.js`](profile-export.js) (H7) writes what a profile holds in the Core to one JSON document and reads it back, for a new machine or a profile rebuilt by hand:
+
+```powershell
+node core/ctl.js profile.export id=lab > lab-profile.json
+Get-Content lab-profile.json -Raw | node core/ctl.js profile.restore
+```
+
+(Call `node core/ctl.js` here, not `npm run ctl`: npm prints its own lines into the file.)
+
+- **What goes out.** The profile's id, name and preset; its agent and service-account identities that aren't retired, each with its grants that haven't expired; its MCP servers with their identities' grants; its standing grants that aren't revoked; its approved memory; and the names (no files) of its skills and the names (no values) of its secrets. A server's or standing grant's command, env and prompt go through the vault's exact-value redaction first, so a credential pasted as text leaves as its marker. One `profile.change` event (`profile.export`) records it.
+- **How it comes back.** Restore writes no row itself: it replays the document through `profile.create`, `identity.create`, `grant.add`, `mcp.add`, `standing.create` and `memory.add`, so each check, the [quarantine](#-the-quarantine-preset) rules included, applies, and each change is audited as usual, then one `profile.restore` event. It is refused whole, before anything is written, when an identity, server or standing grant in it already exists (ids are never reused) or the profile is here with another preset; into an existing profile otherwise.
+- **What it needs from you after.** Identities come back as drafts (activate each), servers as discovered (install and pin each, so you see its tools again), and standing grants paused (resume each). The result lists the `secrets` to set with `secret.set` and the `skills` to install again, and `skipped`: whatever a check refused, with its reason (a server whose env held a pasted credential, say).
+- **What stays behind.** Sessions, transcripts, audit events, pending memory, review dates and a broad-access identity's standing switch. The window's own files for the profile (settings, bookmarks, workspaces) are in its userData folder, not the Core.
+
 ### 🧪 The quarantine preset
 
 For trying an MCP server you don't trust yet (H5): `profile.create id=try displayName="Try a server" preset=quarantine`. The profile gets a work folder of its own, `quarantine\<id>` beside the sessions folder (`C:\ProgramData\houston-core\quarantine` by default; outside the user profile, because a container is denied `C:\Users` and Node reads every folder above a script it runs). Then, in that profile, the Core refuses:
@@ -679,6 +696,8 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
 | `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
 | `profile.create` | `id`, `displayName`; optional `preset` (`quarantine`) | the new profile; its folder is made, and a quarantine one's work folder (`workFolder`) ([The quarantine preset](#-the-quarantine-preset)) |
+| `profile.export` | `id` | the profile as a `houston-profile` document, version 1, with no secret value in it ([Export and restore](#-export-and-restore)) |
+| `profile.restore` | `export` (that document) | `{ profile, created, identities, servers, standing, memory, secrets, skills, skipped }`: what came back (drafts, discovered, paused), what to set and install again, and what a check refused; `conflict` before any write when an id in it exists |
 | `runtime.list` | none | the local runtimes answering now: `id`, `name`, `port`, `baseUrl`, `models`, `apis` (`chat`, `responses`, `messages`) ([Local model runtimes](#️-local-model-runtimes)) |
 | `memory.list` | optional `profile`, `state` (`pending`, `approved`, `rejected`) | items, newest first: `id`, `profile`, `text`, `state`, `source` (`identity`, `session`), `createdAt`, `reviewedAt`, `reviewedBy`, `note` ([Profile memory](#-profile-memory)) |
 | `memory.add` | `text`; optional `profile` | the item, approved, its source the operator |
@@ -757,7 +776,7 @@ NT AUTHORITY\SYSTEM:(OI)(CI)(F)
 
 ## 🚧 Not built yet
 
-H1, H3, H5 and H6 are done. H2 waits only on the owner's items (the demo, the homepage, the 5-day trial), and H4 on its first nightly job's 5 nights (2026-11-14 to 18). H5 brought review dates and reach ([Identity registry](#-identity-registry)), [Profiles](#-profiles) with [the quarantine preset](#-the-quarantine-preset), [Sub-agents](#-sub-agents) and [Broad-access identities](#-broad-access-identities); H6 brought Roundtable seats (`{identity}` in the [MCP gateway](#-mcp-gateway)), [Skills](#-skills) from Promptbook, [Profile memory](#-profile-memory) and [Local model runtimes](#️-local-model-runtimes), with the window's Feed tab and start page. The abuse suite in [`abuse/`](../abuse/README.md) passes 16 of 16 with 0 of 122 attempts through (2026-11-13), AT-13 through `npm run smoke`, and since then it is a release gate: `npm run gate` refuses until a full run on the checked-out code is saved. In H7, schema upgrades are tested from every earlier version and back the database up first (2026-11-15). The fallback containment rung is blocked: ADR-004's write-restricted token doesn't hold deletes ([spike](../docs/decisions/spikes/2026-11-15-h7-limited-token.md)), so it waits for the owner's choice; the installer and signed updates wait on a packager and a signing certificate. Next on the [roadmap](../docs/ROADMAP.md): profile export, a health screen and log retention.
+H1, H3, H5 and H6 are done. H2 waits only on the owner's items (the demo, the homepage, the 5-day trial), and H4 on its first nightly job's 5 nights (2026-11-14 to 18). H5 brought review dates and reach ([Identity registry](#-identity-registry)), [Profiles](#-profiles) with [the quarantine preset](#-the-quarantine-preset), [Sub-agents](#-sub-agents) and [Broad-access identities](#-broad-access-identities); H6 brought Roundtable seats (`{identity}` in the [MCP gateway](#-mcp-gateway)), [Skills](#-skills) from Promptbook, [Profile memory](#-profile-memory) and [Local model runtimes](#️-local-model-runtimes), with the window's Feed tab and start page. The abuse suite in [`abuse/`](../abuse/README.md) passes 16 of 16 with 0 of 122 attempts through (2026-11-13), AT-13 through `npm run smoke`, and since then it is a release gate: `npm run gate` refuses until a full run on the checked-out code is saved. In H7, schema upgrades are tested from every earlier version and back the database up first (2026-11-15), and a profile [exports and restores](#-export-and-restore) without its secrets (2026-11-18). The fallback containment rung is blocked: ADR-004's write-restricted token doesn't hold deletes ([spike](../docs/decisions/spikes/2026-11-15-h7-limited-token.md)), so it waits for the owner's choice; the installer and signed updates wait on a packager and a signing certificate. Next on the [roadmap](../docs/ROADMAP.md): a health screen and log retention.
 
 Module rules: `policy` and `audit` import nothing from `runner` or `gateway`; only `vault` stores or opens a secret, and only the gateway asks it for one, to hand straight to a server's container; nothing binds beyond `127.0.0.1`; the Control API is a named pipe, never a port; the Core imports nothing from the window (`src/`).
 
