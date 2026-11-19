@@ -14,8 +14,9 @@ const ENTITIES = /** @type {Record<string, string>} */ ({ amp: '&', lt: '<', gt:
 /** XML text to plain text: CDATA unwrapped, tags dropped, entities decoded, spaces collapsed. @param {string} s */
 function plain(s) {
   return s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]*>/g, ' ')
+    // Linear on any input: no lazy scan per CDATA opener, and a tag stops at the next '<'.
+    .replaceAll('<![CDATA[', '').replaceAll(']]>', '')
+    .replace(/<[^<>]*>/g, ' ')
     .replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => {
       if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? m;
       const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
@@ -38,8 +39,13 @@ function webUrl(s) {
 
 /** The first `<tag>` element's inner text in an XML fragment, or ''. @param {string} xml @param {string} tag */
 function inner(xml, tag) {
-  const m = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'));
-  return m ? m[1] : '';
+  // The first opening tag, then indexOf for its close: one lazy regex rescanned the rest of
+  // the text from every unclosed opener, quadratic on a feed of them.
+  const m = new RegExp(`<${tag}(?:\\s[^<>]*)?>`, 'i').exec(xml);
+  if (!m) return '';
+  const start = m.index + m[0].length;
+  const end = xml.toLowerCase().indexOf(`</${tag.toLowerCase()}>`, start);
+  return end < 0 ? '' : xml.slice(start, end);
 }
 
 /** @param {string} s */
@@ -71,10 +77,20 @@ export function isFeed(text) {
 function feedItems(xml, source) {
   /** @type {NewsItem[]} */
   const out = [];
-  for (const m of xml.matchAll(/<(item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi)) {
-    const body = m[2];
+  // Each opener's close is found with indexOf, and a tag name with no close left is skipped
+  // from then on, so the scan stays linear on a feed of unclosed <item>s.
+  const lower = xml.toLowerCase();
+  const unclosed = new Set();
+  const open = /<(item|entry)(?:\s[^<>]*)?>/gi;
+  for (let m; (m = open.exec(xml));) {
+    const name = m[1].toLowerCase();
+    if (unclosed.has(name)) continue;
+    const close = lower.indexOf(`</${name}>`, open.lastIndex);
+    if (close < 0) { unclosed.add(name); continue; }
+    const body = xml.slice(open.lastIndex, close);
+    open.lastIndex = close + name.length + 3;
     // Atom: the alternate link (or one with no rel); RSS: <link>text</link>.
-    const links = [...body.matchAll(/<link\b([^>]*?)\/?>/gi)].map((l) => l[1]);
+    const links = [...body.matchAll(/<link\b([^<>]*?)\/?>/gi)].map((l) => l[1]);
     const atom = links.find((a) => /href=/i.test(a) && (!/rel=/i.test(a) || /rel=["']alternate["']/i.test(a)));
     const href = atom?.match(/href=["']([^"']+)["']/i)?.[1];
     const url = webUrl(plain(href ?? (inner(body, 'link') || inner(body, 'guid'))));
@@ -104,7 +120,7 @@ function markdownItems(md, source) {
       if (d) at = time(d[1]);
     }
     let found = false;
-    for (const m of line.matchAll(/!?\[([^\]]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?(?:\s+"[^"]*")?\s*\)|<(https?:\/\/[^\s>]+)>/gi)) {
+    for (const m of line.matchAll(/!?\[([^[\]]*)\]\(\s*<?(https?:\/\/[^\s()<>[\]]+)>?(?:\s+"[^"]*")?\s*\)|<(https?:\/\/[^\s<>]+)>/gi)) {
       found = true;
       if (m[0].startsWith('!')) continue;
       const url = webUrl(m[2] || m[3]);

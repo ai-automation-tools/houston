@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "8c9a4aadb390f99cf1da9dfdaaa27cfa73decf99"
+      "revision": "99532117f80d05cf897535dc44c77de48be87be7"
     }
   },
   "components": [
@@ -46,8 +46,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 285,
-          "end_line": 309,
+          "line": 293,
+          "end_line": 317,
           "label": "shell WebContentsView"
         },
         {
@@ -87,8 +87,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 737,
-          "end_line": 840,
+          "line": 745,
+          "end_line": 848,
           "label": "IPC channels"
         }
       ]
@@ -122,8 +122,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 311,
-          "end_line": 316,
+          "line": 319,
+          "end_line": 324,
           "label": "deny-by-default permissions"
         }
       ]
@@ -246,8 +246,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 657,
-          "end_line": 677,
+          "line": 665,
+          "end_line": 685,
           "label": "chat IPC"
         }
       ]
@@ -344,8 +344,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 529,
-          "end_line": 626,
+          "line": 537,
+          "end_line": 634,
           "label": "tools over app sources"
         }
       ]
@@ -366,8 +366,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 617,
-          "end_line": 623,
+          "line": 625,
+          "end_line": 631,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -395,8 +395,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 544,
-          "end_line": 608,
+          "line": 552,
+          "end_line": 616,
           "label": "terminal_run, cron_run, tab_click, tab_fill"
         },
         {

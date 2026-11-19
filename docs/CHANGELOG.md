@@ -1,4 +1,5 @@
-<h1 align="center">📋 Changelog</h1>
+<h1 align="c- **Architecture diagram re-pinned** (2026-11-18). The news-source reader in `src/main/main.js` now counts bytes as it streams, which moved seven cited line ranges down by 8 lines; the diagram is pinned to 99532117 with no change to what it says.
+enter">📋 Changelog</h1>
 
 <p align="center">
   <em>Every change to the app, newest first.</em>
@@ -85,6 +86,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Security**
 
+- **News parsing is linear and a feed answer is capped as it streams** (security sweep, 2026-11-17). `feedItems`, the tag-text helper and the Markdown link scan rescanned the rest of the text from every unclosed `<item>`, tag or `[`, so a feed host could stall the main process with a 2 MB answer of openers; closes are now found with `indexOf` and the character classes stop at the next opener, with a test. A body with no Content-Length is read with a running byte count instead of `res.text()`. `.gitleaksignore` suppresses the four planted fake credentials in `tests/core/transcripts.test.js`, which test the transcript redactor.
 - **The News tab's feed check no longer backtracks on leading comments** (security sweep, 2026-11-10; CodeQL `js/redos`). `isFeed` skipped XML comments with a repeated regex group, so a feed answer made of many empty comments could stall the main process. It now steps over them with `indexOf`; a test covers it.
 - **`ci.yml` declares `permissions: contents: read`** (security sweep, 2026-10-26). The repo default is already read; this pins it.
 - **Electron 44.8.0 → 44.9.3 and undici 7.30.0 → 7.30.1** (lockfile only, both inside the existing ranges), so CI's `npm audit` passes again: GHSA-jr5w-w6x2-84p9 (Electron, compromised eMudhra intermediates) and three undici advisories (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c; undici comes in through `@electron/get`). The audit job had been failing every PR since the advisories landed, starting with #64.
