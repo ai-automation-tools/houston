@@ -1,6 +1,7 @@
 // The Core's SQLite database: open it, hold it, bring its schema up to date.
 // node:sqlite is built into Node 24, so this adds no dependency.
 
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from './migrations.js';
 
@@ -43,8 +44,8 @@ export function openDb(file) {
  * version, and each step commits with its version bump or not at all.
  *
  * With `backup`, a database that has a schema and is about to get a newer one is copied
- * first (`VACUUM INTO`, a consistent copy of the open database) to the file it names. A
- * copy that fails stops the upgrade before any step runs.
+ * first (`VACUUM INTO`, a consistent copy of the open database) to the file it names, which
+ * must not exist yet. A copy that fails stops the upgrade before any step runs.
  *
  * @param {DatabaseSync} db
  * @param {string[]} [migrations]
@@ -60,6 +61,8 @@ export function migrate(db, migrations = MIGRATIONS, { backup } = {}) {
   if (backup && from > 0 && from < to) {
     saved = backup(from);
     try {
+      // Claim the name first: SQLite's own refusal of an existing file varies by version.
+      fs.closeSync(fs.openSync(saved, 'wx'));
       db.exec(`VACUUM INTO '${saved.replaceAll("'", "''")}'`);
     } catch (e) {
       throw new Error(`the backup before migrating from schema v${from} failed, so nothing was migrated: ${/** @type {Error} */ (e).message}`, { cause: e });
