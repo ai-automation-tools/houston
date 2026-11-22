@@ -49,6 +49,11 @@ try {
   // A secret's value never goes on the command line (history, process lists): it's read from
   // stdin, piped or typed with no echo.  Get-Content token.txt | npm run ctl -- secret.set name=github-token
   if (method === 'secret.set' && params.value === undefined) params.value = await readValue();
+  // An export is piped in whole:  Get-Content lab.json -Raw | node core/ctl.js profile.restore
+  if (method === 'profile.restore' && params.export === undefined) {
+    if (process.stdin.isTTY) throw new Error('pipe the export in: Get-Content lab.json -Raw | node core/ctl.js profile.restore');
+    params.export = JSON.parse((await readValue()).replace(/^﻿/, ''));
+  }
   console.log(JSON.stringify(await callControl(dataDir(), method, params), null, 2));
 } catch (e) {
   const err = /** @type {Error & { code?: string }} */ (e);

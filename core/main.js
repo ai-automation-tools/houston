@@ -50,10 +50,23 @@ export function secureDir(dir) {
 }
 
 /**
+ * Where the copy of a schema-v`from` database goes before an upgrade: `backups\core-v<from>-<time>.db`.
+ * ponytail: every copy is kept; schema upgrades are rare and the database is small. Prune if that changes.
+ * @param {string} dir the data folder
+ * @param {number} from
+ * @param {Date} [now]
+ */
+export function backupFile(dir, from, now = new Date()) {
+  const folder = path.join(dir, 'backups');
+  fs.mkdirSync(folder, { recursive: true });
+  return path.join(folder, `core-v${from}-${now.toISOString().replace(/[:.]/g, '-')}.db`);
+}
+
+/**
  * Start the Core in `dir`.
  *
  * @param {string} [dir]
- * @returns {{ dir: string, db: import('node:sqlite').DatabaseSync, schema: { from: number, to: number }, audit: ReturnType<typeof openAudit>, interrupted: string[], close: () => void }}
+ * @returns {{ dir: string, db: import('node:sqlite').DatabaseSync, schema: { from: number, to: number, backup?: string }, audit: ReturnType<typeof openAudit>, interrupted: string[], close: () => void }}
  * @throws {import('./db.js').CoreLockedError} when a Core already runs on `dir`
  */
 export function start(dir = dataDir()) {
@@ -63,10 +76,11 @@ export function start(dir = dataDir()) {
   secureDir(dir);
   const db = openDb(path.join(dir, 'core.db'));
   try {
-    const schema = migrate(db);
+    // Before an upgrade, a copy of the database as it was, in the data folder (every session is denied it).
+    const schema = migrate(db, undefined, { backup: (v) => backupFile(dir, v) });
     // After the lock on purpose: the log has one writer because the database has one owner.
     const audit = openAudit(path.join(dir, 'audit'));
-    audit.system('core.start');
+    audit.system('core.start', schema.from < schema.to ? { migration: schema } : undefined);
     // Sessions a dead Core left open: end any container still running, close the record (AT-16).
     // The operator owns every other identity, so it exists from the first start.
     ensureOperator(db, audit);
