@@ -1,4 +1,5 @@
-<h1 align="center">📋 Changelog</h1>
+<h1 align="c- **Architecture diagram re-pinned** (2026-11-18). The news-source reader in `src/main/main.js` now counts bytes as it streams, which moved seven cited line ranges down by 8 lines; the diagram is pinned to 99532117 with no change to what it says.
+enter">📋 Changelog</h1>
 
 <p align="center">
   <em>Every change to the app, newest first.</em>
@@ -19,6 +20,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Changed**
 
+- **Upstream check, harness rows** (2026-11-19). `docs/UPSTREAMS.md` gains rows for the Claude Code and Codex CLIs the Core launches (flags and MCP config checked against their current docs), its Electron, Ghostery and electron-chrome-extensions rows now match `package.json`, and a roadmap item queues re-running the containment spikes on `@microsoft/mxc-sdk` 1.1.0, which removes ProcessContainer's legacy fallbacks.
 - **Profile export and restore without secrets** (2026-11-18). *Harness H7.* `profile.export` writes a profile's identities and live grants, MCP servers, standing grants, approved memory and the names of its skills and secrets to one JSON document, with no secret value in it (a credential pasted as text leaves redacted). `profile.restore` replays it through the operator's own calls, so every check and quarantine rule applies and every change is audited: identities come back as drafts, servers as discovered, standing grants paused, and the result lists the secrets to set, the skills to reinstall and anything a check refused. A restore whose ids already exist is refused before anything is written. From a terminal: `node core/ctl.js profile.export id=lab > lab.json`, then `Get-Content lab.json -Raw | node core/ctl.js profile.restore`.
 - **Schema upgrades tested from every version, with a backup first** (2026-11-15). *Harness H7.* Before the Core upgrades an existing database it copies it as it was to `backups\core-v<from>-<time>.db` in its data folder; if the copy fails, nothing is migrated and the Core doesn't start. The `core.start` audit event names the versions and the copy. A new test builds a database at every earlier schema, with a row of each kind every version could hold, upgrades it and checks that every row survives; each new migration must add its seed rows there.
 - **The abuse suite is a release gate** (2026-11-13). *Harness H7.* `node abuse/run.js` with no test names is now the full suite: after the Core's tests it runs `npm run smoke` for AT-13 and saves that too, and every results file ends with a record of what ran and a hash of the code it ran on (Markdown left out). `npm run gate` reads the newest record and refuses unless it was a full run of every AT-nn in the requirements, every test passed, no attempt got through, and it ran on the committed code checked out now. Run on this machine: 16 of 16, 0 of 122 attempts through.
@@ -87,6 +89,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Security**
 
+- **News parsing is linear and a feed answer is capped as it streams** (security sweep, 2026-11-17). `feedItems`, the tag-text helper and the Markdown link scan rescanned the rest of the text from every unclosed `<item>`, tag or `[`, so a feed host could stall the main process with a 2 MB answer of openers; closes are now found with `indexOf` and the character classes stop at the next opener, with a test. A body with no Content-Length is read with a running byte count instead of `res.text()`. `.gitleaksignore` suppresses the four planted fake credentials in `tests/core/transcripts.test.js`, which test the transcript redactor.
 - **The News tab's feed check no longer backtracks on leading comments** (security sweep, 2026-11-10; CodeQL `js/redos`). `isFeed` skipped XML comments with a repeated regex group, so a feed answer made of many empty comments could stall the main process. It now steps over them with `indexOf`; a test covers it.
 - **`ci.yml` declares `permissions: contents: read`** (security sweep, 2026-10-26). The repo default is already read; this pins it.
 - **Electron 44.8.0 → 44.9.3 and undici 7.30.0 → 7.30.1** (lockfile only, both inside the existing ranges), so CI's `npm audit` passes again: GHSA-jr5w-w6x2-84p9 (Electron, compromised eMudhra intermediates) and three undici advisories (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c; undici comes in through `@electron/get`). The audit job had been failing every PR since the advisories landed, starting with #64.
