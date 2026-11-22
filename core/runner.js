@@ -129,7 +129,7 @@ export function compileGrants(grants, now = new Date()) {
 /** How deep sub-agents nest: a child (1) and a grandchild (2), no further (H5). */
 export const MAX_DEPTH = 2;
 
-/** The containment rung this runner starts sessions on; the fallback rung is H7. */
+/** The containment rung this runner starts sessions on, and the only one: no fallback rung (ADR-004, amended 2026-11-22). */
 export const CONTAINMENT = 'container';
 
 /** @param {RunnerOptions} opts */

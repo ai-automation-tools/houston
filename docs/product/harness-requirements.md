@@ -180,7 +180,7 @@ Hypotheses to validate, not results.
 
 | Area | Target |
 |:---|:---|
-| Platform | Windows 11 at or above the container runtime's build floor, Home edition included. Below it, sessions run on a fallback labelled "limited containment" |
+| Platform | Windows 11 at or above the container runtime's build floor, Home edition included. Below it, sessions don't start: there is no fallback rung (owner's decision 2026-11-22, ADR-004 amended) |
 | Scale | One operator; 8 concurrent sessions; 50 identities and 30 MCP servers per profile |
 | Contained shell ready | Under 3 seconds |
 | Gateway overhead | Median under 15 ms per call on loopback |
