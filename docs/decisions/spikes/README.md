@@ -14,7 +14,7 @@
 |:---|:---|
 | [**🧪 2026-11-12-s1-first-contact.md**](2026-11-12-s1-first-contact.md) | Execution Containers load and run a contained command on Windows 11 Home with no admin rights. Partial: the toolchain and file-policy runs of spike S1 are still open. |
 | [**🧪 2026-11-12-h0-spike-results.md**](2026-11-12-h0-spike-results.md) | Spikes S1 to S5 with commands and output, and six changes for H1 to H3. Closed: the owner accepted the slowdown and the schemas. |
-| [**🧪 2026-11-15-h7-limited-token.md**](2026-11-15-h7-limited-token.md) | ADR-004's fallback rung, a write-restricted token: writes are held, but deletes and moves are not, so the H7 fallback item is blocked on the owner's choice. |
+| [**🧪 2026-11-15-h7-limited-token.md**](2026-11-15-h7-limited-token.md) | ADR-004's fallback rung, a write-restricted token: writes are held, but deletes and moves are not, so the owner dropped the fallback rung on 2026-11-22. |
 
 ---
 

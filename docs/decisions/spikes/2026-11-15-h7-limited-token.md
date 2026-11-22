@@ -1,6 +1,6 @@
 # Spike H7: the write-restricted token doesn't hold deletes
 
-**Date:** 2026-11-15 · **Status:** failed; the fallback rung is blocked until the owner picks a way forward ([open question](../../OPEN-QUESTIONS.md#harness-which-fallback-if-process-containers-fail-on-windows-11-home)).
+**Date:** 2026-11-15 · **Status:** failed. Resolved 2026-11-22: the owner chose no fallback rung (sessions don't start where containers are unavailable), and ADR-004 is amended ([open question](../../OPEN-QUESTIONS.md#harness-which-fallback-if-process-containers-fail-on-windows-11-home)).
 **Serves:** [ADR-004](../adr-004-core-companion-process.md) ("Where that is unavailable, sessions run on a write-restricted token and are labelled 'limited containment'"), harness-requirements' platform row, roadmap H7 "The fallback containment rung".
 
 ## The question

@@ -168,7 +168,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
   /** @type {Record<string, (p: any) => unknown>} */
   const handlers = {
-    // What the window's Connections row shows. The runner starts containers only until the fallback rung (H7).
+    // What the window's Connections row shows. The runner starts containers only: there is no fallback rung (ADR-004, amended 2026-11-22).
     // limits: the defaults the window's Settings page shows (null when this Core has no inbox or transcripts).
     'core.status': () => ({
       pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
