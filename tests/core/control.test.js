@@ -347,6 +347,17 @@ test('core.status: pid, schema, the containment rung, how many sessions run and 
   });
 });
 
+test('core.health: the audit chain checked now, the folder sizes and the newest core.log lines', async (t) => {
+  const s = await setup(t);
+  fs.writeFileSync(path.join(s.dir, 'core.log'), '{"event":"core.start"}\n');
+  const h = await s.call('core.health', { log: 5 });
+  assert.equal(h.audit.breaks, 0);
+  assert.ok(h.audit.events >= 1);
+  assert.ok(h.storage.audit > 0 && h.storage.total >= h.storage.audit);
+  assert.deepEqual(h.log, ['{"event":"core.start"}']);
+  assert.deepEqual((await s.call('core.health')).log, []);
+});
+
 test("Houston's client finds the Core through HOUSTON_CORE_DATA, and says ENOENT when it isn't running", async (t) => {
   const s = await setup(t);
   const before = process.env.HOUSTON_CORE_DATA;

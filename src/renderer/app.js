@@ -14,6 +14,7 @@ import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
 import { describeAsk, secondsLeft } from './shared/approvals.js';
 import { SETTINGS_URL } from './shared/scopes.js';
+import { HEALTH_URL } from './shared/health.js';
 import { profileMenu } from './shared/profiles.js';
 
 /** @type {any} */
@@ -652,6 +653,7 @@ const ACTIONS = [
   ['Toggle sidebar', 'Ctrl+B', 'toggle-sidebar'],
   ['Toggle chat', 'Ctrl+Shift+L', 'toggle-chat'],
   ['Settings: every control and its scope', 'Ctrl+,', 'settings'],
+  ['Health: every check, and the diagnostics bundle', 'View menu', 'health'],
   ['Search everything', 'Ctrl+Shift+F', 'focus-search'],
   ['Open Cronsole', 'pinned tab', 'open-cronsole'],
   ['Connections', 'Hub, Cronsole, shells, chat, MCP', 'connections'],
@@ -716,6 +718,7 @@ function runAction(action) {
   if (action === 'palette') palette.open();
   if (action === 'connections') connections.open();
   if (action === 'settings') openUrl(SETTINGS_URL);
+  if (action === 'health') openUrl(HEALTH_URL);
   if (action === 'open-cronsole') openCronsole();
   if (action.startsWith('panel-')) {
     appEl.classList.remove('no-sidebar');
