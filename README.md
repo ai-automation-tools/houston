@@ -67,6 +67,7 @@ An agent (Claude Code, or Claude in the sidebar) can drive it, and runs nothing 
 | **📜 Logs** | The harness's audit log: what each agent did and what was decided, by identity, session and decision; each session's transcript, secrets redacted |
 | **🛡 Agents** | The harness's agent identities: start one (Claude Code, Codex or a plain shell) in a contained terminal tab, open or stop its sessions |
 | **⚙️ Settings** | Every control with its scope (global, profile, workspace, session), what it's set to and where to change it |
+| **🩺 Health** | Every check in one page (the Core's audit chain and storage too), and a diagnostics bundle saved on this machine with your user folder and keys scrubbed |
 | **🔌 Connections** | The harness's Core, Hub, Cronsole, shells, chat and MCP: working or not, and what to set |
 
 The full tour is in [features.md](docs/guide/features.md).

@@ -40,6 +40,9 @@ export function onPath(file) {
 /** The app's own credentials (the chat key, under either name; Hub's token): never passed to a child. */
 const APP_SECRETS = new Set(['ACC_CHAT_API_KEY', 'ANTHROPIC_API_KEY', 'ACC_HUB_TOKEN']);
 
+/** The values of the app's own credentials that are set, so the diagnostics bundle can leave them out. */
+export const appSecretValues = () => [...APP_SECRETS].map((k) => env[k]).filter((v) => typeof v === 'string' && v !== '');
+
 /**
  * The environment for a terminal or other child process: `base` without the app's own
  * credentials, whether they came from .env or the real environment, plus `extra`.

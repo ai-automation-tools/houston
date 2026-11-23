@@ -158,6 +158,7 @@ test('the demo harness: start a contained shell, an ask card, its answer, the au
   assert.match(transcript, /\[REDACTED:anthropic-key\]/);
   assert.doesNotMatch(transcript, /sk-ant-demo03/);
   assert.match(api.demoPage('acc://settings/'), /<h2>Global<\/h2>/);
+  assert.match(api.demoPage('acc://health/'), /<td>Audit chain<\/td>/);
   assert.equal(api.demoPage('https://example.com/'), null);
 
   await api.agents.stopAll();
