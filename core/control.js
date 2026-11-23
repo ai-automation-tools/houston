@@ -21,6 +21,7 @@ import { OPERATOR, RegistryError } from './identities.js';
 import { CONTAINMENT, RunnerError } from './runner.js';
 import { StandingError } from './standing.js';
 import { ProfileError } from './profiles.js';
+import { exportProfile, restoreProfile } from './profile-export.js';
 import { SkillError } from './skills.js';
 import { MemoryError } from './memory.js';
 import { discover } from './runtimes.js';
@@ -28,7 +29,7 @@ import { VaultError } from './vault.js';
 
 export const METHODS = [
   'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
-  'profile.list', 'profile.create', 'skill.list', 'skill.install', 'skill.remove',
+  'profile.list', 'profile.create', 'profile.export', 'profile.restore', 'skill.list', 'skill.install', 'skill.remove',
   'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list', 'identity.allowStanding',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
@@ -167,7 +168,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
   /** @type {Record<string, (p: any) => unknown>} */
   const handlers = {
-    // What the window's Connections row shows. The runner starts containers only until the fallback rung (H7).
+    // What the window's Connections row shows. The runner starts containers only: there is no fallback rung (ADR-004, amended 2026-11-22).
     // limits: the defaults the window's Settings page shows (null when this Core has no inbox or transcripts).
     'core.status': () => ({
       pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
@@ -221,6 +222,9 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
 
     'profile.list': () => need(profiles, 'profiles').list(),
     'profile.create': (p) => need(profiles, 'profiles').create(p),
+    // A profile as one document with no secret values in it, and back as drafts and paused grants (profile-export.js).
+    'profile.export': (p) => exportProfile({ audit, profiles, registry, gateway, standing, memory, skills, vault }, p.id),
+    'profile.restore': (p) => restoreProfile({ audit, profiles, registry, gateway, standing, memory, skills, vault }, p.export),
     // Local model runtimes answering on this machine now (runtimes.js).
     'runtime.list': () => discover(),
     'skill.list': (p) => need(skills, 'skills').list(p.profile),

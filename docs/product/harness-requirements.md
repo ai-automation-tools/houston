@@ -93,7 +93,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | SEC-05 | Approvals | Must | MVP; inbox built (H2) | An approval inbox (`core/approvals.js`); decided in the shell, executed by the Core |
 | SEC-06 | Secrets management | Must | MVP; vault built (H3) | A Core vault; credentials reach MCP servers, never an agent |
 | SEC-07 | Audit logs | Must | MVP | An append-only, hash-chained event log |
-| SEC-08 | Governance | Should | Expiry, lifecycle states and review dates built (H5); export Next | Policy versions, expiry, grant review, lifecycle states, export |
+| SEC-08 | Governance | Should | Expiry, lifecycle states and review dates built (H5); export built with profile export (H7) | Policy versions, expiry, grant review, lifecycle states, export |
 | SEC-09 | Controls enforced at execution boundaries | Must | MVP | Container policy and gateway checks. A prompt or a UI toggle is never the control |
 | SEC-10 | Emergency stop | Must | MVP; sessions (H2), gateway tokens (H3) and pausing standing grants (H4) built | Stop All: end every session tree, revoke tokens, pause standing grants |
 
@@ -112,7 +112,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | ID | Requirement | Pri | Phase | Met by |
 |:---|:---|:---:|:---:|:---|
 | SET-01 | Per-profile settings, bookmarks and folders | Must | Built (H5) | A profile directory |
-| SET-02 | Per-profile agents, skills and MCP configuration | Must | Built: agents and MCP configuration (H5), skills (H6) | Profile-scoped rows in the Core |
+| SET-02 | Per-profile agents, skills and MCP configuration | Must | Built: agents and MCP configuration (H5), skills (H6); export and restore without secrets (H7) | Profile-scoped rows in the Core |
 | SET-03 | Custom themes | Could | Later | CSS variables |
 | SET-04 | Custom folder icons | Could | Next | Project Hub already stores them |
 | SET-05 | Customisable buttons and tabs | Could | Later | Extends quick links |
@@ -180,7 +180,7 @@ Hypotheses to validate, not results.
 
 | Area | Target |
 |:---|:---|
-| Platform | Windows 11 at or above the container runtime's build floor, Home edition included. Below it, sessions run on a fallback labelled "limited containment" |
+| Platform | Windows 11 at or above the container runtime's build floor, Home edition included. Below it, sessions don't start: there is no fallback rung (owner's decision 2026-11-22, ADR-004 amended) |
 | Scale | One operator; 8 concurrent sessions; 50 identities and 30 MCP servers per profile |
 | Contained shell ready | Under 3 seconds |
 | Gateway overhead | Median under 15 ms per call on loopback |

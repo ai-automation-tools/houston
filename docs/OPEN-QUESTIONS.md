@@ -18,7 +18,9 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 - Asked: 2026-11-12 with ADR-004
 - Context: spike H0-S1 tests Microsoft Execution Containers on Home. If it fails, the options are (a) dedicated local Windows accounts plus firewall rules, which need a one-time admin setup, or (b) shrink the harness to the gateway, identities and audit with no file containment. Only needed if S1 fails.
 - Note 2026-11-12: S1 ran and containers work on Home ([results](decisions/spikes/2026-11-12-h0-spike-results.md)). This only matters if the slowdown below is rejected.
+- Note 2026-11-15 by houston-roadmap: this now blocks H7's "fallback containment rung". ADR-004's fallback, a write-restricted token, was tried ([spike](decisions/spikes/2026-11-15-h7-limited-token.md)): it holds creates and overwrites to the granted folders, but Windows doesn't check deletes against a write-restricted token, so a session could delete any of the operator's files or move them into its workspace. Options: (a) build it anyway, labelled "writes held, deletes and reads not"; (b) a stricter token (the user's SID and Authenticated Users deny-only) with an ADR-004 update and its own spike; (c) no fallback rung: below the build floor only broad-access (unconfined, marked) identities run. Recommendation: (c) until a machine that needs a fallback exists.
 - Answer: Moot. Spike S1 passed on Windows 11 Home, so no fallback is chosen. Reopen only if the slowdown is rejected. (Mike, 2026-11-16)
+- Decision 2026-11-22 (Mike), on the 2026-11-15 note: no fallback rung at all. Where process containers are unavailable, sessions don't start; the write-restricted token is dropped from ADR-004.
 
 ### Harness: is a one-time admin setup acceptable later?
 
