@@ -28,8 +28,9 @@ import { docsTasks } from '../shared/cronsole.js';
  * @param {Tabs} tabs
  * @param {Terminals} terminals
  * @param {Electron.Session} browseSession
+ * @param {(() => Promise<string>) | null} [saveDiagnostics] View › Save diagnostics bundle, without the Explorer window
  */
-export function smoke(dir, wc, tabs, terminals, browseSession) {
+export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics = null) {
   const live = process.env.ACC_SMOKE_LIVE === '1';
   /** @type {{ name: string, result: 'pass' | 'fail' | 'skip' | 'warn', detail?: string }[]} */
   const results = [];
@@ -954,6 +955,28 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
         }
         agentRun.settingsKey = Menu.getApplicationMenu()?.items.flatMap((m) => m.submenu?.items ?? []).find((m) => m.label === 'Settings')?.accelerator ?? null;
 
+        // Health: View › Health opens every check with this Core's own; the bundle is scrubbed JSON.
+        Menu.getApplicationMenu()?.items.flatMap((m) => m.submenu?.items ?? []).find((m) => m.label === 'Health')?.click();
+        for (let i = 0; i < 40 && !tabs.list().some((x) => x.url.startsWith('acc://health/')); i++) await wait(250);
+        const hTab = tabs.list().find((x) => x.url.startsWith('acc://health/'));
+        const hView = hTab && tabs.tabs.get(hTab.id);
+        if (hView) {
+          for (let i = 0; i < 40 && hView.view.webContents.isLoading(); i++) await wait(100);
+          agentRun.health = await hView.view.webContents.executeJavaScript(`({
+            rows: Object.fromEntries([...document.querySelectorAll('tbody tr')].filter((r) => r.cells.length === 4).map((r) => [r.cells[1].textContent, r.cells[0].textContent])),
+            scripts: document.scripts.length,
+          })`);
+          tabs.close(hTab.id);
+        }
+        try {
+          const file = await saveDiagnostics?.();
+          const text = file ? fs.readFileSync(file, 'utf8') : '';
+          const b = JSON.parse(text);
+          agentRun.bundle = { checks: b.checks?.length, coreLog: Array.isArray(b.core?.log), home: text.toLowerCase().includes(os.homedir().toLowerCase().replaceAll('\\', '\\\\')) };
+        } catch (err) {
+          agentRun.bundle = { error: err instanceof Error ? err.message : String(err) };
+        }
+
         // The Integrations tab over this Core: a server registered with ctl (after Settings, which counts identities), then Install and Pin pressed in the tab.
         const stub = fileURLToPath(new URL('../../tests/core/stub-mcp-server.js', import.meta.url));
         await ctl('mcp.add', { name: 'smoke-stub', transport: 'host', command: `"${node}" "${stub}"` });
@@ -1101,6 +1124,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession) {
           && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
           && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
           && agentRun.settingsKey === 'CmdOrCtrl+,'), { ...st, key: agentRun?.settingsKey });
+      const hl = agentRun?.health;
+      check('View › Health shows every check with the Core\'s audit chain and storage; the diagnostics bundle holds them with the user folder scrubbed',
+        Boolean(hl && hl.scripts === 0 && hl.rows['Houston Core'] === '✓' && hl.rows['Audit chain'] === '✓' && hl.rows['Core storage'] === '✓' && hl.rows['MCP server'] === '✓'
+          && agentRun.bundle?.checks > 5 && agentRun.bundle.coreLog && agentRun.bundle.home === false), { ...hl, bundle: agentRun?.bundle });
       const ig = agentRun?.integrations;
       check('the Integrations tab shows a registered server\'s command before it runs, installs it, lists the tools a pin would serve, and pins them',
         Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'

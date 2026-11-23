@@ -25,10 +25,11 @@ import { exportProfile, restoreProfile } from './profile-export.js';
 import { SkillError } from './skills.js';
 import { MemoryError } from './memory.js';
 import { discover } from './runtimes.js';
+import { coreHealth } from './health.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
-  'core.status', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
+  'core.status', 'core.health', 'session.start', 'session.stop', 'session.list', 'stop.all', 'audit.query',
   'profile.list', 'profile.create', 'profile.export', 'profile.restore', 'skill.list', 'skill.install', 'skill.remove',
   'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list', 'identity.allowStanding',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
@@ -174,6 +175,8 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
       limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, transcriptBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null },
     }),
+    // The health screen and diagnostics bundle: the audit chain checked now, folder sizes, core.log's newest lines redacted.
+    'core.health': (p) => coreHealth({ dir, audit, redact: vault?.redact }, p),
     'session.start': async (p) => {
       const program = p.program ?? {};
       if (typeof program !== 'object' || Array.isArray(program)) throw new ControlError('bad_request', 'program is an object');

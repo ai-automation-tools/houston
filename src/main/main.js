@@ -4,6 +4,7 @@
 
 import { app, BaseWindow, Menu, Tray, WebContentsView, ipcMain, net, protocol, session, shell } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { appendLog, logCrashes, logError } from './applog.js';
@@ -41,6 +42,9 @@ import { core } from './core.js';
 import { coreSettings, createAgents, identitiesPage, integrations, transcriptPage } from './agents.js';
 import { feed, startPage } from './feed.js';
 import { settingsBody } from '../shared/scopes.js';
+import { bundleName, coreHealthRows, diagnosticsBundle, healthBody } from '../shared/health.js';
+import { tailLines } from '../../core/health.js';
+import { appSecretValues } from './env.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
@@ -92,6 +96,8 @@ const cron = cronsole();
 let stopEvents = null;
 /** @type {Tray | null} */
 let tray = null;
+/** Writes the diagnostics bundle and returns its path; set once the window is up. @type {(() => Promise<string>) | null} */
+let saveDiagnostics = null;
 // Set on a real quit (File → Quit, the tray's Quit, a smoke run's app.quit()), so the
 // window's close goes through instead of hiding to the tray.
 let quitting = false;
@@ -268,6 +274,11 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
         item('Command palette', 'CmdOrCtrl+K', 'palette'),
         item('Connections', undefined, 'connections'),
         item('Settings', 'CmdOrCtrl+,', 'settings'),
+        item('Health', undefined, 'health'),
+        {
+          label: 'Save diagnostics bundle',
+          click: () => saveDiagnostics?.().then((file) => shell.showItemInFolder(file), (err) => logError('diagnostics', err)),
+        },
         item('Search everything', 'CmdOrCtrl+Shift+F', 'focus-search'),
         item('Toggle sidebar', 'CmdOrCtrl+B', 'toggle-sidebar'),
         item('Toggle chat', 'CmdOrCtrl+Shift+L', 'toggle-chat'),
@@ -330,6 +341,7 @@ async function createWindow() {
     runlog: { title: 'Run', render: async (url) => runLog(url) },
     transcript: { title: 'Transcript', render: transcriptPage },
     settings: { title: 'Settings', render: () => settingsPage() },
+    health: { title: 'Health', render: async () => docPage({ title: 'Health', trail: 'Houston › Health', body: healthBody(await healthSnapshot(), escapeHtml) }) },
     identities: { title: 'Identity Center', render: () => identitiesPage() },
     start: { title: 'Start', render: () => startPage() },
   });
@@ -711,7 +723,11 @@ async function createWindow() {
 
   // The Connections view: the Core, Hub, Cronsole, each shell, the chat model and the MCP server.
   // Given a row's id it checks that one again (Retry), given a group ('shells') every row in it, and with none, all of them.
-  handle('connections:check', async (id) => {
+  /**
+   * The Connections rows. Given a row's id it checks that one again (Retry), given a group ('shells') every row in it, and with none, all of them.
+   * @param {string} [id]
+   */
+  const connectionRows = async (id) => {
     const want = (/** @type {string} */ key) => !id || id === key || (key === 'shells' && String(id).startsWith('shell:'));
     const cronRow = async () => {
       const info = cron.info();
@@ -731,7 +747,35 @@ async function createWindow() {
       want('mcp') ? [mcpRow(mcp)] : [],
     ]);
     return groups.flat().filter((r) => !id || r.id === id || (id === 'shells' && r.id.startsWith('shell:')));
-  });
+  };
+  handle('connections:check', (id) => connectionRows(id));
+
+  // The health screen (acc://health/) and the diagnostics bundle: the Connections rows, the Core's own checks, the versions.
+  const LOG_LINES = 200;
+  /** @param {number} [log] core.log lines to ask the Core for */
+  const coreHealth = (log = 0) => (process.platform !== 'win32' ? Promise.resolve(null)
+    : core.call('core.health', { log }, 30_000).catch((/** @type {Error & { code?: string }} */ e) => ({ error: e.message, code: e.code })));
+  /** @param {number} [log] */
+  const healthSnapshot = async (log = 0) => {
+    const [rows, h] = await Promise.all([connectionRows(), coreHealth(log)]);
+    const info = {
+      Houston: app.getVersion(), Electron: process.versions.electron, Chromium: process.versions.chrome, Node: process.versions.node,
+      Windows: `${os.version()} (${os.release()})`, Profile: activeProfile(), 'Data folder': app.getPath('userData'),
+    };
+    return { app: info, rows: [...rows, ...coreHealthRows(h)], core: h };
+  };
+  saveDiagnostics = async () => {
+    const now = new Date();
+    const { app: info, rows, core: h } = await healthSnapshot(LOG_LINES);
+    const text = diagnosticsBundle({
+      created: now.toISOString(), app: info, rows, core: h, appLog: tailLines(path.join(app.getPath('userData'), 'logs', 'app.log'), LOG_LINES),
+    }, { home: os.homedir(), secrets: appSecretValues() });
+    const dir = path.join(app.getPath('userData'), 'diagnostics');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, bundleName(now));
+    fs.writeFileSync(file, text);
+    return file;
+  };
 
   handle('app:info', () => ({
     hubUrl: hub.url,
@@ -898,7 +942,7 @@ async function createWindow() {
     rebuild();
   }, (err) => console.error('[adblock] filter lists failed to load; browsing without blocking:', err));
 
-  if (process.env.ACC_SMOKE_DIR) smoke(process.env.ACC_SMOKE_DIR, shellView.webContents, tabs, terminals, browseSession);
+  if (process.env.ACC_SMOKE_DIR) smoke(process.env.ACC_SMOKE_DIR, shellView.webContents, tabs, terminals, browseSession, saveDiagnostics);
   await mcpReady;
   await shellView.webContents.loadURL('acc://shell/index.html');
 }

@@ -154,6 +154,13 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 Each row says what it's set to now and where it's changed (a menu, a tab, `settings.json`, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
 
+## 🩺 Health
+
+- **View › Health**, or **Health** in the palette, opens a page with this install's versions and every check, each marked ✓ working, ! to look at, ✗ failing or – not set up, with what to do.
+- The checks are the Connections rows below, plus two from the Core: the **audit chain**, verified again when the page opens, and **Core storage**, the size of its audit log, transcripts and database backups against the 5 GB log target.
+- Reload the tab to check again. The page only shows.
+- **View › Save diagnostics bundle** writes all of it, with the newest 200 lines of the app's log and the Core's, to one JSON file in the app's `diagnostics` folder, and shows it in Explorer. Your user folder is written as `%USERPROFILE%`, the chat key, Hub's token and the vault's values are left out, and nothing sends the file anywhere: attach it to a bug report yourself if you want to.
+
 ## 🔌 Connections
 
 - Click the dot next to "Houston" at the top of the sidebar, or pick **Connections** from the palette or the View menu.

@@ -28,6 +28,7 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
 | [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
+| [**health.js**](health.js) | `core.health`: the audit chain checked again, the size of each folder the Core writes, and `core.log`'s newest lines through the vault's redaction. Reads only. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
 | [**identities.js**](identities.js) | The identity registry: the operator, agent identities through their lifecycle, and their grants. |
@@ -684,6 +685,7 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | Method | Params | Result |
 |:---|:---|:---|
 | `core.status` | none | `{ pid, startedAt, schema, containment, sessions, limits }`: `containment` is the rung sessions run on (`container`), `sessions` how many run, and `limits` the approval timeout and transcript caps (`approvalSeconds`, `transcriptBytes`, `sessionTranscriptBytes`). Houston's Connections row and Settings page show it |
+| `core.health` | optional `log` (0 to 200) | `{ audit: { events, breaks, firstBreak }, storage: { audit, transcripts, backups, total }, log }`: the chain verified now, bytes per folder, and that many of `core.log`'s newest lines, redacted. Houston's Health page and diagnostics bundle show it |
 | `session.start` | `identity`, `workspace`; `command` unless the identity has a backend; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
 | `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
 | `session.attach` | `id` | `{ attached: id }`, then the connection streams the terminal ([below](#a-sessions-terminal)) |

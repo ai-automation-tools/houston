@@ -8,6 +8,7 @@ import { backendRows, memoryRows, runtimeRows, secretRows, serverName, serverRow
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
 import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
+import { HEALTH_URL, coreHealthRows, healthBody } from '../shared/health.js';
 import { IDENTITIES_URL, identitiesBody } from '../shared/identities.js';
 
 const WS = 'D:/work/acme-api';
@@ -380,6 +381,17 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
           workspaces: 2, workspace: { name: 'acme-api', folder: WS.replaceAll('/', '\\'), tabs: 2, terminals: 1 + [...sessions.values()].filter((s) => s.term).length },
           core: { dir: 'C:\\Users\\dev\\AppData\\Local\\houston-core', sessions: sessions.size, identities: IDENTITIES.length, grants: grants.length, askGrants: grants.filter((g) => g.effect === 'ask').length, approvals: pending.length,
             limits: { approvalSeconds: APPROVAL_MS / 1000, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: servers.length, pinned: servers.filter((x) => x.state === 'pinned').length, review: servers.filter((x) => x.state === 'needs_review').length }, secrets: SECRETS.length },
+        }, escapeHtml);
+      }
+      if (url === HEALTH_URL) {
+        return healthBody({
+          app: { Houston: '0.1.0', Electron: '45.0.0', Chromium: '142.0.0.0', Node: '24.0.0', Windows: 'Windows 11 Home (10.0.26100)', Profile: 'default', 'Data folder': 'C:\\Users\\dev\\AppData\\Roaming\\ai-command-center' },
+          rows: [
+            { id: 'core', name: 'Houston Core', state: 'ok', detail: `Running · containment: container · ${sessions.size} session${sessions.size === 1 ? '' : 's'} · pid 4242` },
+            { id: 'hub', name: 'Project Hub', state: 'ok', detail: 'http://127.0.0.1:4273 · ready' },
+            { id: 'chat', name: 'Chat model', state: 'off', detail: 'Not set up', fix: 'Set ACC_CHAT_API_KEY and ACC_CHAT_MODEL in .env, then restart the app.' },
+            ...coreHealthRows({ audit: { events: events.length, breaks: 0, firstBreak: null }, storage: { audit: 48_000, transcripts: 210_000, backups: 0, total: 1_300_000 }, log: [] }),
+          ],
         }, escapeHtml);
       }
       const id = transcriptIdFromUrl(url);
