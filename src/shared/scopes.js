@@ -29,7 +29,7 @@ export const SCOPES = {
  *   profile?: { active: string, name: string, list: { id: string, displayName: string }[] },
  *   core: null | { error: string } | {
  *     dir: string, sessions: number, identities: number, grants: number, askGrants: number, approvals: number,
- *     limits: { approvalSeconds: number, transcriptBytes: number, sessionTranscriptBytes: number },
+ *     limits: { approvalSeconds: number, transcriptBytes: number, sessionTranscriptBytes: number, transcriptDays?: number | null },  transcriptDays: none from a Core before retention
  *     mcp?: null | { servers: number, pinned: number, review: number },  null: a Core from before the gateway
  *     secrets?: null | number,
  *   },
@@ -60,7 +60,7 @@ export function controls(s) {
     { label: 'Hard denies', scope: 'global', value: 'your user profile and its credential folders, the Core\'s own data, other private trees', where: 'Fixed in the Core (core/policy.js, launch defaults); no grant overrides them' },
     { label: 'Stop All', scope: 'global', value: 'Ctrl+Shift+Backspace, the ⏹ button on the address bar, the tray menu', where: 'Fixed; it ends every agent session the Core runs' },
     { label: 'Audit log', scope: 'global', value: fromCore((c) => `${c.dir}\\audit`), where: 'Written by the Core only, hash-chained; read it in the Logs tab' },
-    { label: 'Transcript limits', scope: 'global', value: fromCore((c) => `${size(c.limits.sessionTranscriptBytes)} a session, ${size(c.limits.transcriptBytes)} in all, oldest deleted first`), where: 'Core defaults (core/transcripts.js)' },
+    { label: 'Transcript limits', scope: 'global', value: fromCore((c) => `${size(c.limits.sessionTranscriptBytes)} a session, ${size(c.limits.transcriptBytes)} in all${c.limits.transcriptDays ? `, ${c.limits.transcriptDays} days` : ''}, oldest deleted first`), where: 'Core defaults (core/transcripts.js)' },
     { label: 'Approval timeout', scope: 'global', value: fromCore((c) => `an unanswered card denies after ${c.limits.approvalSeconds} s`), where: 'Core default (core/approvals.js)' },
     { label: 'MCP server', scope: 'global', value: s.mcpUrl || 'not running', where: 'Fixed: loopback only, a new token at every launch' },
     { label: 'Close to tray', scope: 'global', value: s.closeToTray ? 'on' : 'off', where: 'File menu, or the tray menu' },

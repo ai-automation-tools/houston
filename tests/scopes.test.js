@@ -9,7 +9,7 @@ const snap = (over = {}) => ({
   hubUrl: 'http://127.0.0.1:4273', hubToken: 'sent', quickLinks: 2, newsSources: 1, bookmarkSource: '', adBlock: true, closeToTray: false,
   chat: { model: 'claude-x', missing: [] }, cronsole: { configured: false, ui: '' }, mcpUrl: 'http://127.0.0.1:1/mcp',
   workspaces: 3, workspace: { name: 'acme', folder: 'D:\\acme', tabs: 1, terminals: 2 },
-  core: { dir: 'C:\\data', sessions: 1, identities: 2, grants: 5, askGrants: 1, approvals: 0, limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: 2, pinned: 1, review: 1 }, secrets: 3 },
+  core: { dir: 'C:\\data', sessions: 1, identities: 2, grants: 5, askGrants: 1, approvals: 0, limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2, transcriptDays: 90 }, mcp: { servers: 2, pinned: 1, review: 1 }, secrets: 3 },
   ...over,
 });
 
@@ -33,7 +33,11 @@ test('every control has a known scope, a value and where it is changed; each sco
 
 test('values come from the snapshot: the Core\'s own limits, counts, chat and workspace', () => {
   const rows = controls(snap());
-  assert.equal(row(rows, 'Transcript limits').value, '100 MB a session, 5 GB in all, oldest deleted first');
+  assert.equal(row(rows, 'Transcript limits').value, '100 MB a session, 5 GB in all, 90 days, oldest deleted first');
+  // A Core from before retention sends no age.
+  const noAge = snap();
+  noAge.core = { ...noAge.core, limits: { ...noAge.core.limits, transcriptDays: undefined } };
+  assert.equal(row(controls(noAge), 'Transcript limits').value, '100 MB a session, 5 GB in all, oldest deleted first');
   assert.equal(row(rows, 'Approval timeout').value, 'an unanswered card denies after 120 s');
   assert.equal(row(rows, 'Agent identities and grants').value, '2 identities, 5 grants (1 ask)');
   assert.equal(row(rows, 'Audit log').value, 'C:\\data\\audit');

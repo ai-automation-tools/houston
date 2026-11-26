@@ -1121,7 +1121,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
       const st = agentRun?.settings;
       check('⚙ opens Settings: every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
         Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile: Default,Workspace: Agents smoke,Session'
-          && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
+          && st.rows['Transcript limits'] === '100 MB a session, 5 GB in all, 90 days, oldest deleted first' && st.rows['Running agent sessions'] === '0 sessions'
           && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
           && agentRun.settingsKey === 'CmdOrCtrl+,'), { ...st, key: agentRun?.settingsKey });
       const hl = agentRun?.health;

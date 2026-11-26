@@ -99,3 +99,37 @@ test('read gives the newest part from a whole line, and nothing for an unknown o
   assert.equal(r.truncated, true);
   assert.equal(r.text, 'last\n');
 });
+
+test('past their age, finished transcripts are deleted at start and at each rotate, each audited; a running one stays', (t) => {
+  const s = setup(t, { maxAgeDays: 30 });
+  const running = s.transcripts.open(session('live'));
+  const day = 24 * 60 * 60 * 1000;
+  for (const [id, age] of [['stale', 31], ['fresh', 29]]) {
+    fs.writeFileSync(path.join(s.tdir, `${id}.txt`), 'x');
+    const at = new Date(Date.now() - age * day);
+    fs.utimesSync(path.join(s.tdir, `${id}.txt`), at, at);
+  }
+  fs.utimesSync(path.join(s.tdir, 'live.txt'), new Date(0), new Date(0));
+  s.transcripts.rotate();
+  assert.deepEqual(fs.readdirSync(s.tdir).sort(), ['fresh.txt', 'live.txt']);
+  const deleted = s.events().filter((e) => e.type === 'log.deleted');
+  assert.deepEqual(deleted.map((e) => [e.action, e.resource.id, e.decision.reasons[0]]), [['transcript.expire', 'stale', 'older than 30 days']]);
+  running.close();
+  assert.equal(s.transcripts.maxAgeDays, 30);
+  assert.equal(setup(t).transcripts.maxAgeDays, 90);
+});
+
+test('remove deletes a finished transcript as the operator, never a running one or a path', (t) => {
+  const s = setup(t);
+  const running = s.transcripts.open(session('live'));
+  s.transcripts.open(session('done')).close('exit 0');
+  assert.equal(s.transcripts.remove('live', 'local:operator'), 'running');
+  assert.equal(s.transcripts.remove('nope', 'local:operator'), 'missing');
+  assert.equal(s.transcripts.remove('../audit/audit-000001', 'local:operator'), 'missing');
+  assert.equal(s.transcripts.remove('done', 'local:operator'), 'deleted');
+  assert.equal(s.transcripts.read('done'), null);
+  assert.ok(fs.existsSync(path.join(s.tdir, 'live.txt')));
+  const deleted = s.events().filter((e) => e.type === 'log.deleted');
+  assert.deepEqual(deleted.map((e) => [e.action, e.identity.subject, e.resource.id]), [['transcript.delete', 'local:operator', 'done']]);
+  running.close();
+});

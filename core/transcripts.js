@@ -2,14 +2,17 @@
 // as plain text, with secrets replaced by a marker before anything reaches the disk. One file per
 // session in <data>/transcripts, inside the data folder only the operator can read. Two caps: one
 // transcript stops growing at sessionCapBytes, and the whole folder is kept under capBytes by
-// deleting the oldest finished transcripts first (each one a `log.deleted` audit event). The
-// audit log is never rotated here.
+// deleting the oldest finished transcripts first. Retention: a finished transcript is deleted
+// maxAgeDays after its last line, and the operator can delete one sooner (remove). Each deletion
+// is a `log.deleted` audit event. The audit log is never rotated here.
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const TRANSCRIPT_CAP = 5 * 1024 ** 3;
 export const SESSION_CAP = 100 * 1024 ** 2;
+export const TRANSCRIPT_DAYS = 90;
+const DAY = 24 * 60 * 60 * 1000;
 // Text with no line end yet is held back, so a secret split across two chunks is redacted
 // whole. Past this much, it's written anyway.
 const HOLD_MAX = 16 * 1024;
@@ -90,32 +93,41 @@ const ID = /^[A-Za-z0-9-]{1,64}$/;
  *   audit: { append: (e: object) => unknown },
  *   capBytes?: number,
  *   sessionCapBytes?: number,
+ *   maxAgeDays?: number,
  *   exact?: (line: string) => string,
+ *   now?: () => number,
  * }} opts
  *   exact: the vault's redaction of its own stored values (vault.js), run after the shapes
  */
-export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessionCapBytes = SESSION_CAP, exact = (l) => l }) {
+export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessionCapBytes = SESSION_CAP, maxAgeDays = TRANSCRIPT_DAYS, exact = (l) => l, now = Date.now }) {
   fs.mkdirSync(dir, { recursive: true });
   /** Sessions being written now: never rotated out. @type {Set<string>} */
   const open = new Set();
   const file = (/** @type {string} */ id) => path.join(dir, `${id}.txt`);
 
-  /** Delete the oldest finished transcripts until the folder is under the cap. */
+  /** @param {string} id @param {string} action @param {string} subject @param {string} reason */
+  function drop(id, action, subject, reason) {
+    fs.rmSync(file(id), { force: true });
+    audit.append({
+      type: 'log.deleted', action, identity: { subject }, session_id: id,
+      resource: { type: 'Transcript', id }, decision: { result: 'allow', policy_version: 'none', reasons: [reason] },
+    });
+  }
+
+  /** Delete finished transcripts past their age, then the oldest finished ones until the folder is under the cap. */
   function rotate() {
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.txt')).map((f) => {
       const st = fs.statSync(path.join(dir, f));
       return { id: f.slice(0, -4), size: st.size, mtime: st.mtimeMs };
     }).sort((a, b) => a.mtime - b.mtime);
     let total = files.reduce((n, f) => n + f.size, 0);
+    const oldest = now() - maxAgeDays * DAY;
     for (const f of files) {
-      if (total <= capBytes) break;
       if (open.has(f.id)) continue;
-      fs.rmSync(file(f.id), { force: true });
+      if (f.mtime < oldest) drop(f.id, 'transcript.expire', 'local:core', `older than ${maxAgeDays} days`);
+      else if (total > capBytes) drop(f.id, 'transcript.rotate', 'local:core', `transcripts over their ${capBytes} byte cap; oldest first`);
+      else break;
       total -= f.size;
-      audit.append({
-        type: 'log.deleted', action: 'transcript.rotate', identity: { subject: 'local:core' }, session_id: f.id,
-        resource: { type: 'Transcript', id: f.id }, decision: { result: 'allow', policy_version: 'none', reasons: [`transcripts over their ${capBytes} byte cap; oldest first`] },
-      });
     }
   }
   rotate();
@@ -123,7 +135,20 @@ export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessi
   return {
     capBytes,
     sessionCapBytes,
+    maxAgeDays,
     rotate,
+
+    /**
+     * The operator deletes a finished transcript before its time.
+     * @param {string} id @param {string} subject who asked
+     * @returns {'deleted' | 'running' | 'missing'}
+     */
+    remove(id, subject) {
+      if (!ID.test(id) || !fs.existsSync(file(id))) return 'missing';
+      if (open.has(id)) return 'running';
+      drop(id, 'transcript.delete', subject, 'deleted by the operator');
+      return 'deleted';
+    },
 
     /**
      * Start a session's transcript. write() takes raw terminal text; close() writes what's held.

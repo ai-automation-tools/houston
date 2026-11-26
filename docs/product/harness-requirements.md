@@ -126,7 +126,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | LOG-01 | Conversation logs on by default | Must | MVP; built (H2) | Session transcripts |
 | LOG-02 | Application logs on by default | Must | Done for the app; Core log MVP | `logs\app.log` and a Core log |
 | LOG-03 | Security and audit logs on by default | Must | MVP | The audit event log |
-| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction, limits, export MVP; rest Next; redaction and caps built for transcripts (H2) | Redact before write; a size cap; chain check on start |
+| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction, limits, export MVP; rest Next; redaction and caps built for transcripts (H2); transcript retention and deletion, audit export built (H7); audit pruning later | Redact before write; a size cap and a 90-day age; operator `transcript.delete` and `audit.export`; chain check on start |
 
 ## Acceptance criteria for the MVP musts
 

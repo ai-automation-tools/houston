@@ -343,7 +343,7 @@ test('core.status: pid, schema, the containment rung, how many sessions run and 
   const st = await s.call('core.status');
   assert.deepEqual({ ...st, startedAt: typeof st.startedAt }, {
     pid: process.pid, startedAt: 'string', schema: 3, containment: 'container', sessions: 1,
-    limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 },
+    limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2, transcriptDays: 90 },
   });
 });
 
@@ -399,4 +399,27 @@ test('secrets go in through secret.set (ctl reads the value from stdin) and neve
   assert.equal((await call('secret.set', { name: 'Bad Name', value }).catch((e) => e)).code, 'bad_request');
   assert.deepEqual(await call('secret.delete', { name: 'api-key' }), { name: 'api-key', deleted: true });
   assert.ok(![...s.audit.events()].some((e) => JSON.stringify(e).includes(value)));
+});
+
+test('transcript.delete: a finished one only, audited; audit.export: every event to the exports folder, audited', async (t) => {
+  const s = await setup(t);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\w', command: 'c' });
+  await assert.rejects(s.call('transcript.delete', { id: 's1' }), (e) => e.code === 'conflict');
+  s.runner.get('s1').exit(0);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(await s.call('transcript.delete', { id: 's1' }), { deleted: 's1' });
+  await assert.rejects(s.call('transcript.get', { id: 's1' }), (e) => e.code === 'not_found');
+  await assert.rejects(s.call('transcript.delete', { id: 's1' }), (e) => e.code === 'not_found');
+  await assert.rejects(s.call('transcript.delete', {}), (e) => e.code === 'bad_request');
+  const before = [...s.audit.events()].length;
+  const r = await s.call('audit.export');
+  assert.equal(path.dirname(r.file), path.join(s.dir, 'exports'));
+  assert.match(path.basename(r.file), /^audit-[\dT-]+Z\.jsonl$/);
+  assert.equal(r.events, before);
+  assert.deepEqual(r.breaks, []);
+  const lines = fs.readFileSync(r.file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines.length, before);
+  assert.ok(lines.some((e) => e.type === 'log.deleted' && e.action === 'transcript.delete' && e.identity.subject === 'local:operator'));
+  const last = [...s.audit.events()].at(-1);
+  assert.deepEqual([last.type, last.action, last.resource.id, last.decision.reasons[0]], ['log.export', 'audit.export', path.basename(r.file), `${before} events, 0 breaks`]);
 });

@@ -33,7 +33,7 @@ export const METHODS = [
   'profile.list', 'profile.create', 'profile.export', 'profile.restore', 'skill.list', 'skill.install', 'skill.remove',
   'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list', 'identity.allowStanding',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
-  'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
+  'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get', 'transcript.delete', 'audit.export',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
   'standing.list', 'standing.get', 'standing.create', 'standing.update', 'standing.pause', 'standing.resume', 'standing.revoke', 'standing.run',
 ];
@@ -173,7 +173,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     // limits: the defaults the window's Settings page shows (null when this Core has no inbox or transcripts).
     'core.status': () => ({
       pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
-      limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, transcriptBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null },
+      limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, transcriptBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null, transcriptDays: transcripts?.maxAgeDays ?? null },
     }),
     // The health screen and diagnostics bundle: the audit chain checked now, folder sizes, core.log's newest lines redacted.
     'core.health': (p) => coreHealth({ dir, audit, redact: vault?.redact }, p),
@@ -200,6 +200,14 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       if (!r) throw new ControlError('not_found', 'no transcript has that session id');
       return r;
     },
+    // The operator deletes one before its retention runs out (a log.deleted event). Not from the window: ctl only.
+    'transcript.delete': (p) => {
+      const id = str(p.id, 'id');
+      const r = need(transcripts, 'transcripts').remove(id, OPERATOR);
+      if (r === 'running') throw new ControlError('conflict', 'that session is still running; delete its transcript after it ends');
+      if (r === 'missing') throw new ControlError('not_found', 'no transcript has that session id');
+      return { deleted: id };
+    },
     'approval.decide': (p) => {
       if (!approvals) throw new ControlError('not_found', 'this Core has no approval inbox');
       return approvals.decide(str(p.id, 'id'), p.answer);
@@ -222,6 +230,19 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
       return { stopped: (await runner.stopAll()).length, paused: paused.length };
     },
     'audit.query': (p) => queryAudit(audit, p),
+    // Every good event to exports\audit-<time>.jsonl in the data folder, and the breaks, so a reader
+    // knows what it's missing. Not from the window: ctl only. The log itself is never deleted.
+    'audit.export': () => {
+      const folder = path.join(dir, 'exports');
+      fs.mkdirSync(folder, { recursive: true });
+      const file = path.join(folder, `audit-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
+      const { events, breaks } = audit.exportTo(file);
+      audit.append({
+        type: 'log.export', action: 'audit.export', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'AuditLog', id: path.basename(file) },
+        decision: { result: 'allow', policy_version: 'none', reasons: [`${events} events, ${breaks.length} breaks`] },
+      });
+      return { file, events, breaks };
+    },
 
     'profile.list': () => need(profiles, 'profiles').list(),
     'profile.create': (p) => need(profiles, 'profiles').create(p),
