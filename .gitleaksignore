@@ -4,3 +4,6 @@
 679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:jwt:29
 679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:generic-api-key:32
 679dd7b5a7b5d1ea843d8f06f5308c9726bd77d8:tests/core/transcripts.test.js:private-key:52
+# .gitleaksignore line 2 as added in 769ca86b: the comment above lists the redactor tests' planted
+# sample values, and the rule reads that list as a key. It is prose, not a secret.
+769ca86baeafca3d8525ac07cd14e7ea4a382fbd:.gitleaksignore:generic-api-key:2
