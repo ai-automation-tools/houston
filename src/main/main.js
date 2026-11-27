@@ -16,7 +16,7 @@ import { store } from './store.js';
 import { activeProfile, setNextProfile } from './profile.js';
 import { browsePartition } from '../shared/profiles.js';
 import { Tabs } from './tabs.js';
-import { Terminals } from './terminal.js';
+import { Terminals, ptyDrainMs } from './terminal.js';
 import { extensionsMenu, listExtensions, setupExtensions } from './extensions.js';
 import { loadBlocker } from './adblock.js';
 import { smoke } from './smoke.js';
@@ -69,6 +69,13 @@ protocol.registerSchemesAsPrivileged([
 // ACC_USER_DATA: run on another profile (npm run smoke's throwaway one). Before the
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
+
+// A smoke run keeps painting and running timers while its window is covered or minimized,
+// so its checks don't depend on the desktop being left alone. The real app keeps Chromium's
+// throttling, which saves power when it's in the background.
+if (process.env.ACC_SMOKE_DIR) {
+  for (const s of ['disable-renderer-backgrounding', 'disable-backgrounding-occluded-windows', 'disable-background-timer-throttling']) app.commandLine.appendSwitch(s);
+}
 
 // The active profile's browser storage (H5): another profile's cookies and sign-ins are never loaded.
 // After the userData folder is final: profile.json is read from it.
@@ -961,6 +968,13 @@ async function createWindow() {
 
 app.on('second-instance', (_e, argv) => { if (argv.includes('--quit')) app.quit(); else showWindow(); });
 app.on('before-quit', () => { quitting = true; });
+app.on('will-quit', (e) => {
+  // Every terminal was killed as the window closed (win 'closed'). Exiting while node-pty
+  // still has their ConPTY output threads running throws in conpty.node during teardown
+  // (0xC0000409 or 0xE06D7363), so hold the quit until they've stopped, then quit again.
+  const ms = ptyDrainMs();
+  if (ms > 0) { e.preventDefault(); setTimeout(() => app.quit(), ms); }
+});
 
 logCrashes();
 app.whenReady().then(() => {
@@ -977,7 +991,7 @@ app.on('window-all-closed', () => app.quit());
 
 // node-pty's ConPTY output reader runs on a worker thread that outlives its session, so
 // the process reaches 'quit' and then never exits. Every window is closed and every
-// terminal killed by this point (win 'closed'), so exit explicitly.
+// terminal killed by this point (win 'closed'), and will-quit waited for their threads, so exit explicitly.
 app.on('quit', () => {
   tray?.destroy();
   mcp?.close();

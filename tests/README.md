@@ -91,7 +91,7 @@ What the smoke run checks:
 - **With `--live`:** the Files tree loads and expands, search finds README files, a Markdown file opens as a document page with no second sidebar, the Cron tab lists Cronsole's tasks with one pinned Cronsole tab first, and a task's run opens as a page.
 
 > [!NOTE]
-> `npm run smoke` and `npm run spike:extensions` open a real window on a throwaway profile under `%TEMP%` (deleted afterwards, with only your `settings.json` copied in), so they run beside an open copy of the app and leave your history, logs and extensions alone. `npm run smoke -- --profile` uses the real profile in `%APPDATA%\ai-command-center` instead; it then won't run while the app is open.
+> `npm run smoke` and `npm run spike:extensions` open a real window on a throwaway profile under `%TEMP%` (deleted afterwards, with only your `settings.json` copied in), so they run beside an open copy of the app and leave your history, logs and extensions alone. `npm run smoke -- --profile` uses the real profile in `%APPDATA%\ai-command-center` instead; it then won't run while the app is open. You can keep working while it runs: the window opens in front, but it keeps painting and running its timers when another window covers it. Don't minimize it, though: a minimized window has nothing on screen to capture, so the screenshot, find and terminal-search checks fail.
 
 ---
 
