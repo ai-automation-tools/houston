@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electron from 'electron';
+import { electronDrift } from '../abuse/gate.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dir = path.join(root, '.smoke');
@@ -60,6 +61,9 @@ if (profile) {
   ]));
   env.ACC_SMOKE_SEEDED = '1';
 }
+
+const drift = electronDrift(root);
+if (drift) console.warn(`[smoke] warning: ${drift}`);
 
 const summaryFile = path.join(dir, 'summary.json');
 fs.rmSync(summaryFile, { force: true });

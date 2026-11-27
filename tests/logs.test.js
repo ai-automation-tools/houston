@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LOG_LIMIT, logFilter, logRow, sessionChoices } from '../src/shared/logs.js';
+import { LOG_LIMIT, logDay, logFilter, logRow, sessionChoices } from '../src/shared/logs.js';
+
+test('logDay heads events Today, Yesterday or with their date, in local time', () => {
+  const now = new Date(2026, 10, 27, 0, 30);
+  assert.equal(logDay(new Date(2026, 10, 27, 0, 5).toISOString(), now), 'Today');
+  assert.equal(logDay(new Date(2026, 10, 26, 23, 59).toISOString(), now), 'Yesterday');
+  assert.equal(logDay(new Date(2026, 10, 20, 12).toISOString(), now), new Date(2026, 10, 20, 12).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }));
+  assert.equal(logDay('not a time', now), 'Unknown date');
+});
 
 test('logFilter passes only an identity, a session and a decision, and maps session to session_id', () => {
   assert.deepEqual(logFilter({ identity: 'local:a', session: 's1', result: 'deny' }), { identity: 'local:a', session_id: 's1', result: 'deny', limit: LOG_LIMIT });

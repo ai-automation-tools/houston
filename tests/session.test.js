@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SAVED_TABS_MAX, chromeUserAgent, cleanSavedTabs, cycleTab, pickTab, savedActiveIndex } from '../src/shared/session.js';
+import { SAVED_TABS_MAX, chromeUserAgent, cleanSavedTabs, cycleTab, pickTab, savedActiveIndex, tabMenu } from '../src/shared/session.js';
 
 test('cleanSavedTabs keeps allowed URLs in order and drops the rest', () => {
   assert.deepEqual(
@@ -54,4 +54,16 @@ test('chromeUserAgent drops the Electron and app tokens and keeps the rest', () 
   assert.equal(chromeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ai-command-center/0.1.0 Chrome/152.0.7977.167 Electron/44.9.3 Safari/537.36'), chrome);
   assert.equal(chromeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.167 Electron/44.9.3 Safari/537.36'), chrome);
   assert.equal(chromeUserAgent(chrome), chrome);
+});
+
+test('tabMenu closes others and to the right, never the pinned tab', () => {
+  const pinned = (/** @type {number} */ id) => id === 1;
+  const ids = (/** @type {any[]} */ items) => items.map((i) => (i === '-' ? '-' : i.id));
+  const mid = tabMenu([1, 2, 3, 4], 3, pinned, true);
+  assert.deepEqual(ids(mid.items), ['reload', 'duplicate', 'copy', '-', 'close', 'others', 'right']);
+  assert.deepEqual(mid.others, [2, 4]);
+  assert.deepEqual(mid.right, [4]);
+  const pin = tabMenu([1, 2], 1, pinned, true);
+  assert.deepEqual(ids(pin.items), ['reload', 'duplicate', 'copy', '-', 'others', 'right']);
+  assert.deepEqual(ids(tabMenu([1], 1, pinned, false).items), ['reload']);
 });

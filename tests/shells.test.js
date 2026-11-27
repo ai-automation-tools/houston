@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pickShell, shellProfiles } from '../src/shared/shells.js';
-import { menuItems } from '../src/shared/menu.js';
+import { menuItems, pasteLabel } from '../src/shared/menu.js';
 
 const env = { ProgramFiles: 'C:\\Program Files', SystemRoot: 'C:\\Windows', LOCALAPPDATA: 'C:\\Users\\dev\\AppData\\Local' };
 
@@ -35,4 +35,17 @@ test('menuItems keeps ids, labels and separators, and refuses anything else', ()
   for (const bad of [null, 'x', [{}], [{ id: 1, label: 'A' }], [{ id: 'a', label: '' }], [{ id: 'a', label: 'x'.repeat(201) }], Array(41).fill('-')]) {
     assert.throws(() => menuItems(bad), undefined, JSON.stringify(bad)?.slice(0, 60));
   }
+});
+
+test('menuItems doubles & so a Windows menu shows it instead of a mnemonic', () => {
+  assert.deepEqual(menuItems([{ id: 'a', label: 'R&D' }]), [{ id: 'a', label: 'R&&D' }]);
+});
+
+test('pasteLabel previews the first line, clipped, with the line count, and nothing for an empty clipboard', () => {
+  assert.equal(pasteLabel('Get-ChildItem'), 'Paste: Get-ChildItem');
+  assert.equal(pasteLabel('Get-ChildItem\r\n'), 'Paste: Get-ChildItem');
+  assert.equal(pasteLabel('cd ..\nrm -r x\n'), 'Paste 2 lines: cd ..');
+  assert.equal(pasteLabel('x'.repeat(50)), `Paste: ${'x'.repeat(40)}…`);
+  assert.equal(pasteLabel('a\u001b[31mb\u200bc\tz'), 'Paste: a[31mbcz');
+  for (const empty of ['', '  ', '\r\n\n', undefined]) assert.equal(pasteLabel(/** @type {any} */ (empty)), '');
 });

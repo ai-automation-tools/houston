@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_UI, cronsoleConfig, docsTasks, exportedTask, failedTasks, grantLine, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, standingGrantIn, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
+import { DEFAULT_UI, cronsoleConfig, docsTasks, exportedTask, failedTasks, filterTasks, grantLine, initialize, isCronsoleUrl, listTasks, runFromUrl, runOutput, runRows, runSummary, runTask, runUrl, standingGrantIn, stdioRpc, taskHistory, taskIdArg, taskRows, taskSummary } from '../src/shared/cronsole.js';
 
 test('cronsoleConfig reads the server path and the UI origin, http(s) only', () => {
   assert.deepEqual(cronsoleConfig({}), { server: '', ui: DEFAULT_UI });
@@ -137,6 +137,23 @@ test('docsTasks keeps tasks whose name has a docs word, whole words only', () =>
   const kept = docsTasks(names.map((name, i) => ({ ...t, id: String(i), name }))).map((x) => x.name);
   assert.deepEqual(kept, ['Docs link check', 'README refresh', 'diagram-upkeep', 'weekly_changelog', 'Doc drift (houston)', 'Documentation sweep']);
   assert.deepEqual(docsTasks([]), []);
+});
+
+test('filterTasks matches every word of the name and combines with Docs and Failed', () => {
+  const t = /** @type {import('../src/shared/cronsole.js').CronTask} */ ({ ...TASK });
+  const tasks = [
+    { ...t, id: 'a', name: 'Houston docs sweep', lastRunStatus: 'FAILURE', status: 'ACTIVE' },
+    { ...t, id: 'b', name: 'Houston nightly report', lastRunStatus: 'SUCCESS', status: 'ACTIVE' },
+    { ...t, id: 'c', name: 'Promptbook docs sweep', lastRunStatus: 'SUCCESS', status: 'ACTIVE' },
+    { ...t, id: 'd', name: 'Old houston job', lastRunStatus: 'FAILURE', status: 'DISABLED' },
+  ];
+  const ids = (/** @type {any} */ f) => filterTasks(tasks, f).map((x) => x.id);
+  assert.deepEqual(ids({}), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(ids({ query: '  HOUSTON ' }), ['a', 'b', 'd']);
+  assert.deepEqual(ids({ query: 'sweep houston' }), ['a']);
+  assert.deepEqual(ids({ docs: true }), ['a', 'c']);
+  assert.deepEqual(ids({ failed: true }), ['a']);
+  assert.deepEqual(ids({ query: 'promptbook', failed: true }), []);
 });
 
 const RUN = { id: 'e1', status: 'FAILURE', triggeredAt: '2026-10-04T02:00:00.000Z', durationMs: 4200, log: '2 broken links', platformRunId: null };

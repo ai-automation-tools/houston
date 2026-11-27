@@ -335,6 +335,16 @@ async function createWindow() {
     tabs.create(url);
     return { action: 'deny' };
   });
+  // The shell's own text fields (address bar, search, chat, Settings) get the usual edit menu.
+  // Rows and the terminal cancel their contextmenu event themselves, so they never reach this.
+  shellView.webContents.on('context-menu', (_e, params) => {
+    if (!params.isEditable) return;
+    const f = params.editFlags;
+    Menu.buildFromTemplate([
+      { role: 'cut', enabled: f.canCut }, { role: 'copy', enabled: f.canCopy }, { role: 'paste', enabled: f.canPaste },
+      { type: 'separator' }, { role: 'selectAll', enabled: f.canSelectAll },
+    ]).popup();
+  });
 
   const browseSession = session.fromPartition(BROWSE_PARTITION);
   // Pages are untrusted: deny every permission but the few in src/shared/permissions.js.

@@ -68,12 +68,27 @@ export function sourceNow() {
   };
 }
 
+/**
+ * The installed Electron against the lockfile's: a sentence saying how they differ, or ''.
+ * A smoke or abuse run on a stale install isn't evidence for the code checked out.
+ * @param {string} [dir] the checkout
+ */
+export function electronDrift(dir = root) {
+  const read = (/** @type {string} */ file) => { try { return JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')); } catch { return null; } };
+  const locked = read('package-lock.json')?.packages?.['node_modules/electron']?.version;
+  const installed = read(path.join('node_modules', 'electron', 'package.json'))?.version;
+  if (!locked || installed === locked) return '';
+  return `node_modules has Electron ${installed || '(none)'} but package-lock.json has ${locked}: close Houston and reinstall (npm ci in the real checkout).`;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dir = path.join(root, 'abuse', 'results');
   const newest = fs.readdirSync(dir).filter((f) => /^\d{4}-\d\d-\d\d\.md$/.test(f)).sort().at(-1);
   const required = requiredTests(fs.readFileSync(path.join(root, 'docs', 'product', 'harness-requirements.md'), 'utf8'));
   const record = newest ? parseRecord(fs.readFileSync(path.join(dir, newest), 'utf8')) : null;
   const problems = gateProblems(record, required, sourceNow());
+  const drift = electronDrift();
+  if (drift) problems.push(drift);
   if (problems.length) {
     console.error(`Release gate: refused (${newest ?? 'no results file'}).\n${problems.map((p) => `- ${p}`).join('\n')}`);
     process.exit(1);

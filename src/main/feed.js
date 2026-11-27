@@ -11,10 +11,10 @@ import { store } from './store.js';
 
 const MAX_FILE = 5 * 1024 * 1024;
 
-/** The feed as the index file says now, or why there is none. @returns {{ feed: import('../shared/feed.js').Feed | null, error: string | null }} */
+/** The feed as the index file says now, or why there is none (`unset`: no index file named). @returns {{ feed: import('../shared/feed.js').Feed | null, error: string | null, unset?: boolean }} */
 function readFeed() {
   const file = store.settings().feedIndex;
-  if (!file) return { feed: null, error: 'No feed yet: set "feedIndex" in settings.json to the index.json a scheduled job writes (docs/guide/setup.md).' };
+  if (!file) return { feed: null, error: 'No feed yet: set the Feed index file in Settings › Sources to the index.json a scheduled job writes.', unset: true };
   try {
     if (fs.statSync(file).size > MAX_FILE) return { feed: null, error: 'The feed index is over 5 MB.' };
     return { feed: parseFeed(fs.readFileSync(file, 'utf8')), error: null };
@@ -38,8 +38,8 @@ async function installed() {
 export const feed = {
   /** What the Feed tab shows. */
   list() {
-    const { feed: f, error } = readFeed();
-    if (!f) return { error };
+    const { feed: f, error, unset } = readFeed();
+    if (!f) return { error, unset };
     return { generated: f.generated, dropped: f.dropped, ...feedView(f, store.feedBookmarks()) };
   },
 

@@ -40,7 +40,8 @@ runs both on every push; the org PR sweep won't merge a PR with a red check, and
 Graduate stage needs a green run on `main`. Run `npm run smoke` when you touch `src/main/`, `src/preload/`
 or `src/renderer/` and you have a desktop session. `npm run scan:secrets` (gitleaks)
 before anything goes public, and `npm run gate` before a release: it passes only if the newest
-saved abuse run (`node abuse/run.js`, all tests, on this machine) covered this exact code.
+saved abuse run (`node abuse/run.js`, all tests, on this machine) covered this exact code and the
+installed Electron is the lockfile's (`npm run smoke` warns when it isn't).
 
 ## Standards
 

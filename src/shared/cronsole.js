@@ -228,6 +228,18 @@ export function docsTasks(tasks) {
 }
 
 /**
+ * The Cron tab's finder: every word of `query` in the name, then the Docs and Failed toggles.
+ * Failed means what the tab's badge counts: active tasks whose last run failed.
+ * @param {CronTask[]} tasks
+ * @param {{ query?: string, docs?: boolean, failed?: boolean }} [f]
+ */
+export function filterTasks(tasks, { query = '', docs = false, failed = false } = {}) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const bad = failed ? new Set(failedTasks(tasks)) : null;
+  return (docs ? docsTasks(tasks) : tasks).filter((t) => (!bad || bad.has(t)) && words.every((w) => t.name.toLowerCase().includes(w)));
+}
+
+/**
  * The standing grant a task's command runs under (H4): `harness.js run --grant <id>`, or
  * `npm run harness -- run --grant <id>`, anywhere in its exported definition (Task Scheduler
  * XML or Cronsole's JSON). Null when it doesn't run one.

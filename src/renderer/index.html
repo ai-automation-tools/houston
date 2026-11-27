@@ -68,6 +68,11 @@
           <button id="cron-open" title="Cronsole's UI in the pinned tab">Open Cronsole</button>
           <button id="cron-refresh" title="Ask Cronsole again">Refresh</button>
           <button id="cron-docs" aria-pressed="false" title="Docs upkeep: only the tasks that keep docs current (doc, readme, changelog or diagram in the name). Click one for its last runs and reports">Docs</button>
+          <button id="cron-failed" aria-pressed="false" title="Only the active tasks whose last run failed">Failed</button>
+        </div>
+        <div class="panel-tools cron-find">
+          <input id="cron-filter" type="search" placeholder="Filter tasks by name" aria-label="Filter tasks by name" autocomplete="off" spellcheck="false">
+          <span id="cron-count" class="sub" aria-live="polite"></span>
         </div>
         <div id="cron-list"></div>
       </section>

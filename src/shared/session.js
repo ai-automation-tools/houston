@@ -66,3 +66,28 @@ export function savedActiveIndex(index, count) {
 export function chromeUserAgent(ua) {
   return ua.replace(/ Electron\/\S+/, '').replace(/\) \S+\/\S+ Chrome\//, ') Chrome/');
 }
+
+/**
+ * A browser tab's right-click menu, and the tabs Close other tabs and Close tabs to the
+ * right would close. The pinned tab (Cronsole's) is never closed from here.
+ * @param {number[]} order tab ids as the strip shows them
+ * @param {number} id the tab right-clicked
+ * @param {(id: number) => boolean} pinned
+ * @param {boolean} hasUrl
+ */
+export function tabMenu(order, id, pinned, hasUrl) {
+  const others = order.filter((t) => t !== id && !pinned(t));
+  const right = order.slice(order.indexOf(id) + 1).filter((t) => !pinned(t));
+  /** @type {({ id: string, label: string } | '-')[]} */
+  const items = [
+    { id: 'reload', label: 'Reload' },
+    ...(hasUrl ? [{ id: 'duplicate', label: 'Duplicate' }, { id: 'copy', label: 'Copy address' }] : []),
+  ];
+  const closing = [
+    ...(pinned(id) ? [] : [{ id: 'close', label: 'Close' }]),
+    ...(others.length ? [{ id: 'others', label: 'Close other tabs' }] : []),
+    ...(right.length ? [{ id: 'right', label: 'Close tabs to the right' }] : []),
+  ];
+  if (closing.length) items.push('-', ...closing);
+  return { items, others, right };
+}

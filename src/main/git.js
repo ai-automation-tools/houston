@@ -45,7 +45,7 @@ function run(cwd, args, { okExit1 = false } = {}) {
  * @param {string | null} folder
  */
 export async function status(folder) {
-  if (!folder) return { repo: null, reason: 'Open a folder as a workspace to see its Git changes.' };
+  if (!folder) return { repo: null, noFolder: true, reason: 'Open a folder as a workspace to see its Git changes.' };
   let repo;
   try {
     repo = (await run(folder, ROOT_ARGS)).trim();

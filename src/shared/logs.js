@@ -77,6 +77,21 @@ export function logRow(e) {
 }
 
 /**
+ * The heading a Logs event sits under: Today, Yesterday, or its date. Local time.
+ * @param {string} time the event's ISO time
+ * @param {Date} [now]
+ */
+export function logDay(time, now = new Date()) {
+  const t = new Date(time);
+  if (Number.isNaN(t.getTime())) return 'Unknown date';
+  const day = (/** @type {Date} */ d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(t)) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return t.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/**
  * The session filter's choices from session.start events, newest first.
  * @param {any[]} starts
  * @returns {{ id: string, label: string }[]}
