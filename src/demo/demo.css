@@ -63,3 +63,8 @@ body.demo #app { height: calc(100vh - var(--srcbar-h)); }
 
 .demo-toast { position: fixed; left: 12px; bottom: 12px; z-index: 30; max-width: 420px; padding: 10px 12px;
   background: #1f2937; border: 1px solid #374151; border-radius: 8px; color: #f4f4f5; }
+/* The demo's stand-in for the app's native menus (install.js). */
+.demo-menu { position: fixed; z-index: 40; min-width: 160px; padding: 4px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); box-shadow: 0 8px 24px #0008; }
+.demo-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 4px; padding: 6px 10px; color: var(--text); cursor: pointer; }
+.demo-menu button:hover, .demo-menu button:focus-visible { background: var(--panel-2); outline: none; }
+.demo-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }

@@ -1,7 +1,7 @@
 <h1 align="center">🧭 Diagrams</h1>
 
 <p align="center">
-  <em>How Houston's one window is put together, drawn from the code and checked against it.</em>
+  <em>How Houston's window and its Core are put together, drawn from the code and checked against it.</em>
 </p>
 
 <p align="center">
@@ -22,8 +22,17 @@ tabs, fetches files and bookmarks from Project Hub, starts Cronsole's MCP server
 process, keeps its JSON files in userData, spawns the PowerShell terminals and runs the chat panel,
 whose API key never leaves it. The MCP server on `127.0.0.1` takes calls from the chat panel and
 from Claude Code (or any MCP client) with the per-launch token, and its acting tools wait on the
-confirm bar before anything is typed into a terminal or run in Cronsole. Below the map, four cards
-cover what keeps pages out, what an agent can do, who reaches the MCP server, and the optional parts.
+confirm bar before anything is typed into a terminal or run in Cronsole.
+
+Below the window sits the Core, the harness's own Node process. The main process reaches it only
+through its Control API, a named pipe with a token, to start and stop agent sessions, list and answer
+approvals, and press Stop All. The Core's runner checks an identity's grants against the policy and
+starts Claude Code or Codex in a Windows process container. A session's only way out is its egress
+proxy, which also serves its MCP gateway: one policy check per call, an ask held in the approval inbox
+until you answer from the window's approval bar, secrets from the vault only for an MCP server's
+environment, and every start, call and answer in the hash-chained audit log. Below the map, six cards
+cover what keeps pages out, what an MCP client can do, who reaches the MCP server, what contains an
+agent, how the window only asks, and the optional parts.
 
 **See it on the [homepage](https://houston.ai-automation-tools.dev/#architecture)**, or open the interactive version: [`app-architecture.html`](app-architecture.html) in a browser
 from a clone, or [render it from GitHub](https://raw.githack.com/ai-automation-tools/houston/main/docs/diagrams/app-architecture.html).
@@ -34,7 +43,7 @@ tracing, search, light/dark, and SVG/PNG export.
 
 | File | What it is | Edit it? |
 |:---|:---|:---|
-| [`app-architecture.json`](app-architecture.json) | The source: components, connections, the boundary, cards, and the code each component cites | **Yes, this is the only file you edit** |
+| [`app-architecture.json`](app-architecture.json) | The source: components, connections, the boundaries, cards, and the code each component cites | **Yes, this is the only file you edit** |
 | `app-architecture.html` · `.png` | Generated: the interactive diagram, which the homepage embeds live, and a static PNG snapshot | Never; rebuild |
 | `houston-site/app-architecture.html` · `.png` | Copies the build writes into the homepage repo, a separate private repo whose root Pages publishes. `--check` flags a copy that differs | Never; rebuild |
 | `app-architecture.delivery.json` · `.sources.lock.json` | Build receipt, and the git blob of every cited file at the pinned commit | Never; rebuild |
@@ -44,9 +53,11 @@ tracing, search, light/dark, and SVG/PNG export.
 
 Every component cites code by path and line range, pinned to the commit in `meta.repository.revision`.
 The cited files are `main.js`, `tabs.js`, `hub.js`, `docs.js`, `cronsole.js`, `store.js`,
-`chat.js`, `terminal.js` and `mcp.js` in `src/main/`; `chat.js`, `cronsole.js`, `mcp.js`,
-`confirm.js`, `tools.js` and `shells.js` in `src/shared/`; `src/preload/shell.cjs`; and
-`src/renderer/app.js`. When one changes, the diagram may describe logic that moved or no longer
+`chat.js`, `terminal.js`, `mcp.js`, `devservers.js`, `kill.js`, `git.js`, `core.js`, `agents.js`
+and `approvals.js` in `src/main/`; `chat.js`, `cronsole.js`, `mcp.js`, `confirm.js`, `tools.js`,
+`shells.js` and `runs.js` in `src/shared/`; `src/preload/shell.cjs`; `src/renderer/app.js`; and
+`control.js`, `runner.js`, `policy.js`, `launch.js`, `backends.js`, `approvals.js`, `egress.js`,
+`gateway.js`, `vault.js`, `audit.js` and `transcripts.js` in `core/`. When one changes, the diagram may describe logic that moved or no longer
 exists, so it counts as stale until someone has re-read that code.
 
 | When | What catches it |

@@ -86,6 +86,7 @@ child.on('exit', (code) => {
   }
   // The verdict is the summary's. Electron can still crash on its way out after the checks
   // (0xC0000409 seen 2026-11-27), and a raw Windows code that size comes out garbled from process.exit.
-  if (code !== 0) console.error(`[smoke] note: the app exited with ${code === null ? 'no code' : `0x${(code >>> 0).toString(16).toUpperCase()}`} after its checks`);
+  // The app sets 1 itself when a check failed (src/main/smoke.js), so only a different code is news.
+  if (code !== (summary.failed ? 1 : 0)) console.error(`[smoke] note: the app exited with ${code === null ? 'no code' : `0x${(code >>> 0).toString(16).toUpperCase()}`} after its checks`);
   process.exit(summary.failed ? 1 : 0);
 });

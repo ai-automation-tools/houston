@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Houston: one window, one main process",
+    "title": "Houston: the window and the Core",
     "output": "docs/diagrams/app-architecture.html",
     "quality_profile": "showcase",
     "locale": "en",
@@ -10,7 +10,7 @@
       "url": "https://github.com/ai-automation-tools/houston.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "99532117f80d05cf897535dc44c77de48be87be7"
+      "revision": "e5886e7d24f63a9445e75f554f34bb8c3aa92703"
     }
   },
   "components": [
@@ -21,7 +21,7 @@
       "sublabel": "clicks, types, approves",
       "icon": "person",
       "pos": [
-        40,
+        50,
         200
       ],
       "size": [
@@ -46,8 +46,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 293,
-          "end_line": 317,
+          "line": 304,
+          "end_line": 328,
           "label": "shell WebContentsView"
         },
         {
@@ -58,8 +58,8 @@
         },
         {
           "path": "src/renderer/app.js",
-          "line": 138,
-          "end_line": 240,
+          "line": 139,
+          "end_line": 241,
           "label": "confirm bar, approval inbox, run tabs"
         }
       ]
@@ -71,7 +71,7 @@
       "sublabel": "IPC from the shell only",
       "tag": "Electron 45",
       "pos": [
-        470,
+        450,
         200
       ],
       "size": [
@@ -81,15 +81,21 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 178,
-          "end_line": 203,
+          "line": 184,
+          "end_line": 209,
           "label": "handle() refuses other senders"
         },
         {
           "path": "src/main/main.js",
-          "line": 745,
-          "end_line": 848,
+          "line": 801,
+          "end_line": 904,
           "label": "IPC channels"
+        },
+        {
+          "path": "src/main/main.js",
+          "line": 141,
+          "end_line": 162,
+          "label": "Stop All: navbar, hotkey, tray"
         }
       ]
     },
@@ -122,9 +128,9 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 319,
-          "end_line": 324,
-          "label": "deny-by-default permissions"
+          "line": 330,
+          "end_line": 347,
+          "label": "deny-by-default permissions, file: guard"
         }
       ]
     },
@@ -134,7 +140,7 @@
       "label": "Project Hub",
       "sublabel": "HTTP, loopback :4273",
       "pos": [
-        440,
+        420,
         40
       ],
       "size": [
@@ -168,7 +174,7 @@
       "label": "Cronsole MCP",
       "sublabel": "child process, stdio",
       "pos": [
-        600,
+        580,
         40
       ],
       "size": [
@@ -196,11 +202,11 @@
       "label": "Profile JSON",
       "sublabel": "settings, workspaces, chats, runs",
       "pos": [
-        780,
+        760,
         40
       ],
       "size": [
-        140,
+        190,
         64
       ],
       "sources": [
@@ -230,7 +236,7 @@
       "label": "Chat pane",
       "sublabel": "key stays in main",
       "pos": [
-        780,
+        760,
         200
       ],
       "size": [
@@ -246,8 +252,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 665,
-          "end_line": 685,
+          "line": 689,
+          "end_line": 708,
           "label": "chat IPC"
         }
       ]
@@ -258,7 +264,7 @@
       "label": "Anthropic API",
       "sublabel": "Messages, streamed",
       "pos": [
-        1040,
+        1020,
         200
       ],
       "size": [
@@ -287,7 +293,7 @@
       "sublabel": "shells, runs, agent sessions",
       "tag": "fixed shells",
       "pos": [
-        490,
+        470,
         380
       ],
       "size": [
@@ -322,7 +328,7 @@
       "sublabel": "127.0.0.1, random port",
       "tag": "Bearer token",
       "pos": [
-        780,
+        760,
         380
       ],
       "size": [
@@ -344,8 +350,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 537,
-          "end_line": 634,
+          "line": 561,
+          "end_line": 658,
           "label": "tools over app sources"
         }
       ]
@@ -356,7 +362,7 @@
       "label": "Claude Code",
       "sublabel": "or any MCP client",
       "pos": [
-        1040,
+        1020,
         380
       ],
       "size": [
@@ -366,8 +372,8 @@
       "sources": [
         {
           "path": "src/main/main.js",
-          "line": 625,
-          "end_line": 631,
+          "line": 649,
+          "end_line": 654,
           "label": "MCP address and token in terminal env"
         }
       ]
@@ -379,7 +385,7 @@
       "sublabel": "waits for your Run click",
       "tag": "5 min timeout",
       "pos": [
-        780,
+        760,
         560
       ],
       "size": [
@@ -395,8 +401,8 @@
         },
         {
           "path": "src/main/main.js",
-          "line": 552,
-          "end_line": 616,
+          "line": 576,
+          "end_line": 640,
           "label": "terminal_run, cron_run, tab_click, tab_fill"
         },
         {
@@ -463,6 +469,249 @@
           "label": "execFile, status, diff page"
         }
       ]
+    },
+    {
+      "id": "control",
+      "type": "security",
+      "label": "Control API",
+      "sublabel": "named pipe, token per start",
+      "tag": "operator only",
+      "pos": [
+        460,
+        740
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/control.js",
+          "line": 1,
+          "end_line": 11,
+          "label": "random pipe, token in control.json"
+        },
+        {
+          "path": "core/control.js",
+          "line": 331,
+          "end_line": 349,
+          "label": "bad token: audited, closed"
+        },
+        {
+          "path": "src/main/core.js",
+          "line": 1,
+          "end_line": 14,
+          "label": "the window is a client"
+        }
+      ]
+    },
+    {
+      "id": "runner",
+      "type": "backend",
+      "label": "Runner + policy",
+      "sublabel": "grants to a container",
+      "tag": "default deny",
+      "pos": [
+        760,
+        740
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/runner.js",
+          "line": 157,
+          "end_line": 211,
+          "label": "refuses before anything starts"
+        },
+        {
+          "path": "core/policy.js",
+          "line": 133,
+          "end_line": 191,
+          "label": "global deny, deny, narrowest grant"
+        },
+        {
+          "path": "src/main/agents.js",
+          "line": 214,
+          "end_line": 228,
+          "label": "Agents tab asks session.start"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "external",
+      "label": "Agent session",
+      "sublabel": "Claude Code or Codex",
+      "tag": "own CLI home",
+      "pos": [
+        1020,
+        740
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/backends.js",
+          "line": 48,
+          "end_line": 97,
+          "label": "Claude Code and Codex manifests"
+        },
+        {
+          "path": "core/launch.js",
+          "line": 128,
+          "end_line": 147,
+          "label": "container request, no user env"
+        },
+        {
+          "path": "core/runner.js",
+          "line": 342,
+          "end_line": 352,
+          "label": "spawnWithPty in the container"
+        }
+      ]
+    },
+    {
+      "id": "inbox",
+      "type": "security",
+      "label": "Approval inbox",
+      "sublabel": "once, session or deny",
+      "tag": "2 min, then deny",
+      "pos": [
+        460,
+        890
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/approvals.js",
+          "line": 72,
+          "end_line": 112,
+          "label": "an ask waits; timeout denies"
+        },
+        {
+          "path": "src/main/approvals.js",
+          "line": 8,
+          "end_line": 45,
+          "label": "window lists and answers"
+        },
+        {
+          "path": "src/renderer/app.js",
+          "line": 171,
+          "end_line": 217,
+          "label": "approval bar, Deny has focus"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "security",
+      "label": "Egress + MCP gateway",
+      "sublabel": "one port per session",
+      "tag": "127.0.0.1",
+      "pos": [
+        760,
+        890
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/egress.js",
+          "line": 95,
+          "end_line": 125,
+          "label": "allowed, public hosts only"
+        },
+        {
+          "path": "core/gateway.js",
+          "line": 517,
+          "end_line": 540,
+          "label": "policy check, then the server"
+        },
+        {
+          "path": "core/gateway.js",
+          "line": 572,
+          "end_line": 590,
+          "label": "Host, Origin, session token"
+        }
+      ]
+    },
+    {
+      "id": "audit",
+      "type": "database",
+      "label": "Audit log",
+      "sublabel": "hash-chained, transcripts",
+      "pos": [
+        460,
+        1040
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/audit.js",
+          "line": 1,
+          "end_line": 15,
+          "label": "what the hash chain shows"
+        },
+        {
+          "path": "core/audit.js",
+          "line": 200,
+          "end_line": 211,
+          "label": "append: hash, write, fsync"
+        },
+        {
+          "path": "core/transcripts.js",
+          "line": 1,
+          "end_line": 6,
+          "label": "redacted before write"
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "database",
+      "label": "Vault",
+      "sublabel": "DPAPI, Core-only entropy",
+      "pos": [
+        760,
+        1040
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "core/vault.js",
+          "line": 1,
+          "end_line": 10,
+          "label": "sealed; no call returns a value"
+        },
+        {
+          "path": "core/vault.js",
+          "line": 175,
+          "end_line": 188,
+          "label": "reveal(): for the gateway only"
+        },
+        {
+          "path": "core/gateway.js",
+          "line": 210,
+          "end_line": 226,
+          "label": "use grant, then into server env"
+        }
+      ]
     }
   ],
   "boundaries": [
@@ -475,6 +724,25 @@
         "terms",
         "mcp",
         "confirm"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Houston Core (own Node process)",
+      "wraps": [
+        "control",
+        "runner",
+        "inbox",
+        "gateway",
+        "audit",
+        "vault"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Process container",
+      "wraps": [
+        "agent"
       ]
     }
   ],
@@ -579,6 +847,63 @@
       "from": "confirm",
       "to": "tabs",
       "label": "clicks, types"
+    },
+    {
+      "id": "main-control",
+      "from": "main",
+      "to": "control",
+      "label": "Control API",
+      "variant": "security"
+    },
+    {
+      "id": "control-terms",
+      "from": "control",
+      "to": "terms",
+      "label": "session.attach"
+    },
+    {
+      "id": "control-runner",
+      "from": "control",
+      "to": "runner",
+      "label": "start, stop.all"
+    },
+    {
+      "id": "runner-agent",
+      "from": "runner",
+      "to": "agent",
+      "label": "launches",
+      "variant": "emphasis"
+    },
+    {
+      "id": "agent-gateway",
+      "from": "agent",
+      "to": "gateway",
+      "label": "its only way out",
+      "variant": "security"
+    },
+    {
+      "id": "gateway-inbox",
+      "from": "gateway",
+      "to": "inbox",
+      "label": "ask waits"
+    },
+    {
+      "id": "control-inbox",
+      "from": "control",
+      "to": "inbox",
+      "label": "list, decide"
+    },
+    {
+      "id": "gateway-vault",
+      "from": "gateway",
+      "to": "vault",
+      "label": "reveal()"
+    },
+    {
+      "id": "inbox-audit",
+      "from": "inbox",
+      "to": "audit",
+      "label": "asks, answers"
     }
   ],
   "cards": [
@@ -588,12 +913,13 @@
       "items": [
         "Browser tabs are sandboxed, get only the extension-API and ad-block preloads and are denied every permission but fullscreen, pointer lock and clipboard writes",
         "Every IPC channel refuses any sender but the shell view's main frame on acc://shell",
-        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs, terminal_run run logs, agent session transcripts, Settings, the Identity Center) run no scripts; only documents may link to documents, the rest open from the app only"
+        "acc:// pages (documents, Cronsole runs, Git diffs, dev server logs, terminal_run run logs, agent session transcripts, Settings, Health, the Identity Center) run no scripts; only documents may link to documents, the rest open from the app only",
+        "A file: request that names a host is refused, so no page can make Windows send an SMB sign-in"
       ]
     },
     {
       "dot": "violet",
-      "title": "What an agent can do",
+      "title": "What an MCP client can do",
       "items": [
         "Look with no click: list_tabs, read_tab, sidebar_search, recent, list_terminals, terminal_read, run_status, cron_tasks, and tab_elements, tab_screenshot on the tab the user attached",
         "Navigate: open_tab, and open_file by Hub node id (VS Code or Explorer, never the default app)",
@@ -606,7 +932,30 @@
       "items": [
         "Claude Code in an app terminal: ACC_MCP_URL and ACC_MCP_TOKEN are in every terminal's environment",
         "The chat panel, through the same server and token, so its calls are logged and confirmed like any client's",
-        "Every call, refused ones too, goes to the sidebar's MCP tab and logs/mcp.log, with the connecting client named; terminal_run's last 50 runs are searchable there too"
+        "Every call, refused ones too, goes to the sidebar's MCP tab and logs/mcp.log, with the connecting client named; terminal_run's last 50 runs are searchable there too",
+        "Contained agent sessions, through the Core's gateway, once the operator installs and pins the houston server it is registered as"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "What contains an agent",
+      "items": [
+        "The Core starts each Claude Code or Codex session as a named identity in a Windows process container of its own (@microsoft/mxc-sdk), with its own CLI home",
+        "Inside it: the workspace and what its grants open; the users folder and the Core's data folder denied; Windows' own variables only, never the user's environment",
+        "No network but one host port, the session's egress proxy: tunnels only to hosts its grants allow, and only at public addresses. The same port serves its MCP gateway, with a token that dies with the session",
+        "Policy is default deny: a global deny, then an explicit deny, then the narrowest allow or ask. An ask waits in the approval inbox; an unattended run treats it as deny",
+        "MCP servers run as identities of their own, in containers of their own (a host or http one is marked unconfined), only once pinned. A secret reaches a server's environment only with a use grant, and results come back redacted, marked untrusted and capped",
+        "An identity the operator marks broad access runs unconfined on the host, and is marked so wherever it appears"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "The window only asks",
+      "items": [
+        "Houston calls the Control API on a named pipe whose name and token change at every Core start; both sit in control.json in the Core's data folder, which sessions are denied. A bad token is audited and the connection closed",
+        "The approval bar shows what the Core holds and sends back once, session or deny. Deny has the focus, and the Core denies an ask nobody answers in 2 minutes",
+        "Stop All, on the navbar, its hotkey (Ctrl+Shift+Backspace) and the tray, runs in the main process with no confirm: the Core pauses every standing grant, then stops every session",
+        "The audit log is hash-chained JSON lines: every start, refusal, call and answer. Transcripts are redacted before they are written. The Logs tab only reads them"
       ]
     },
     {
@@ -620,7 +969,7 @@
         "The News tab reads the sources listed in settings.json from the main process, an http(s) feed or a local .md file, with a 15 second deadline and a 2 MB cap; the page never names the address",
         "Closing the window hides Houston to the tray by default (layout.json closeToTray), so terminals, dev servers and the MCP server keep running; Quit exits",
         "Dev servers and the Git tab need a workspace folder; git and npm are found on PATH",
-        "Agent sessions the harness's Core runs open as terminal tabs; each ask they raise waits in an approval bar that the Core denies if its countdown runs out"
+        "Without the Core the window works as before, and the Agents, Integrations and Logs tabs say it is not running. The Core runs on Windows only, from npm run core or a logon task"
       ]
     }
   ]

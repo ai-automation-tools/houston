@@ -13,6 +13,14 @@ import { RUN_SCRIPT } from '../shared/runs.js';
 import { childEnv } from './env.js';
 import { killTree } from './kill.js';
 
+// node-pty stops a terminal's ConPTY output thread 1 s after the terminal ends
+// (FLUSH_DATA_INTERVAL). A process that exits with one still running crashes with
+// 0xC0000409, about 2 runs in 5 when it exits right after killing them (2026-11-27).
+const PTY_DRAIN_MS = 1500;
+let lastEnd = 0;
+/** How long until every ended terminal's output thread has stopped; wait this long before exiting. */
+export const ptyDrainMs = () => Math.max(0, lastEnd + PTY_DRAIN_MS - Date.now());
+
 /** @param {unknown} dir */
 function safeCwd(dir) {
   if (typeof dir === 'string' && dir) {
@@ -123,6 +131,7 @@ export class Terminals {
 
   /** @param {number} id @param {number} exitCode @param {string} [reason] a contained session's end, shown in place of the code */
   exited(id, exitCode, reason) {
+    lastEnd = Date.now();
     this.sessions.delete(id);
     const m = this.meta.get(id);
     if (m) m.exited = true;
@@ -186,6 +195,7 @@ export class Terminals {
     this.sessions.delete(id);
     // A run's command may have started programs of its own; end them with it.
     if (run) killTree(p.pid);
+    lastEnd = Date.now();
     try { p.kill(); } catch { /* already gone */ }
   }
 

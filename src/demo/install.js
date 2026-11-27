@@ -59,4 +59,27 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   for (const fn of shortcuts) fn(action);
 });
+// The app's menus are native; the demo draws one at the pointer (the sidebar's », the shell and workspace menus).
+let pointer = { x: 0, y: 0 };
+document.addEventListener('pointerdown', (e) => { pointer = { x: e.clientX, y: e.clientY }; }, true);
+acc.menu = (/** @type {({ id: string, label: string } | '-')[]} */ items) => new Promise((resolve) => {
+  const box = document.createElement('div');
+  box.className = 'demo-menu';
+  box.setAttribute('role', 'menu');
+  for (const item of items) {
+    if (item === '-') { box.append(document.createElement('hr')); continue; }
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitem');
+    b.textContent = item.label;
+    b.addEventListener('click', () => done(item.id));
+    box.append(b);
+  }
+  const done = (/** @type {string | null} */ id) => { box.remove(); document.removeEventListener('pointerdown', outside, true); resolve(id); };
+  const outside = (/** @type {Event} */ e) => { if (!box.contains(/** @type {Node} */ (e.target))) done(null); };
+  document.body.append(box);
+  box.style.left = `${Math.min(pointer.x, innerWidth - box.offsetWidth - 8)}px`;
+  box.style.top = `${Math.min(pointer.y, innerHeight - box.offsetHeight - 8)}px`;
+  setTimeout(() => document.addEventListener('pointerdown', outside, true));
+  /** @type {HTMLElement | null} */ (box.querySelector('button'))?.focus();
+});
 /** @type {any} */ (window).acc = acc;

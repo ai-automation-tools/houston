@@ -2,7 +2,7 @@
 // strip, terminal panel) as a WebContentsView, with a WebContentsView per browser tab
 // stacked over the shell's content area.
 
-import { app, BaseWindow, Menu, Tray, WebContentsView, ipcMain, net, protocol, session, shell } from 'electron';
+import { app, BaseWindow, Menu, Tray, WebContentsView, ipcMain, nativeTheme, net, protocol, session, shell } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +16,7 @@ import { store } from './store.js';
 import { activeProfile, setNextProfile } from './profile.js';
 import { browsePartition } from '../shared/profiles.js';
 import { Tabs } from './tabs.js';
-import { Terminals } from './terminal.js';
+import { Terminals, ptyDrainMs } from './terminal.js';
 import { extensionsMenu, listExtensions, setupExtensions } from './extensions.js';
 import { loadBlocker } from './adblock.js';
 import { smoke } from './smoke.js';
@@ -41,10 +41,12 @@ import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../sha
 import { core } from './core.js';
 import { coreSettings, createAgents, identitiesPage, integrations, transcriptPage } from './agents.js';
 import { feed, startPage } from './feed.js';
-import { settingsBody } from '../shared/scopes.js';
+import { controls, settingsBody } from '../shared/scopes.js';
+import { PANE_ROWS, prefChange } from '../shared/prefs.js';
+import { DEFAULT_HUB_URL } from '../shared/settings.js';
 import { bundleName, coreHealthRows, diagnosticsBundle, healthBody } from '../shared/health.js';
 import { tailLines } from '../../core/health.js';
-import { appSecretValues } from './env.js';
+import { appSecretValues, env } from './env.js';
 import { watchApprovals } from './approvals.js';
 import { conversationText, isConversationId, removeConversation, renameConversation, searchConversations, titleFrom, touchConversation } from '../shared/conversations.js';
 
@@ -69,6 +71,13 @@ protocol.registerSchemesAsPrivileged([
 // ACC_USER_DATA: run on another profile (npm run smoke's throwaway one). Before the
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
+
+// A smoke run keeps painting and running timers while its window is covered or minimized,
+// so its checks don't depend on the desktop being left alone. The real app keeps Chromium's
+// throttling, which saves power when it's in the background.
+if (process.env.ACC_SMOKE_DIR) {
+  for (const s of ['disable-renderer-backgrounding', 'disable-backgrounding-occluded-windows', 'disable-background-timer-throttling']) app.commandLine.appendSwitch(s);
+}
 
 // The active profile's browser storage (H5): another profile's cookies and sign-ins are never loaded.
 // After the userData folder is final: profile.json is read from it.
@@ -406,11 +415,11 @@ async function createWindow() {
     return { active: id, name: all.find((p) => p.id === id)?.displayName ?? id, list: all };
   };
   /** The acc://settings/ page: every control, its value now, its scope and where it's changed. */
-  const settingsPage = async () => {
+  const settingsData = async () => {
     const settings = store.settings();
     const layout = store.layout();
     const ws = current();
-    const body = settingsBody({
+    return {
       hubUrl: hub.url, hubToken: hub.token, quickLinks: settings.quickLinks.length, newsSources: settings.newsSources.length, feedIndex: settings.feedIndex, bookmarkSource: layout.bookmarkSource,
       adBlock: layout.adBlock, closeToTray: layout.closeToTray,
       chat: conversation.info(), cronsole: cron.info(), mcpUrl: mcp?.url ?? '',
@@ -418,9 +427,9 @@ async function createWindow() {
       workspace: { name: ws.name, folder: ws.folder ?? '', tabs: tabs.list().length, terminals: terminals.listSessions().filter((t) => t.ws === spaces.active).length },
       core: await coreSettings(),
       profile: await profileInfo(),
-    }, escapeHtml);
-    return docPage({ title: 'Settings', trail: 'Houston › Settings', body });
+    };
   };
+  const settingsPage = async () => docPage({ title: 'Settings', trail: 'Houston › Settings', body: settingsBody(await settingsData(), escapeHtml) });
 
   /** The acc://runlog/<id> page. @param {string} url */
   const runLog = (url) => {
@@ -842,6 +851,8 @@ async function createWindow() {
   handle('tabs:restore', () => {
     if (restored) return;
     restored = true;
+    // Settings › Startup: the start page instead of the last session's tabs.
+    if (store.layout().startTab === 'start') { tabs.create('acc://start/'); return; }
     openTabs(current());
     // Nothing to restore: the start page (H6).
     if (!current().tabs.length) tabs.create('acc://start/');
@@ -852,7 +863,7 @@ async function createWindow() {
   });
 
   handle('term:create', (opts) => {
-    const t = terminals.create({ ...opts, ws: spaces.active });
+    const t = terminals.create({ ...opts, shell: opts?.shell ?? store.layout().defaultShell, ws: spaces.active });
     send('recent:changed', store.addRecent({ type: 'terminal', target: t.cwd, label: t.cwd }));
     return t;
   });
@@ -954,6 +965,40 @@ async function createWindow() {
     rebuild();
   }, (err) => console.error('[adblock] filter lists failed to load; browsing without blocking:', err));
 
+  // The Settings pane (src/renderer/prefs.js): the app's preferences, each change checked by
+  // prefChange() and applied here; the agent and security controls come back read-only.
+  const prefs = async () => {
+    const l = store.layout();
+    const raw = store.rawSettings();
+    const s = store.settings();
+    return {
+      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal,
+      defaultShell: terminals.list().some((t) => t.id === l.defaultShell) ? l.defaultShell : terminals.list()[0]?.id ?? '',
+      shells: terminals.list(),
+      hubUrl: typeof raw.hubUrl === 'string' ? raw.hubUrl : '', hubDefault: DEFAULT_HUB_URL, hubFromEnv: Boolean(env.ACC_HUB_URL), hubNow: hub.url,
+      quickLinks: Array.isArray(raw.quickLinks) ? s.quickLinks : [],
+      newsSources: s.newsSources,
+      feedIndex: s.feedIndex ?? '',
+      readOnly: controls(await settingsData()).filter((c) => !PANE_ROWS.has(c.label)),
+    };
+  };
+  handle('prefs:get', prefs);
+  handle('prefs:set', async (key, value) => {
+    const c = prefChange(String(key), value, { shells: terminals.list().map((t) => t.id), remoteHub: env.ACC_HUB_REMOTE === '1' });
+    if (c.file === 'settings') store.saveSetting(c.key, c.value);
+    else if (c.key === 'closeToTray') setCloseToTray(Boolean(c.value));
+    else store.saveLayout({ [c.key]: c.value });
+    if (c.key === 'theme') nativeTheme.themeSource = store.layout().theme;
+    if (c.key === 'adBlock') {
+      if (c.value) blocker?.enableBlockingInSession(browseSession);
+      else blocker?.disableBlockingInSession(browseSession);
+      rebuild();
+    }
+    return prefs();
+  });
+  // A new Project Hub address is read at start (src/main/hub.js), so the pane offers a restart.
+  handle('prefs:restart', () => { app.relaunch(); app.quit(); });
+
   if (process.env.ACC_SMOKE_DIR) smoke(process.env.ACC_SMOKE_DIR, shellView.webContents, tabs, terminals, browseSession, saveDiagnostics);
   await mcpReady;
   await shellView.webContents.loadURL('acc://shell/index.html');
@@ -961,9 +1006,17 @@ async function createWindow() {
 
 app.on('second-instance', (_e, argv) => { if (argv.includes('--quit')) app.quit(); else showWindow(); });
 app.on('before-quit', () => { quitting = true; });
+app.on('will-quit', (e) => {
+  // Every terminal was killed as the window closed (win 'closed'). Exiting while node-pty
+  // still has their ConPTY output threads running throws in conpty.node during teardown
+  // (0xC0000409 or 0xE06D7363), so hold the quit until they've stopped, then quit again.
+  const ms = ptyDrainMs();
+  if (ms > 0) { e.preventDefault(); setTimeout(() => app.quit(), ms); }
+});
 
 logCrashes();
 app.whenReady().then(() => {
+  nativeTheme.themeSource = store.layout().theme;
   serveShell();
   buildMenu();
   createTray().catch((err) => logError('tray', err));
@@ -977,7 +1030,7 @@ app.on('window-all-closed', () => app.quit());
 
 // node-pty's ConPTY output reader runs on a worker thread that outlives its session, so
 // the process reaches 'quit' and then never exits. Every window is closed and every
-// terminal killed by this point (win 'closed'), so exit explicitly.
+// terminal killed by this point (win 'closed'), and will-quit waited for their threads, so exit explicitly.
 app.on('quit', () => {
   tray?.destroy();
   mcp?.close();

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { cleanMessages } from '../shared/chat.js';
 import { cleanRecent, pushRecent } from '../shared/recent.js';
 import { settingsFrom } from '../shared/settings.js';
+import { layoutPrefs } from '../shared/prefs.js';
 import { chatFileName, cleanWorkspaces } from '../shared/workspaces.js';
 import { cleanIndex, isConversationId, touchConversation } from '../shared/conversations.js';
 import { env } from './env.js';
@@ -50,6 +51,24 @@ export const store = {
     return settingsFrom(readJson('settings.json', {}), env);
   },
 
+  /** settings.json as written, for the Settings pane's fields (store.settings() fills in defaults). */
+  rawSettings() {
+    const d = readJson('settings.json', {});
+    return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+  },
+
+  /**
+   * One key of settings.json from the Settings pane, already checked by prefChange(); undefined
+   * removes it (back to the default). Keys the pane doesn't own are kept as they were.
+   * @param {string} key @param {unknown} value
+   */
+  saveSetting(key, value) {
+    const d = { ...store.rawSettings() };
+    if (value === undefined) delete d[key];
+    else d[key] = value;
+    writeJson('settings.json', d);
+  },
+
   recent() {
     return cleanRecent(readJson('recent.json', []));
   },
@@ -61,7 +80,7 @@ export const store = {
     return next;
   },
 
-  /** @returns {{ sidebarWidth: number, terminalHeight: number, terminalOpen: boolean, chatWidth: number, chatOpen: boolean, adBlock: boolean, closeToTray: boolean, bookmarkSource: string }} */
+  /** @returns {{ sidebarWidth: number, terminalHeight: number, terminalOpen: boolean, chatWidth: number, chatOpen: boolean, adBlock: boolean, closeToTray: boolean, bookmarkSource: string } & import('../shared/prefs.js').LayoutPrefs} */
   layout() {
     const d = readJson('layout.json', {});
     return {
@@ -73,6 +92,7 @@ export const store = {
       adBlock: d.adBlock !== false,
       closeToTray: d.closeToTray !== false,
       bookmarkSource: typeof d.bookmarkSource === 'string' ? d.bookmarkSource : '',
+      ...layoutPrefs(d),
     };
   },
 

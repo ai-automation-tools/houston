@@ -13,6 +13,7 @@
 ## 🪟 Window and tray
 
 - Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running. Click the tray icon to bring it back.
+- The sidebar's tabs are a row of icons: hover one for its name. When the sidebar is too narrow for all of them, the rest sit behind **»** at the end of the row, which lists them; the tab you're on always stays in view, and **»** shows a **!** when a tab behind it has a count. **Settings** is at the bottom left of the sidebar.
 - Right-click the tray icon for **Show Houston**, **Close to tray** and **Quit Houston**. Untick **Close to tray** there, or under **File** (Alt shows the menu), and ✕ quits instead. **File → Quit** always quits.
 
 ## 🌐 Browser
@@ -26,7 +27,7 @@
 - Ads and trackers are blocked by default: EasyList and EasyPrivacy through [Ghostery's adblocker](https://github.com/ghostery/adblocker) (MPL-2.0). **Extensions → Block ads and trackers** turns it off.
 
 > [!WARNING]
-> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing. LastPass and Rakuten work. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent).
+> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing; an extension that sets its toolbar icon from image data (Rakuten, AdBlock) shows the icon from its manifest instead. LastPass and Rakuten work. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent).
 
 ## 💻 Terminals
 
@@ -143,7 +144,19 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 ## ⚙️ Settings
 
-⚙ at the right of the address bar, **Ctrl+,** or **Settings** in the palette opens a page listing every control, grouped by scope:
+**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens the Settings pane over the main area. Its sections:
+
+| Section | What you change there |
+|:---|:---|
+| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once |
+| Browser | Ad blocking (applies at once); the quick links on the empty tab page |
+| Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
+| Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |
+| Agents and security | Nothing: the controls the Core enforces, read-only, each with where it's set |
+
+A change saves as you make it (a list or an address with its **Save** button or Enter), and one Houston can't use is refused with the reason under the field. **Esc** or ✕ closes the pane. Grants, policy, secrets and the Core's limits are never switches here: a checkbox can't enforce anything, so they stay with the Core and `npm run ctl`.
+
+At the bottom of the pane, **Open every control as a page** opens `acc://settings/`, every control grouped by scope:
 
 | Scope | What it means | Examples |
 |:---|:---|:---|
@@ -152,7 +165,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 | Workspace | Saved with the active workspace | Its folder, tabs, terminals and conversations |
 | Session | Lives as long as one agent session | Allow once and allow for this session; running sessions |
 
-Each row says what it's set to now and where it's changed (a menu, a tab, `settings.json`, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
+Each row says what it's set to now and where it's changed (the Settings pane, a menu, a tab, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
 
 ## 🩺 Health
 
