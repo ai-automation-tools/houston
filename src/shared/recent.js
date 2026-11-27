@@ -4,7 +4,7 @@
 export const RECENT_MAX = 50;
 
 /**
- * @typedef {{ type: 'file' | 'folder' | 'url' | 'terminal', target: string, label: string, at: number }} RecentItem
+ * @typedef {{ type: 'file' | 'folder' | 'url' | 'terminal' | 'download', target: string, label: string, at: number }} RecentItem
  */
 
 /**
@@ -26,7 +26,7 @@ export function pushRecent(list, item, now = Date.now()) {
  */
 export function cleanRecent(raw) {
   if (!Array.isArray(raw)) return [];
-  const types = new Set(['file', 'folder', 'url', 'terminal']);
+  const types = new Set(['file', 'folder', 'url', 'terminal', 'download']);
   return raw
     .filter((r) => r && types.has(r.type) && typeof r.target === 'string' && typeof r.label === 'string' && Number.isFinite(r.at))
     .slice(0, RECENT_MAX);

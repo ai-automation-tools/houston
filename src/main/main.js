@@ -16,6 +16,7 @@ import { store } from './store.js';
 import { activeProfile, setNextProfile } from './profile.js';
 import { browsePartition } from '../shared/profiles.js';
 import { Tabs } from './tabs.js';
+import { setupDownloads, showDownload } from './downloads.js';
 import { Terminals, ptyDrainMs } from './terminal.js';
 import { extensionsMenu, listExtensions, setupExtensions } from './extensions.js';
 import { loadBlocker } from './adblock.js';
@@ -71,6 +72,8 @@ protocol.registerSchemesAsPrivileged([
 // ACC_USER_DATA: run on another profile (npm run smoke's throwaway one). Before the
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
+// A smoke run's downloads stay in its throwaway profile, out of the real Downloads folder.
+if (process.env.ACC_SMOKE_DIR) app.setPath('downloads', path.join(app.getPath('userData'), 'downloads'));
 
 // A smoke run keeps painting and running timers while its window is covered or minimized,
 // so its checks don't depend on the desktop being left alone. The real app keeps Chromium's
@@ -262,6 +265,7 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
         item('Close tab', 'CmdOrCtrl+W', 'close-tab'),
         item('Reopen closed tab', 'CmdOrCtrl+Shift+T', 'reopen-tab'),
         item('Focus address bar', 'Alt+D', 'focus-address'),
+        item('Save page as…', 'CmdOrCtrl+S', 'save-page'),
         { type: 'separator' },
         item('Next tab', 'Ctrl+Tab', 'next-tab'),
         item('Previous tab', 'Ctrl+Shift+Tab', 'prev-tab'),
@@ -308,7 +312,7 @@ function buildMenu(extensions = [{ label: 'Loading…', enabled: false }]) {
 
 async function createWindow() {
   const layout = store.layout();
-  win = new BaseWindow({ width: 1500, height: 950, minWidth: 900, minHeight: 600, title: 'Houston', autoHideMenuBar: true, backgroundColor: '#0b0d10' });
+  win = new BaseWindow({ width: 1500, height: 950, minWidth: 800, minHeight: 480, title: 'Houston', autoHideMenuBar: true, backgroundColor: '#0b0d10' });
 
   shellView = new WebContentsView({
     webPreferences: {
@@ -381,6 +385,7 @@ async function createWindow() {
     invalidateDocsIndex();
     send('hub:changed');
   });
+  setupDownloads({ session: browseSession, send });
   const tabs = new Tabs({
     window: win,
     session: browseSession,
@@ -920,7 +925,9 @@ async function createWindow() {
   }));
 
   handle('recent:list', () => store.recent());
-  handle('recent:add', (item) => store.addRecent(item));
+  // A download enters Recent only from downloads.js, since Show in folder trusts that entry.
+  handle('recent:add', (item) => { if (item?.type === 'download') throw new Error('Only a download adds a download.'); return store.addRecent(item); });
+  handle('downloads:show', (file) => showDownload(file));
 
   handle('ext:list', () => listExtensions(browseSession));
 

@@ -26,9 +26,11 @@ button, input, select { font: inherit; color: inherit; }
 #app {
   display: grid;
   /* Sidebar, splitter, the browser and terminal, splitter, chat. The classes below zero a side. */
-  --side-col: var(--sidebar-w);
+  /* In a small window the sidebar and chat give way, so the browser keeps a usable width;
+     at a normal size the caps are above what anyone drags them to. */
+  --side-col: min(var(--sidebar-w), 32vw);
   --side-gap: 4px;
-  --chat-col: var(--chat-w);
+  --chat-col: min(var(--chat-w), 32vw);
   --chat-gap: 4px;
   grid-template-columns: var(--side-col) var(--side-gap) minmax(0, 1fr) var(--chat-gap) var(--chat-col);
   /* minmax(0, …) so a long sidebar list scrolls instead of stretching the row. */
@@ -133,7 +135,7 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 .row:hover .acts, .row:focus-within .acts { display: flex; }
 .row .acts button { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; height: 20px; cursor: pointer; color: var(--text-2); font-size: 11px; }
 .row .acts button:hover { color: var(--text); border-color: var(--line-2); }
-.cron-tools { display: flex; gap: 6px; }
+.cron-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .cron-tools button { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
 .cron-tools button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .cron-find { display: flex; gap: 8px; align-items: center; padding-top: 0; }
@@ -220,7 +222,8 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 .splitter:hover, .splitter:focus-visible { background: var(--accent); outline: none; }
 
 /* ---- main column ------------------------------------------------------ */
-#main { position: relative; display: grid; grid-template-rows: 36px 40px 1fr 4px var(--term-h); min-width: 0; min-height: 0; }
+/* The terminal takes at most 40% of the height, so a short window still shows the page or Settings. */
+#main { position: relative; display: grid; grid-template-rows: 36px 40px 1fr 4px min(var(--term-h), 40vh); grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 #main.no-terminal { grid-template-rows: 36px 40px 1fr 0 0; }
 #main.no-terminal #terminal-panel, #main.no-terminal #term-split { visibility: hidden; }
 
@@ -242,8 +245,15 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 .tab.agent .title::before { content: '🤖 '; }
 .tab.loading .title::before { content: "◌ "; color: var(--accent); }
 
-#navbar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
-#address-form { flex: 1; position: relative; }
+#navbar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg); border-bottom: 1px solid var(--line); container-type: inline-size; }
+/* A narrow navbar (a small window with the chat open) drops what has another way in: Forward is on the
+   page's right-click menu with the extensions' items (and Extensions in the menu bar), and the chat pane has
+   its own close button. Stop All never goes. */
+@container (max-width: 420px) {
+  #navbar [data-cmd="forward"], #open-external, #chat-toggle, #actions-host { display: none; }
+}
+/* min-width: 0 lets the address box give way in a narrow window, so Stop All never leaves the screen. */
+#address-form { flex: 1; min-width: 0; position: relative; }
 /* Suggestions under the address bar. The browser tab is hidden while they show, as for the palette. */
 #address-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10; padding: 4px 0; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); box-shadow: 0 8px 24px #0008; }
 #address-suggest[hidden] { display: none; }
@@ -259,7 +269,7 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 #star.starred { color: #fbbf24; }
 
 #content { position: relative; min-height: 0; background: var(--bg); }
-.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-2); }
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; text-align: center; color: var(--text-2); }
 .empty h1 { font-size: 22px; font-weight: 600; color: var(--text); margin: 0; }
 #quick-links { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 640px; margin-top: 14px; }
 #quick-links button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
