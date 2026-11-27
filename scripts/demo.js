@@ -25,6 +25,7 @@ const copies = [
 for (const [from, to] of copies) fs.cpSync(path.join(root, from), path.join(out, to), { recursive: true });
 
 const html = fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
-fs.writeFileSync(path.join(out, 'index.html'), demoHtml(html));
+// BUILD_SHA: set by pages.yml to the commit being deployed.
+fs.writeFileSync(path.join(out, 'index.html'), demoHtml(html, process.env.BUILD_SHA || 'local'));
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
 console.log('demo built in _site/');

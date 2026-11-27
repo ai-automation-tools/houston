@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { demoApi, commandOutput, TREE } from '../src/demo/acc.js';
-import { demoHtml, HOME_URL } from '../src/demo/page.js';
+import { demoHtml, REPO_URL } from '../src/demo/page.js';
 import { flatten } from '../src/shared/tree.js';
 import { ABOUT_HTML, WELCOME_ID, WELCOME_URL } from '../src/demo/about.js';
 
@@ -12,7 +12,12 @@ test('demoHtml adds the source bar and loads the mock before app.js', () => {
   const html = demoHtml(read('../src/renderer/index.html'));
   assert.ok(html.indexOf('demo/install.js') < html.indexOf('src="app.js"'));
   assert.ok(html.indexOf('class="src-bar"') < html.indexOf('id="app"'));
-  assert.ok(html.includes(`href="${HOME_URL}"`));
+  // The org's source bar: the repo, as "View source".
+  const bar = html.slice(html.indexOf('class="src-bar"'), html.indexOf('</div>', html.indexOf('class="src-bar"')));
+  assert.ok(bar.includes(`href="${REPO_URL}"`) && bar.includes('View source'));
+  // The build stamp, letters and digits only.
+  assert.ok(html.includes('<meta name="build" content="local">'));
+  assert.ok(demoHtml(read('../src/renderer/index.html'), 'abc123"><script>').includes('<meta name="build" content="abc123script">'));
   // Every path relative, so the page serves under a Pages subpath.
   assert.doesNotMatch(html, /(src|href)="\/[^/]/);
   assert.throws(() => demoHtml('<html><body></body></html>'), /expected/);
