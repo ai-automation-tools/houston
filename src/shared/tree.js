@@ -16,6 +16,34 @@ export function isContainer(node) {
 }
 
 /**
+ * A folder's rows with dot-folders and dot-files (`.claude`, `.github`, `.env`) first or
+ * last among the folders and among the files, as Project Hub's own Explorer offers; the
+ * order is otherwise kept. A new list; the scan's is left alone.
+ * @template {{ name: string, children?: unknown[], kind?: string }} T
+ * @param {T[]} list
+ * @param {boolean} first
+ * @returns {T[]}
+ */
+export function orderDots(list, first) {
+  const out = [...list];
+  for (const dir of [true, false]) {
+    /** @type {number[]} */
+    const at = [];
+    /** @type {T[]} */
+    const dot = [];
+    /** @type {T[]} */
+    const rest = [];
+    list.forEach((n, i) => {
+      if (isContainer(n) !== dir) return;
+      at.push(i);
+      (String(n.name).startsWith('.') ? dot : rest).push(n);
+    });
+    (first ? [...dot, ...rest] : [...rest, ...dot]).forEach((n, k) => { out[at[k]] = n; });
+  }
+  return out;
+}
+
+/**
  * Turn a Hub node id into an absolute Windows-style path with forward slashes.
  * Ids are relative to the scan's `base`, except `~/...`, which is the home folder,
  * and `@...`, which is a virtual grouping with no path at all.

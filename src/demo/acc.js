@@ -13,6 +13,7 @@ import { trayItem } from '../shared/chat.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { demoHarness } from './harness.js';
 import { PANE_ROWS, prefChange } from '../shared/prefs.js';
+import { hubFolderChange, scanDepthChange } from '../shared/hubsettings.js';
 import { searchConversations } from '../shared/conversations.js';
 import { Activity, activityRows } from '../shared/activity.js';
 import { Runs, runRows } from '../shared/runs.js';
@@ -175,6 +176,12 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     { type: 'terminal', target: `${BASE}/acme-api`, label: `${BASE}/acme-api`, at: now() - 3 * HOUR },
     { type: 'file', target: 'acme-api/README.md', label: 'README.md', at: now() - 26 * HOUR },
   ];
+  /** Project Hub's settings as the demo's fake Hub has them. */
+  const hubSettings = {
+    folders: [{ name: 'Notes', dir: 'D:/Demo/Notes' }],
+    defaultDepth: 10,
+    workspaces: [{ name: 'acme', maxDepth: /** @type {number | null} */ (null), effectiveDepth: 10 }],
+  };
   /** @param {any} item */
   const addRecent = (item) => { recent = /** @type {any} */ (pushRecent(/** @type {any} */ (recent), item, now())); emit('recent', recent); };
 
@@ -327,7 +334,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
 
   /** The Settings pane's made-up preferences (prefs below). */
   const prefs = {
-    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', tabLabels: 'both', shells: SHELLS,
+    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', tabLabels: 'both', dotsFirst: false, shells: SHELLS,
     hubUrl: '', hubDefault: 'http://127.0.0.1:4273', hubFromEnv: false, hubNow: 'http://127.0.0.1:4273',
     quickLinks: [{ label: 'Project Hub demo', url: 'https://project-hub.ai-automation-tools.dev' }],
     newsSources: [{ label: 'Team digest', url: 'D:\\work\\notes\\digest.md' }, { label: 'Release notes', url: 'https://example.com/releases.xml' }],
@@ -357,6 +364,23 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
         return { ...prefs, readOnly: harness.settingsRows().filter((x) => !PANE_ROWS.has(x.label)) };
       },
       restart: async () => { notify('Restarting needs the desktop app.'); },
+      // Project Hub's folders and scan depth: made up, kept in memory, checked like the app's.
+      hub: async () => structuredClone(hubSettings),
+      hubFolder: async (/** @type {unknown} */ input) => {
+        const c = hubFolderChange(input);
+        if (c.method === 'DELETE') hubSettings.folders = hubSettings.folders.filter((f) => f.name !== c.body.name);
+        else if (hubSettings.folders.some((f) => f.name.toLowerCase() === c.body.name.toLowerCase())) throw new Error(`The sidebar already has a folder called ${c.body.name}.`);
+        else hubSettings.folders.push({ name: c.body.name, dir: c.body.dir });
+        return { ok: true };
+      },
+      hubDepth: async (/** @type {unknown} */ input) => {
+        const c = scanDepthChange(input, hubSettings.workspaces.map((w) => w.name));
+        if (c.workspace === undefined) hubSettings.defaultDepth = /** @type {number} */ (c.maxDepth);
+        for (const w of hubSettings.workspaces) {
+          if (w.name === c.workspace) w.maxDepth = c.maxDepth;
+          w.effectiveDepth = w.maxDepth ?? hubSettings.defaultDepth;
+        }
+      },
     },
 
     hub: {
@@ -475,6 +499,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     recent: {
       list: async () => recent,
       add: async (/** @type {any} */ item) => addRecent(item),
+      clear: async () => { recent = []; emit('recent', recent); return recent; },
       onChanged: listen('recent'),
     },
 

@@ -344,6 +344,13 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 .pref button.primary, .prefs-section > button.primary { border-color: var(--accent); }
 .pref button:disabled { opacity: .5; cursor: default; }
 .pref-list { display: flex; flex-direction: column; gap: 6px; }
+.pref input[type="number"].pref-depth { width: 72px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; outline: none; }
+.pref input[type="number"].pref-depth:focus { border-color: var(--accent); }
+.pref input[type="text"].pref-short { flex: 0 1 160px; }
+.pref-ws { min-width: 160px; }
+.pref-folder { display: grid; grid-template-columns: minmax(100px, auto) minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
+.pref-path { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.pref-folder .icon-btn { width: 28px; height: 28px; padding: 0; border: 0; background: none; }
 .pref-list-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 28px; gap: 6px; align-items: center; }
 .pref-list-row .icon-btn { width: 28px; height: 28px; padding: 0; border: 0; background: none; }
 .prefs-scope h3 { margin: 14px 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }

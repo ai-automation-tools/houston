@@ -460,6 +460,46 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     } else {
       check('Hub: a Markdown file opens as a document page', false, 'no acc://doc tab', { live: true });
     }
+    // Hub's own page in a tab shows no sidebar of its own: Houston's is the one.
+    const hubTab = tabs.create(store.settings().hubUrl);
+    for (let i = 0; i < 40 && !(await hubTab.view.webContents.executeJavaScript('Boolean(document.querySelector("main"))').catch(() => false)); i++) await wait(250);
+    await wait(500);
+    const hubPage = await hubTab.view.webContents.executeJavaScript(`(() => {
+      const side = document.querySelector('#sidebar'), main = document.querySelector('main');
+      return { sidebar: side ? getComputedStyle(side).display : null, main: main ? Math.round(main.getBoundingClientRect().width) : 0, width: innerWidth };
+    })()`).catch((/** @type {Error} */ err) => ({ error: err.message }));
+    console.log(`[smoke] hub page=${JSON.stringify(hubPage)}`);
+    check('Hub: its own page in a tab hides its sidebar and fills the tab', hubPage.sidebar === 'none' && hubPage.main >= hubPage.width - 2, hubPage, { live: true });
+    if (hubPage.main) await shot('hub.png', hubTab.view.webContents);
+    hubTab.view.webContents.close();
+    // Settings › Project Hub reads Hub's folders and scan depth, and refuses a network path
+    // before Hub hears of it; Settings › Files › Dot-folders first saves to layout.json. Nothing
+    // in Hub's config is changed.
+    await wc.executeJavaScript(`document.getElementById('settings-open').click()`);
+    for (let i = 0; i < 60 && !(await wc.executeJavaScript(`Boolean(document.querySelector('#prefs-hub .pref-folder, #prefs-hub .pref-depth, #prefs-hub .pref-error'))`)); i++) await wait(250);
+    const hubPrefs = await wc.executeJavaScript(`(async () => {
+      const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+      const box = document.getElementById('prefs-hub');
+      const folders = box.querySelectorAll('.pref-folder').length;
+      const depth = Number(box.querySelector('.pref-depth')?.value);
+      const dir = box.querySelector('input[aria-label="Folder path"]');
+      dir.value = '//server/share';
+      [...box.querySelectorAll('button')].find((b) => b.textContent === 'Add folder').click();
+      await pause(500);
+      const refused = box.querySelector('.pref-error')?.textContent || '';
+      dir.value = '';
+      document.getElementById('pref-dotsFirst').click();
+      await pause(500);
+      const on = document.getElementById('pref-dotsFirst').checked;
+      document.getElementById('pref-dotsFirst').click();
+      await pause(500);
+      return { folders, depth, refused, on, off: !document.getElementById('pref-dotsFirst').checked };
+    })()`).catch((/** @type {Error} */ err) => ({ error: err.message }));
+    await wc.executeJavaScript(`document.getElementById('prefs-close')?.click()`);
+    console.log(`[smoke] hub settings=${JSON.stringify(hubPrefs)}`);
+    check("Settings shows Project Hub's folders and scan depth, and refuses a network folder before Hub hears of it",
+      hubPrefs.folders > 0 && hubPrefs.depth >= 1 && hubPrefs.depth <= 32 && /full path to a folder on this machine/.test(hubPrefs.refused), hubPrefs, { live: true });
+    check('Settings › Files › Dot-folders first saves and turns off again', hubPrefs.on === true && hubPrefs.off === true && store.layout().dotsFirst === false, hubPrefs);
     // The MCP calls above, in the sidebar's MCP panel and at the end of mcp.log.
     const panel = await wc.executeJavaScript(`[...document.querySelectorAll('#panel-mcp .row .name')].map((n) => n.textContent.split(' ')[0]).slice(0, 20)`);
     const logged = fs.readFileSync(path.join(app.getPath('userData'), 'logs', 'mcp.log'), 'utf8').trim().split('\n').slice(-20)
@@ -1260,7 +1300,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
       const st = agentRun?.settings;
       const pn = agentRun?.pane;
       check('Settings opens a pane: a checkbox saves through main and a bad value is refused with the reason; the agent controls are read-only there',
-        Boolean(pn && pn.h2.join() === 'General,Browser,Startup,Sources,Agents and security' && pn.off === false && pn.savedOff && pn.on === true && pn.savedOn
+        Boolean(pn && pn.h2.join() === 'General,Browser,Files,Startup,Sources,Project Hub,Agents and security' && pn.off === false && pn.savedOff && pn.on === true && pn.savedOn
           && /absolute path/.test(pn.refused) && pn.readOnly.includes('Hard denies') && !pn.readOnly.includes('Close to tray') && pn.closed), pn);
       check('the pane\'s link opens every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
         Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile: Default,Workspace: Agents smoke,Session'

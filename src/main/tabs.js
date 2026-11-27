@@ -5,6 +5,7 @@
 import { Menu, WebContentsView, clipboard, shell } from 'electron';
 import { isAllowedNavigation } from '../shared/url.js';
 import { savePage } from './downloads.js';
+import { HUB_PAGE_CSS, isHubPage } from '../shared/settings.js';
 import { cleanSavedTabs } from '../shared/session.js';
 import { AGENT_WORLD, ELEMENTS_MAX, cleanElements, listScript, prepareScript } from '../shared/pageactions.js';
 
@@ -51,13 +52,15 @@ export class Tabs {
    *   session: import('electron').Session,
    *   send: (channel: string, ...args: unknown[]) => void,
    *   onVisit: (url: string, title: string) => void,
+   *   hubUrl?: () => string,
    * }} opts
    */
-  constructor({ window, session, send, onVisit }) {
+  constructor({ window, session, send, onVisit, hubUrl = () => '' }) {
     this.window = window;
     this.session = session;
     this.send = send;
     this.onVisit = onVisit;
+    this.hubUrl = hubUrl;
     /** @type {Map<number, Tab>} */
     this.tabs = new Map();
     /** @type {number | null} */
@@ -113,6 +116,10 @@ export class Tabs {
     });
     wc.on('did-navigate', report);
     wc.on('did-navigate-in-page', report);
+    // Project Hub's page without its own sidebar: Houston's sidebar already shows the same tree.
+    wc.on('dom-ready', () => {
+      if (isHubPage(wc.getURL(), this.hubUrl())) wc.insertCSS(HUB_PAGE_CSS, { cssOrigin: 'user' }).catch(() => {});
+    });
     wc.on('page-favicon-updated', (_e, favicons) => this.send('tab:update', { ...this.describe(tab), favicon: favicons[0] || '' }));
     wc.on('context-menu', (_e, params) => this.contextMenu(tab, params));
     wc.on('found-in-page', (_e, r) => this.send('tab:found', tab.id, { active: r.activeMatchOrdinal, total: r.matches, done: r.finalUpdate }));

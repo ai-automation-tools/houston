@@ -5,9 +5,9 @@ import { layoutPrefs, prefChange } from '../src/shared/prefs.js';
 const ctx = { shells: ['pwsh', 'cmd'], remoteHub: false };
 
 test('layoutPrefs falls back to the defaults for missing or hand-broken values', () => {
-  assert.deepEqual(layoutPrefs({}), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both' });
-  assert.deepEqual(layoutPrefs({ theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both' }), { theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both' });
-  assert.deepEqual(layoutPrefs({ theme: 'neon', startTab: 'x', startTerminal: 'no', defaultShell: 3, tabLabels: 'big' }), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both' });
+  assert.deepEqual(layoutPrefs({}), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both', dotsFirst: false });
+  assert.deepEqual(layoutPrefs({ theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both', dotsFirst: true }), { theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both', dotsFirst: true });
+  assert.deepEqual(layoutPrefs({ theme: 'neon', startTab: 'x', startTerminal: 'no', defaultShell: 3, tabLabels: 'big', dotsFirst: 'yes' }), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both', dotsFirst: false });
 });
 
 test('prefChange sends each window choice to layout.json, checked', () => {
@@ -16,6 +16,8 @@ test('prefChange sends each window choice to layout.json, checked', () => {
   assert.deepEqual(prefChange('defaultShell', 'cmd', ctx), { file: 'layout', key: 'defaultShell', value: 'cmd' });
   assert.deepEqual(prefChange('tabLabels', 'names', ctx), { file: 'layout', key: 'tabLabels', value: 'names' });
   assert.throws(() => prefChange('tabLabels', 'huge', ctx), /icons, names, both/);
+  assert.deepEqual(prefChange('dotsFirst', true, ctx), { file: 'layout', key: 'dotsFirst', value: true });
+  assert.throws(() => prefChange('dotsFirst', 'yes', ctx), /on or off/);
   assert.throws(() => prefChange('adBlock', 'yes', ctx), /on or off/);
   assert.throws(() => prefChange('theme', 'neon', ctx), /system, light, dark/);
   assert.throws(() => prefChange('startTab', 'blank', ctx), /restore, start/);
