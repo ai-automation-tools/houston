@@ -82,6 +82,12 @@ contextBridge.exposeInMainWorld('acc', {
     onOpened: listen('term:opened'),
   },
 
+  /** Downloads and saved pages: their progress, and Show in folder for one in Recent. */
+  downloads: {
+    show: invoke('downloads:show'),
+    onEvent: listen('downloads:event'),
+  },
+
   recent: {
     list: invoke('recent:list'),
     add: invoke('recent:add'),

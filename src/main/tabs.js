@@ -4,6 +4,7 @@
 
 import { Menu, WebContentsView, clipboard, shell } from 'electron';
 import { isAllowedNavigation } from '../shared/url.js';
+import { savePage } from './downloads.js';
 import { cleanSavedTabs } from '../shared/session.js';
 import { AGENT_WORLD, ELEMENTS_MAX, cleanElements, listScript, prepareScript } from '../shared/pageactions.js';
 
@@ -372,6 +373,7 @@ export class Tabs {
     if (action === 'reload') wc.reload();
     if (action === 'stop') wc.stop();
     if (action === 'devtools') wc.toggleDevTools();
+    if (action === 'save-page') savePage(this.window, wc).catch(() => {});
   }
 
   /** @param {string} url */
@@ -407,7 +409,9 @@ export class Tabs {
       { label: 'Reload', click: () => wc.reload() },
     );
     // Web pages only; the app's own acc:// pages keep their short menu.
-    if (/^https?:/i.test(wc.getURL())) items.push({ label: 'Print…', click: () => wc.print() });
+    if (/^https?:/i.test(wc.getURL())) {
+      items.push({ label: 'Save page as…', click: () => savePage(this.window, wc).catch(() => {}) }, { label: 'Print…', click: () => wc.print() });
+    }
     const extItems = this.extensions?.getContextMenuItems(wc, params) ?? [];
     if (extItems.length) items.push({ type: 'separator' }, ...extItems);
     items.push(

@@ -527,6 +527,15 @@ api.tabs.onFound((/** @type {number} */ id, /** @type {{ active: number, total: 
   if (id === activeTab && !findForm.hidden && !findInTerminal) $('find-count').textContent = r.total ? `${r.active}/${r.total}` : '0/0';
 });
 
+// Downloads and saved pages (main/downloads.js): a note when one starts and how it ended.
+api.downloads.onEvent((/** @type {{ state: string, name: string, file?: string, error?: string }} */ d) => {
+  if (d.state === 'started') toast(`Downloading ${d.name}…`);
+  else if (d.state === 'completed' && d.file) {
+    const file = d.file;
+    toast(`Downloaded ${d.name}`, { label: 'Show in folder', run: () => api.downloads.show(file).catch((/** @type {unknown} */ err) => toast(errText(err))) });
+  } else toast(`${d.name}: ${d.state === 'cancelled' ? 'download cancelled' : `download failed${d.error ? ` (${d.error})` : ''}`}`);
+});
+
 // ---- sidebar -----------------------------------------------------------------
 
 const sidebar = new Sidebar({
@@ -665,6 +674,7 @@ const ACTIONS = [
   ['Focus address bar', 'Alt+D', 'focus-address'],
   ['Reload page', 'F5', 'reload'],
   ['Find in page', 'Ctrl+F', 'find'],
+  ['Save page as…', 'Ctrl+S', 'save-page'],
   ['Zoom in', 'Ctrl+=', 'zoom-in'],
   ['Zoom out', 'Ctrl+-', 'zoom-out'],
   ['Reset zoom', 'Ctrl+0', 'zoom-reset'],
@@ -798,6 +808,7 @@ function runAction(action) {
   }
   if (action === 'toggle-chat') setChatOpen(appEl.classList.contains('no-chat'));
   if (action === 'reload') api.tabs.command('reload');
+  if (action === 'save-page') api.tabs.command('save-page');
   if (action === 'find') openFind();
   if (action === 'devtools') api.tabs.command('devtools');
   if (action === 'reopen-tab') api.tabs.command('reopen');

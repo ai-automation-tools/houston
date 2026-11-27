@@ -17,6 +17,7 @@ import { listExtensions } from './extensions.js';
 import { cleanOutput } from '../shared/output.js';
 import { docsTasks } from '../shared/cronsole.js';
 import { store } from './store.js';
+import { savePage } from './downloads.js';
 
 /** @typedef {import('./tabs.js').Tabs} Tabs */
 /** @typedef {import('./terminal.js').Terminals} Terminals */
@@ -81,11 +82,72 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
   wc.once('did-finish-load', async () => {
     try {
       await run();
+      await windowSizes();
     } catch (err) {
       check('the run finished', false, err instanceof Error ? err.stack || err.message : err);
     }
     finish();
   });
+
+  /**
+   * The window-size pass, last because it shrinks the window: at the smallest size the window
+   * allows, every sidebar tab, Settings and the palette fit across (nothing scrolls sideways or
+   * sits past the edge), and Stop All is on screen with its whole label.
+   */
+  async function windowSizes() {
+    const win = tabs.window;
+    const [w, h] = win.getMinimumSize();
+    win.setBounds({ x: 0, y: 0, width: w, height: h });
+    // The worst case: the chat pane open beside the sidebar.
+    if (await wc.executeJavaScript(`document.getElementById('app').classList.contains('no-chat')`)) wc.send('shortcut', 'toggle-chat');
+    await new Promise((r) => setTimeout(r, 800));
+    const probe = `(() => {
+      const bad = [];
+      const de = document.documentElement;
+      if (de.scrollWidth > innerWidth + 1) bad.push('page ' + de.scrollWidth + '>' + innerWidth);
+      // tall: also below the bottom edge; off for what sits in a pane that scrolls up and down.
+      const out = (el, name, tall = true) => {
+        if (!el || !el.offsetParent) return;
+        const r = el.getBoundingClientRect();
+        if (r.right > innerWidth + 1 || (tall && r.bottom > innerHeight + 1) || r.left < -1) bad.push(name + ' off screen ' + Math.round(r.left) + ',' + Math.round(r.right) + ',' + Math.round(r.bottom));
+      };
+      const across = (el, name) => { if (el && el.offsetParent && el.scrollWidth > el.clientWidth + 1) bad.push(name + ' scrolls sideways ' + el.scrollWidth + '>' + el.clientWidth); };
+      const stop = document.getElementById('stop-all');
+      out(stop, 'Stop All');
+      if (stop && stop.scrollWidth > stop.clientWidth + 1) bad.push('Stop All label clipped');
+      for (const b of document.querySelectorAll('#navbar button, #navbar input')) out(b, b.id || b.title || 'navbar control');
+      across(document.getElementById('navbar'), 'navbar');
+      for (const p of document.querySelectorAll('.panel:not([hidden])')) { across(p, p.id); for (const c of p.querySelectorAll('button, input, select')) out(c, p.id + ' ' + (c.id || c.textContent.trim().slice(0, 20)), false); }
+      const prefs = document.getElementById('prefs');
+      if (prefs && !prefs.hidden) { across(prefs, 'Settings'); for (const c of prefs.querySelectorAll('.prefs-section:first-of-type button, .prefs-section:first-of-type select')) out(c, 'Settings ' + (c.id || c.textContent.trim().slice(0, 20)), false); }
+      const pal = document.getElementById('palette');
+      if (pal && pal.open) out(pal, 'palette');
+      return bad;
+    })()`;
+    /** @type {Record<string, string[]>} */
+    const found = {};
+    const panels = await wc.executeJavaScript(`[...document.querySelectorAll('.side-tabs [data-panel]')].map((b) => b.dataset.panel)`);
+    for (const p of panels) {
+      await wc.executeJavaScript(`document.querySelector('.side-tabs [data-panel="${p}"]').click()`);
+      await new Promise((r) => setTimeout(r, 400));
+      found[p] = await wc.executeJavaScript(probe);
+    }
+    await shot('small-sidebar.png', wc);
+    wc.send('shortcut', 'settings');
+    await new Promise((r) => setTimeout(r, 600));
+    found.settings = await wc.executeJavaScript(probe);
+    await shot('small-settings.png', wc);
+    await wc.executeJavaScript(`document.getElementById('prefs-close')?.click()`);
+    wc.send('shortcut', 'palette');
+    await new Promise((r) => setTimeout(r, 400));
+    found.palette = await wc.executeJavaScript(probe);
+    await shot('small-palette.png', wc);
+    await wc.executeJavaScript(`document.getElementById('palette').close()`);
+    console.log(`[smoke] window layout=${JSON.stringify(await wc.executeJavaScript(`({ app: document.getElementById('app').className, cols: getComputedStyle(document.getElementById('app')).gridTemplateColumns, inner: innerWidth })`))}`);
+    const problems = Object.entries(found).filter(([, b]) => b.length);
+    console.log(`[smoke] window ${w}x${h}: ${JSON.stringify(Object.fromEntries(problems))}`);
+    check(`at the smallest window (${w}×${h}) every sidebar tab, Settings and the palette fit, with Stop All on screen`, !problems.length, Object.fromEntries(problems));
+  }
 
   async function run() {
     const wait = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
@@ -124,6 +186,27 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     console.log(`[smoke] tab url=${tab.view.webContents.getURL()} title=${tab.view.webContents.getTitle()}`);
     if (!process.env.ACC_SMOKE_URL) check('a tab loads example.com', /^https:\/\/example\.com/.test(tab.view.webContents.getURL()) && /Example/.test(tab.view.webContents.getTitle()), tab.view.webContents.getURL());
     console.log(`[smoke] tab bounds=${JSON.stringify(tab.view.getBounds())}`);
+    // Downloads (main/downloads.js): a download lands in the Downloads folder (the run's own) under a free
+    // name, marked as from the internet, and in Recent; Save page as writes the page and its folder.
+    if (!process.env.ACC_SMOKE_URL) {
+      const downloads = app.getPath('downloads');
+      fs.mkdirSync(downloads, { recursive: true });
+      fs.writeFileSync(path.join(downloads, 'acc-smoke.txt'), 'already here');
+      const wcTab = tab.view.webContents;
+      await wcTab.executeJavaScript(`(() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['acc-smoke download'])); a.download = 'acc-smoke.txt'; document.body.append(a); a.click(); a.remove(); })()`);
+      const got = () => store.recent().find((r) => r.type === 'download' && r.target.endsWith('acc-smoke (1).txt'));
+      for (let i = 0; i < 50 && !got(); i++) await wait(200);
+      const file = got()?.target ?? '';
+      const read = (/** @type {string} */ f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+      const dl = { file: path.basename(file), text: read(file), kept: read(path.join(downloads, 'acc-smoke.txt')), zone: read(`${file}:Zone.Identifier`) };
+      const page = path.join(downloads, 'acc-smoke-page.html');
+      await savePage(tabs.window, wcTab, page);
+      const saved = { html: /Example Domain/.test(read(page)), recent: store.recent().some((r) => r.type === 'download' && r.target === page), zone: /ZoneId=3/.test(read(`${page}:Zone.Identifier`)) };
+      console.log(`[smoke] downloads=${JSON.stringify({ dl, saved })}`);
+      check('a download saves to Downloads without overwriting, marked as from the internet, and lands in Recent; Save page as writes the page',
+        dl.file === 'acc-smoke (1).txt' && dl.text === 'acc-smoke download' && dl.kept === 'already here' && /ZoneId=3/.test(dl.zone)
+          && saved.html && saved.recent && saved.zone, { dl, saved });
+    }
     console.log(`[smoke] extensions=${JSON.stringify(listExtensions(browseSession))}`);
     // The MCP server as a client would find it: no token must fail, the file's token must work.
     try {

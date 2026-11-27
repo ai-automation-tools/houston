@@ -103,6 +103,7 @@ npm start
 | Ctrl+Tab / Ctrl+1 … 9 | Next tab / that tab |
 | Alt+D | Address bar |
 | Ctrl+F | Find in page |
+| Ctrl+S | Save page as (web pages) |
 | Ctrl+plus / minus / 0 | Zoom |
 | Ctrl+\` / Ctrl+Shift+\` | Toggle terminal / new terminal |
 | Ctrl+Shift+F | Search everything |

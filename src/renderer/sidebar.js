@@ -18,7 +18,7 @@ const ICONS = {
   docroot: '📚', userroot: '👤', md: '📝', html: '🌐', file: '📄', image: '🖼️', pdf: '📕', config: '⚙️',
   skill: '🧩', agent: '🧠', command: '⌘', hook: '🪝', routine: '⏱️', style: '🎨',
 };
-const RECENT_ICONS = { url: '🌐', file: '📄', folder: '📁', terminal: '💻' };
+const RECENT_ICONS = { url: '🌐', file: '📄', folder: '📁', terminal: '💻', download: '⬇' };
 const RUN_ICONS = { running: '◌', succeeded: '✓', failed: '✗', cancelled: '■' };
 
 /**
@@ -610,10 +610,18 @@ export class Sidebar {
       if (r.type === 'url') this.openUrl(r.target);
       if (r.type === 'terminal' || r.type === 'folder') this.openTerminal(r.target);
       if (r.type === 'file') this.api.hub.open(r.target, 'code', r.label).catch((/** @type {unknown} */ err) => toast(errText(err)));
+      // Never opened: a downloaded file could be anything. Explorer shows it, selected.
+      if (r.type === 'download') this.api.downloads.show(r.target).catch((/** @type {unknown} */ err) => toast(errText(err)));
     });
     row.addEventListener('contextmenu', async (e) => {
       if (r.type === 'url') { this.linkMenu(e, r.target); return; }
       e.preventDefault();
+      if (r.type === 'download') {
+        const picked = await this.api.menu([{ id: 'show', label: 'Show in folder' }, { id: 'copy', label: 'Copy path' }]);
+        if (picked === 'show') row.click();
+        if (picked === 'copy') copy(r.target);
+        return;
+      }
       // A file's target is its Hub id, a folder's or terminal's its path.
       const file = r.type === 'file';
       const picked = await this.api.menu([
@@ -1465,13 +1473,32 @@ function ago(at) {
 }
 
 /** @param {string} text */
-export function toast(text) {
+/**
+ * A note in the bottom left; several stack instead of covering each other. An action adds
+ * one button (Show in folder) and keeps the note up a little longer.
+ * @param {string} text
+ * @param {{ label: string, run: () => void }} [action]
+ */
+export function toast(text, action) {
+  let stack = document.getElementById('toasts');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toasts';
+    stack.setAttribute('role', 'status');
+    Object.assign(stack.style, { position: 'fixed', left: '12px', bottom: '12px', zIndex: '10', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' });
+    document.body.append(stack);
+  }
   const t = document.createElement('div');
   t.textContent = text;
   Object.assign(t.style, {
-    position: 'fixed', left: '12px', bottom: '12px', maxWidth: '420px', padding: '10px 12px', zIndex: '10',
+    maxWidth: '420px', padding: '10px 12px',
     background: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f4f4f5', whiteSpace: 'pre-line',
   });
-  document.body.append(t);
-  setTimeout(() => t.remove(), 6000);
+  if (action) {
+    const b = button(action.label, action.label, () => { action.run(); t.remove(); });
+    Object.assign(b.style, { marginLeft: '10px', background: 'transparent', border: '1px solid #4b5563', borderRadius: '5px', color: '#7dd3fc', padding: '2px 8px', cursor: 'pointer' });
+    t.append(b);
+  }
+  stack.append(t);
+  setTimeout(() => t.remove(), action ? 10_000 : 6000);
 }

@@ -468,6 +468,10 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       onOpened: listen('term:opened'),
     },
 
+    downloads: {
+      show: async () => { notify('Downloads are saved by the desktop app; the demo saves nothing.'); },
+      onEvent: listen('downloads'),
+    },
     recent: {
       list: async () => recent,
       add: async (/** @type {any} */ item) => addRecent(item),

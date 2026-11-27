@@ -14,18 +14,21 @@
 
 - Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running. Click the tray icon to bring it back.
 - The sidebar's tabs are a row of buttons, each an icon and its name. **Settings › General › Sidebar tabs** shows icons only (hover one for its name) or names only instead. When the sidebar is too narrow for all of them, the rest sit behind **»** at the end of the row, which lists them; the tab you're on always stays in view, and **»** shows a **!** when a tab behind it has a count. **Settings** is at the bottom left of the sidebar.
+- In a small window (as small as 800×480, which fits a 1080p screen at 200% scaling) the sidebar and chat each take at most about a third of the width, and the terminal at most 40% of the height. With the chat open the address bar drops Forward, ↗, 💬 and the extension icons, which are all on a page's right-click menu, the menu bar or the chat pane itself; **Stop All** always stays.
 - Right-click the tray icon for **Show Houston**, **Close to tray** and **Quit Houston**. Untick **Close to tray** there, or under **File** (Alt shows the menu), and ✕ quits instead. **File → Quit** always quits.
 
 ## 🌐 Browser
 
 - Tabs, back, forward, reload, a context menu, and ↗ to open the page in your default browser.
 - Right-click a tab for Reload, Duplicate, Copy address, Close, Close other tabs and Close tabs to the right (the pinned Cronsole tab is left open).
-- Right-click a page for back, forward, reload, Print… (web pages only) and the link and extension items. The address bar, the search box, the chat box and Settings' fields have Cut, Copy, Paste and Select all.
+- Right-click a page for back, forward, reload, Save page as… and Print… (web pages only), and the link and extension items. The address bar, the search box, the chat box and Settings' fields have Cut, Copy, Paste and Select all.
 - The address bar takes a URL, a `D:\` path, `localhost:3000`, or anything else as a search.
 - As you type, it lists matching pages from Recent and your bookmarks (Project Hub's favorites and the Bookmarks tab's source). ↑ and ↓ pick one, Enter opens it, Escape closes the list; with none picked, Enter goes to what you typed.
 - Links open as tabs. A sign-in pop-up such as "Sign in with Google" gets its own small window, so it can hand the login back.
 - ☆ in the address bar adds the page to Project Hub's favorites; click again to remove it.
 - Chrome Web Store installs work in a tab. **Extensions** in the menu bar (Alt shows it) lists them, with Options, Web Store page and Remove.
+- **Downloads** go to your Downloads folder, under a new name if one is taken (`report (1).pdf`), so nothing is overwritten. A note in the corner says when one starts and how it ended, with **Show in folder** once it's done, and it's listed in Recent (⬇), where a click shows it in Explorer. Houston never opens or runs a downloaded file, and Windows still knows it came from the internet.
+- **Save page as…** (Ctrl+S, the File menu or a web page's right-click menu) saves the page with a folder of its images and styles where you pick, and lists it in Recent the same way.
 - Ads and trackers are blocked by default: EasyList and EasyPrivacy through [Ghostery's adblocker](https://github.com/ghostery/adblocker) (MPL-2.0). **Extensions → Block ads and trackers** turns it off.
 
 > [!WARNING]
