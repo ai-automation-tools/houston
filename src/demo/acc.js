@@ -327,7 +327,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
 
   /** The Settings pane's made-up preferences (prefs below). */
   const prefs = {
-    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', shells: SHELLS,
+    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', tabLabels: 'icons', shells: SHELLS,
     hubUrl: '', hubDefault: 'http://127.0.0.1:4273', hubFromEnv: false, hubNow: 'http://127.0.0.1:4273',
     quickLinks: [{ label: 'Project Hub demo', url: 'https://project-hub.ai-automation-tools.dev' }],
     newsSources: [{ label: 'Team digest', url: 'D:\\work\\notes\\digest.md' }, { label: 'Release notes', url: 'https://example.com/releases.xml' }],

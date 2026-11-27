@@ -31,6 +31,9 @@ const profileName = await api.profile.info().then((/** @type {any} */ p) => p.na
 const layout = info.layout;
 // Settings › Startup: start with the terminal panel closed, for this launch, without saving it as closed.
 if (layout.startTerminal === false) layout.terminalOpen = false;
+// Settings › General › Sidebar tabs: icons, names or both (styles.css reads the attribute).
+const sideTabs = /** @type {HTMLElement} */ (document.querySelector('.side-tabs'));
+sideTabs.dataset.labels = layout.tabLabels ?? 'icons';
 const appEl = $('app');
 const mainEl = $('main');
 const content = $('content');
@@ -344,6 +347,9 @@ function updateTab(t) {
 api.tabs.onActivated((/** @type {number} */ id) => {
   if (id !== activeTab && !findForm.hidden && !findInTerminal) closeFind();
   activeTab = id;
+  prefsPane.hide();
+  settingsTab.classList.remove('active');
+  settingsTab.setAttribute('aria-selected', 'false');
   for (const [tid, el] of tabEls) {
     el.classList.toggle('active', tid === id);
     el.setAttribute('aria-selected', String(tid === id));
@@ -409,7 +415,7 @@ $('address-form').addEventListener('submit', (e) => {
   const text = (pickedSuggestion() || address.value).trim();
   closeSuggest();
   if (!text) return;
-  if (activeTab === null) api.tabs.create(text);
+  if (activeTab === null || prefsPane.showing()) api.tabs.create(text);
   else api.tabs.navigate(text);
   address.blur();
 });
@@ -424,6 +430,8 @@ $('open-external').addEventListener('click', () => {
 });
 
 function newTab() {
+  prefsPane.hide();
+  settingsTab.classList.remove('active');
   address.value = '';
   address.focus();
   activeTab = null;
@@ -695,11 +703,35 @@ const palette = createPalette({
   onClose: () => { if (activeTab !== null) api.tabs.setHidden(false); },
 });
 
+// Settings is a tab in the strip while it's open: it covers the content area, a browser tab
+// taking over hides it (onActivated, newTab), and its × or Esc closes it.
+const settingsTab = document.createElement('div');
+settingsTab.className = 'tab settings-tab';
+settingsTab.setAttribute('role', 'tab');
+settingsTab.innerHTML = '<span class="title">Settings</span><button class="close" aria-label="Close settings">×</button>';
+settingsTab.prepend(/** @type {Node} */ (document.querySelector('#settings-open svg')?.cloneNode(true)));
+settingsTab.addEventListener('click', (e) => {
+  if (/** @type {HTMLElement} */ (e.target).closest('.close')) prefsPane.close();
+  else prefsPane.open();
+});
 const prefsPane = createPrefs({
   api,
   openUrl,
-  onOpen: () => api.tabs.setHidden(true),
-  onClose: () => { if (activeTab !== null) api.tabs.setHidden(false); },
+  onOpen: () => {
+    api.tabs.setHidden(true);
+    if (!settingsTab.isConnected) $('tab-list').append(settingsTab);
+    for (const el of tabEls.values()) { el.classList.remove('active'); el.setAttribute('aria-selected', 'false'); }
+    settingsTab.classList.add('active');
+    settingsTab.setAttribute('aria-selected', 'true');
+    settingsTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (document.activeElement !== address) address.value = '';
+  },
+  // Back to the tab Settings covered, if there is one; activating it marks it and shows its view.
+  onClose: () => {
+    settingsTab.remove();
+    if (activeTab !== null) api.tabs.activate(activeTab);
+  },
+  onSaved: (/** @type {any} */ p) => { if (p.tabLabels !== sideTabs.dataset.labels) { sideTabs.dataset.labels = p.tabLabels; sidebar.fitTabs(); } },
 });
 
 const connections = createConnections({

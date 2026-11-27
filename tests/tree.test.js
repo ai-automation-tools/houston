@@ -42,9 +42,9 @@ test('defaultAction: folders expand, html browses, the rest opens as a document'
 test('fileMenu: folders and files get their own items, virtual nodes get none', () => {
   const ids = (/** @type {ReturnType<typeof fileMenu>} */ m) => m.map((i) => (i === '-' ? '-' : i.id));
   assert.deepEqual(ids(fileMenu({ id: 'Projects/Lab', name: 'Lab', kind: 'root', children: [] })),
-    ['view', 'code', 'reveal', 'terminal', 'workspace', '-', 'copy-path', 'copy-id']);
+    ['view', 'view-tab', 'code', 'reveal', 'terminal', 'workspace', '-', 'copy-path', 'copy-id']);
   assert.deepEqual(ids(fileMenu({ id: 'Projects/Lab/README.md', name: 'README.md', kind: 'md' })),
-    ['view', 'browse', 'code', 'reveal', 'terminal', '-', 'copy-path', 'copy-id']);
+    ['view', 'view-tab', 'browse', 'code', 'reveal', 'terminal', '-', 'copy-path', 'copy-id']);
   assert.deepEqual(fileMenu(tree[0]), []);
 });
 

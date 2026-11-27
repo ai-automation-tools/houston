@@ -111,30 +111,13 @@
       </section>
       <section id="panel-search" class="panel" role="region" aria-label="Search results" hidden></section>
       <footer class="side-foot">
-        <button id="settings-open" class="side-foot-btn" title="Settings: every control, its scope and where to change it (Ctrl+,)" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</button>
+        <button id="settings-open" class="side-foot-btn" title="Settings (Ctrl+,)" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button>
       </footer>
     </aside>
 
     <div id="side-split" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize sidebar"></div>
 
     <main id="main">
-      <section id="prefs" class="prefs" aria-labelledby="prefs-title" hidden>
-        <header class="prefs-head">
-          <h1 id="prefs-title">Settings</h1>
-          <span id="prefs-status" class="prefs-status" role="status" aria-live="polite"></span>
-          <button id="prefs-close" class="icon-btn" title="Close (Esc)" aria-label="Close settings">✕</button>
-        </header>
-        <div class="prefs-body">
-          <nav class="prefs-nav" aria-label="Settings sections">
-            <a href="#prefs-general">General</a>
-            <a href="#prefs-browser">Browser</a>
-            <a href="#prefs-startup">Startup</a>
-            <a href="#prefs-sources">Sources</a>
-            <a href="#prefs-security">Agents and security</a>
-          </nav>
-          <div id="prefs-main" class="prefs-main"></div>
-        </div>
-      </section>
       <div id="tabstrip" role="tablist" aria-label="Browser tabs">
         <div id="tab-list"></div>
         <button id="new-tab" class="icon-btn" title="New tab (Ctrl+T)" aria-label="New tab">＋</button>
@@ -161,6 +144,23 @@
         <button id="stop-all" title="End every agent session the Core is running, at once (Ctrl+Shift+Backspace; also in the tray menu)">⏹ Stop All</button>
       </div>
       <div id="content">
+        <section id="prefs" class="prefs" aria-labelledby="prefs-title" hidden>
+          <header class="prefs-head">
+            <h1 id="prefs-title">Settings</h1>
+            <span id="prefs-status" class="prefs-status" role="status" aria-live="polite"></span>
+            <button id="prefs-close" class="icon-btn" title="Close (Esc)" aria-label="Close settings">✕</button>
+          </header>
+          <div class="prefs-body">
+            <nav class="prefs-nav" aria-label="Settings sections">
+              <a href="#prefs-general">General</a>
+              <a href="#prefs-browser">Browser</a>
+              <a href="#prefs-startup">Startup</a>
+              <a href="#prefs-sources">Sources</a>
+              <a href="#prefs-security">Agents and security</a>
+            </nav>
+            <div id="prefs-main" class="prefs-main"></div>
+          </div>
+        </section>
         <div id="empty" class="empty">
           <h1>🧭 Houston</h1>
           <p>Pick a file in the sidebar, or type an address above.</p>

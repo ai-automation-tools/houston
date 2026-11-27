@@ -65,9 +65,9 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 ## 📁 Files
 
 - Every workspace from Project Hub. A rescan by Hub shows up on its own.
-- A click reads the file in a tab under the app's own sidebar: Markdown rendered by Hub, other text as code, images inline, folders as a listing. Clicking through files reuses that tab; Ctrl+click opens another.
+- A click reads the file in a tab under the app's own sidebar: Markdown rendered by Hub, other text as code, images inline, folders as a listing. Clicking through files reuses that tab; Ctrl+click, or **Preview in a new tab** on the right-click menu, opens another. **Open raw file in a new tab** shows the file itself in a browser tab instead.
 - An HTML file opens as the page itself.
-- Hover or right-click a row for Terminal here, View here, VS Code, Reveal in Explorer, Copy path, Copy Hub id and Open as workspace.
+- Hover or right-click a row for Terminal here, Preview here or in a new tab, the raw file in a new tab, VS Code, Reveal in Explorer, Copy path, Copy Hub id and Open as workspace.
 
 ## 🔖 Bookmarks, 🕘 Recent and 🔍 Search
 
@@ -144,11 +144,11 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 ## ⚙️ Settings
 
-**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens the Settings pane over the main area. Its sections:
+**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens Settings as a tab in the tab strip. Clicking another tab, or opening a new one, leaves it there to come back to; its × or Esc closes it. Its sections:
 
 | Section | What you change there |
 |:---|:---|
-| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once |
+| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once; and whether the sidebar's tabs show icons, names or both |
 | Browser | Ad blocking (applies at once); the quick links on the empty tab page |
 | Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
 | Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |

@@ -351,7 +351,7 @@ export class Sidebar {
   fileAction(node, action, newTab = false) {
     if (!this.scan) return;
     const path = absPath(node.id, this.scan);
-    if (action === 'view') this.viewDoc(node.id, { newTab });
+    if (action === 'view' || action === 'view-tab') this.viewDoc(node.id, { newTab: newTab || action === 'view-tab' });
     if (action === 'browse' && path) this.openUrl(`file:///${path}`);
     if (action === 'code' || action === 'reveal') this.openInHub(node, action);
     if (action === 'terminal') {
@@ -1148,11 +1148,10 @@ export class Sidebar {
     more.hidden = true;
     if (nav.scrollWidth > nav.clientWidth) {
       more.hidden = false;
-      const step = btns[1].offsetLeft - btns[0].offsetLeft;
-      const fit = Math.max(1, Math.floor((nav.clientWidth - more.offsetWidth - 16) / step));
-      const cur = btns.findIndex((b) => b.dataset.panel === this.current);
-      // A current tab past the fold takes the last visible slot.
-      btns.forEach((b, i) => { b.hidden = cur >= fit ? i >= fit - 1 && i !== cur : i >= fit; });
+      // Hide from the end until the row fits (buttons differ in width when they show names),
+      // never the current tab, so one past the fold stays in view.
+      const cur = btns.find((b) => b.dataset.panel === this.current);
+      for (let i = btns.length - 1; i > 0 && nav.scrollWidth > nav.clientWidth; i--) if (btns[i] !== cur) btns[i].hidden = true;
     }
     this.markMore();
   }
