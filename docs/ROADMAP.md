@@ -338,7 +338,7 @@ From the 2026-10-05 review.
 - [ ] `small` `Start-Houston.ps1` launcher, with `scripts/Start-AICommandCenter.ps1` kept as a one-line shim: the docs (`docs/guide/setup.md`, AGENTS.md) name the new script. Done when no doc names the old one except as the shim
 - [ ] `small` MCP tool count matches the server (16) in every doc: `docs/README.md` and `docs/guide/README.md` say twelve. Done when no doc gives a count other than the server's
 - [ ] Decide whether the data folder moves from `%APPDATA%\ai-command-center` (it comes from `package.json`'s `name`, so moving it needs a migration) or stays as a deliberate legacy path 🔒 Needs owner
-- [ ] Decide `sandbox: false`, the empty-referrer check and `file:` navigation (security sweep, 2026-11-10, carried items that await a design call) 🔒 Needs owner
+- [x] Decide `sandbox: false`, the empty-referrer check and `file:` navigation (security sweep, 2026-11-10, carried items that await a design call) 🔒 Needs owner — decided 2026-11-27 (option A for all three, [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)): `sandbox: false` stays, documented in ADR-004 and `AGENTS.md`; app pages keep accepting an empty referrer and now send `Cross-Origin-Resource-Policy: same-origin`; `file:` is drive-letter paths only (`isLocalFileUrl()` in `src/shared/url.js`), and the browse session's `file:` handler refuses one with a host for every request, which closes an NTLM hash leak to a remote SMB host, with a plain listing for folders
 
 ### Distribution and promotion
 

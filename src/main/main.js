@@ -23,7 +23,7 @@ import { smoke } from './smoke.js';
 import { serveDocs, invalidateDocsIndex } from './docs.js';
 import { diffPage as gitDiff, status as gitStatus } from './git.js';
 import { DevServers } from './devservers.js';
-import { toUrl } from '../shared/url.js';
+import { fileListing, isLocalFileUrl, toUrl } from '../shared/url.js';
 import { chromeUserAgent, cleanSavedTabs, savedActiveIndex } from '../shared/session.js';
 import { allTools } from '../shared/tools.js';
 import { elementLine, pageHost } from '../shared/pageactions.js';
@@ -333,6 +333,18 @@ async function createWindow() {
   browseSession.setPermissionRequestHandler((_wc, permission, callback) => callback(isPermissionAllowed(permission)));
   browseSession.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
   browseSession.setDevicePermissionHandler(() => false);
+  // Every file: request in a tab, a page's image as much as a navigation: one naming a host
+  // (an SMB sign-in that sends the user's NTLM hash) is refused, a folder gets a plain listing,
+  // and anything else is read as Chromium would.
+  browseSession.protocol.handle('file', async (req) => {
+    if (!isLocalFileUrl(req.url)) return new Response(null, { status: 403 });
+    const where = fileURLToPath(req.url);
+    if (fs.statSync(where, { throwIfNoEntry: false })?.isDirectory()) {
+      const entries = (await fs.promises.readdir(where, { withFileTypes: true })).map((d) => ({ name: d.name, dir: d.isDirectory() }));
+      return new Response(fileListing(req.url, entries), { headers: { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" } });
+    }
+    return net.fetch(req, { bypassCustomProtocolHandlers: true });
+  });
   const devs = new DevServers(send);
   serveDocs(browseSession, {
     run: { title: 'Cronsole run', render: (url) => cron.page(url) },

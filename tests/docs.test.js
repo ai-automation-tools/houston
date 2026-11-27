@@ -59,6 +59,8 @@ test('docPage escapes the title and trail; headers forbid scripts, frames and fo
   assert.match(csp, /default-src 'none'/);
   assert.doesNotMatch(csp, /script-src/);
   assert.match(csp, /frame-ancestors 'none'/);
+  // A web page that asks for one with no referrer never gets the answer delivered.
+  assert.equal(DOC_HEADERS['cross-origin-resource-policy'], 'same-origin');
   assert.equal(escapeHtml(`"'&`), '&quot;&#39;&amp;');
 });
 

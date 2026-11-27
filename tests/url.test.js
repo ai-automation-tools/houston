@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isAllowedNavigation, toUrl } from '../src/shared/url.js';
+import { fileListing, isAllowedNavigation, isLocalFileUrl, toUrl } from '../src/shared/url.js';
 
 test('toUrl keeps full URLs as they are', () => {
   assert.equal(toUrl('https://example.com/x?y=1'), 'https://example.com/x?y=1');
@@ -40,4 +40,23 @@ test('isAllowedNavigation: a local file opens from the app or another local file
   assert.equal(isAllowedNavigation('FILE:///C:/x', 'http://localhost:3000/'), false);
   assert.equal(isAllowedNavigation('file:///C:/x', 'chrome-extension://abc/popup.html'), false);
   assert.equal(isAllowedNavigation('file:///C:/x', 'about:blank'), false);
+});
+
+test('a file: URL with a host is never local, however it is spelled, so no tab goes there (an SMB sign-in sends the NTLM hash)', () => {
+  for (const u of ['file:///C:/x.html', 'file:///d:/a/b%20c.png', 'file://localhost/C:/x.html']) assert.equal(isLocalFileUrl(u), true, u);
+  for (const u of ['file://evil.example/share/x.png', 'file:////evil.example/share/x', 'file:///\\\\evil.example\\share\\x', 'file:///%5C%5Cevil.example/share',
+    'file://192.0.2.1/c$/x', 'file:///x/y', 'file:', 'https://example.com/', 'not a url']) assert.equal(isLocalFileUrl(u), false, u);
+  // Not from the app, and not from a local file either.
+  assert.equal(isAllowedNavigation('file://evil.example/share/x'), false);
+  assert.equal(isAllowedNavigation('file://evil.example/share/x', 'file:///C:/Users/u/Downloads/a.html'), false);
+  assert.equal(isAllowedNavigation('file:///C:/Users/u/b.html', 'file:///C:/Users/u/Downloads/a.html'), true);
+});
+
+test('fileListing links each entry under its folder, folders first, with names escaped', () => {
+  const html = fileListing('file:///C:/w', [{ name: 'b.txt', dir: false }, { name: 'a dir', dir: true }, { name: '<x>.html', dir: false }]);
+  assert.match(html, /<title>C:\/w\/<\/title>/);
+  assert.ok(html.indexOf('a dir/') < html.indexOf('b.txt'));
+  assert.match(html, /href="file:\/\/\/C:\/w\/a%20dir\/"/);
+  assert.match(html, /href="file:\/\/\/C:\/w\/%3Cx%3E\.html">&#60;x&#62;\.html</);
+  assert.ok(!html.includes('<x>'));
 });
