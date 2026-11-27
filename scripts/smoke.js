@@ -4,7 +4,8 @@
 //          --profile  use the real profile in %APPDATA%\ai-command-center instead
 //        npm run spike:extensions   (installs LastPass and Rakuten, then loads a shop page)
 // Screenshots and summary.json land in .smoke/ (gitignored). Exits 1 when a check fails,
-// or when the app quit without running them (another instance on the same profile).
+// when the app quit without running them (another instance on the same profile), or when the
+// run stopped before its end (the time limit below).
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -63,13 +64,28 @@ if (profile) {
 const summaryFile = path.join(dir, 'summary.json');
 fs.rmSync(summaryFile, { force: true });
 const child = spawn(/** @type {string} */ (/** @type {unknown} */ (electron)), ['.'], { cwd: root, stdio: 'inherit', env });
-const timer = setTimeout(() => { console.error('[smoke] timed out after 120 s'); child.kill(); }, 120_000);
+// A guard against a hung app, not a speed check: a failing check waits out its own timeouts, and
+// the run has grown past 50 checks. The app writes summary.json after every check, so a run this
+// kills still has the checks it reached, marked `complete: false`.
+const LIMIT_S = 240;
+let timedOut = false;
+const timer = setTimeout(() => { timedOut = true; console.error(`[smoke] timed out after ${LIMIT_S} s`); child.kill(); }, LIMIT_S * 1000);
 child.on('exit', (code) => {
   clearTimeout(timer);
   if (profile) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  if (!fs.existsSync(summaryFile)) {
+  /** @type {{ complete?: boolean, failed?: number, checks?: unknown[] } | null} */
+  let summary = null;
+  try { summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8')); } catch { /* none: the app never ran a check */ }
+  if (!summary) {
     console.error('[smoke] FAILED: the app exited without running the checks (is it already running on this profile?)');
     process.exit(1);
   }
-  process.exit(code ?? 1);
+  if (!summary.complete) {
+    console.error(`[smoke] FAILED: the run stopped ${timedOut ? `at its ${LIMIT_S} s limit` : 'early'} after ${summary.checks?.length ?? 0} checks; ${summaryFile} has them`);
+    process.exit(1);
+  }
+  // The verdict is the summary's. Electron can still crash on its way out after the checks
+  // (0xC0000409 seen 2026-11-27), and a raw Windows code that size comes out garbled from process.exit.
+  if (code !== 0) console.error(`[smoke] note: the app exited with ${code === null ? 'no code' : `0x${(code >>> 0).toString(16).toUpperCase()}`} after its checks`);
+  process.exit(summary.failed ? 1 : 0);
 });
