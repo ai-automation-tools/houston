@@ -3,9 +3,11 @@
 // installs into this app. See docs/decisions/adr-001-electron-shell.md for the licence
 // choice and what's known not to work.
 
-import { app, dialog } from 'electron';
+import { app, dialog, nativeImage } from 'electron';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendLog } from './applog.js';
+import { manifestIconPath } from '../shared/extensionicon.js';
 import { ElectronChromeExtensions } from 'electron-chrome-extensions';
 import { installChromeWebStore, uninstallExtension, updateExtensions } from 'electron-chrome-web-store';
 
@@ -60,8 +62,22 @@ export async function setupExtensions({ browseSession, shellSession, window, tab
     });
   });
 
-  // The shell's <browser-action-list> loads extension icons over crx://.
-  ElectronChromeExtensions.handleCRXProtocol(shellSession);
+  // The shell's <browser-action-list> loads extension icons over crx://, from the library.
+  // An MV3 extension that sets its icon from image data (Rakuten and AdBlock do) leaves it
+  // with no image ("not yet supported"), and the button showed a grey letter with its badge
+  // hanging off it; serve that extension's manifest icon instead.
+  shellSession.protocol.handle('crx', async (req) => {
+    const res = await extensions.api.browserAction.handleCRXRequest(req);
+    if (res.ok) return res;
+    const url = new URL(req.url);
+    const [, id, size] = url.pathname.split('/');
+    const ext = url.hostname === 'extension-icon' ? (browseSession.extensions ?? browseSession).getExtension(id) : null;
+    const rel = ext && manifestIconPath(ext.manifest, Number(size) || 32);
+    const file = ext && rel ? path.join(ext.path, rel) : '';
+    if (!ext || !file.startsWith(ext.path + path.sep)) return res;
+    const img = nativeImage.createFromPath(file);
+    return img.isEmpty() ? res : new Response(img.toPNG(), { headers: { 'content-type': 'image/png' } });
+  });
 
   // Loads everything previously installed from the Web Store, and makes the store's
   // install button work inside a tab.

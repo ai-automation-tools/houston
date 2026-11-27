@@ -13,6 +13,7 @@
 ## 🪟 Window and tray
 
 - Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running. Click the tray icon to bring it back.
+- The sidebar's tabs are a row of icons: hover one for its name. When the sidebar is too narrow for all of them, the rest sit behind **»** at the end of the row, which lists them; the tab you're on always stays in view, and **»** shows a **!** when a tab behind it has a count. **Settings** is at the bottom left of the sidebar.
 - Right-click the tray icon for **Show Houston**, **Close to tray** and **Quit Houston**. Untick **Close to tray** there, or under **File** (Alt shows the menu), and ✕ quits instead. **File → Quit** always quits.
 
 ## 🌐 Browser
@@ -26,7 +27,7 @@
 - Ads and trackers are blocked by default: EasyList and EasyPrivacy through [Ghostery's adblocker](https://github.com/ghostery/adblocker) (MPL-2.0). **Extensions → Block ads and trackers** turns it off.
 
 > [!WARNING]
-> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing. LastPass and Rakuten work. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent).
+> Extensions half-work. electron-chrome-extensions covers only part of the `chrome.*` API: offscreen documents, `action.setIcon` with image data and `declarativeNetRequest` are missing; an extension that sets its toolbar icon from image data (Rakuten, AdBlock) shows the icon from its manifest instead. LastPass and Rakuten work. Web Store ad blockers such as uBlock Origin Lite block nothing, which is why the app has its own. Details in [ADR-001](../decisions/adr-001-electron-shell.md#update-2026-10-27-the-user-agent).
 
 ## 💻 Terminals
 
@@ -143,7 +144,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 ## ⚙️ Settings
 
-⚙ at the right of the address bar, **Ctrl+,** or **Settings** in the palette opens a page listing every control, grouped by scope:
+**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens a page listing every control, grouped by scope:
 
 | Scope | What it means | Examples |
 |:---|:---|:---|
