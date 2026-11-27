@@ -133,7 +133,7 @@ How to contribute: [contributing.md](docs/guide/contributing.md).
 | **🧪 spikes/** | Scripts run by hand against the real container SDK: the H0 spikes (`s1` to `s5`) and the milestone checks (`h1-*` to `h4-*`). Nothing imports them |
 | [**🧪 tests/**](tests/README.md) | Unit tests and the scripted launch check |
 | **📜 scripts/** | Smoke run, lint, demo build, diagram build, launcher |
-| [**🤖 AGENTS.md**](AGENTS.md) | Rules for agents working in this repo (`CLAUDE.md` imports it) |
+| [**🤖 AGENTS.md**](AGENTS.md) | Rules for agents working in this repo (every agent CLI reads it, Claude Code included) |
 | [**🛡️ SECURITY.md**](SECURITY.md) | Reporting a vulnerability; the full model is in [security-model.md](docs/guide/security-model.md) |
 
 ## ⚖️ Licence
