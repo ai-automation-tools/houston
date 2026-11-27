@@ -16,7 +16,7 @@ import { store } from './store.js';
 import { activeProfile, setNextProfile } from './profile.js';
 import { browsePartition } from '../shared/profiles.js';
 import { Tabs } from './tabs.js';
-import { Terminals } from './terminal.js';
+import { Terminals, ptyDrainMs } from './terminal.js';
 import { extensionsMenu, listExtensions, setupExtensions } from './extensions.js';
 import { loadBlocker } from './adblock.js';
 import { smoke } from './smoke.js';
@@ -968,6 +968,13 @@ async function createWindow() {
 
 app.on('second-instance', (_e, argv) => { if (argv.includes('--quit')) app.quit(); else showWindow(); });
 app.on('before-quit', () => { quitting = true; });
+app.on('will-quit', (e) => {
+  // Every terminal was killed as the window closed (win 'closed'). Exiting while node-pty
+  // still has their ConPTY output threads running throws in conpty.node during teardown
+  // (0xC0000409 or 0xE06D7363), so hold the quit until they've stopped, then quit again.
+  const ms = ptyDrainMs();
+  if (ms > 0) { e.preventDefault(); setTimeout(() => app.quit(), ms); }
+});
 
 logCrashes();
 app.whenReady().then(() => {
@@ -984,7 +991,7 @@ app.on('window-all-closed', () => app.quit());
 
 // node-pty's ConPTY output reader runs on a worker thread that outlives its session, so
 // the process reaches 'quit' and then never exits. Every window is closed and every
-// terminal killed by this point (win 'closed'), so exit explicitly.
+// terminal killed by this point (win 'closed'), and will-quit waited for their threads, so exit explicitly.
 app.on('quit', () => {
   tray?.destroy();
   mcp?.close();
