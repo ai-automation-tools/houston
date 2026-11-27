@@ -534,7 +534,10 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
         document.querySelector('.side-tabs [data-panel="files"]').click();
         return { shown: rows.map((r) => r.querySelector('.name').textContent), sources: document.getElementById('news-sources').textContent };
       })()`);
-      const opened = tabs.list().some((t) => t.url === 'https://example.com/smoke-news');
+      // The tab lists its address once the page commits, which on a slow network can take seconds.
+      const isOpen = () => tabs.list().some((t) => t.url === 'https://example.com/smoke-news');
+      for (let i = 0; i < 50 && !isOpen(); i++) await wait(100);
+      const opened = isOpen();
       check('the News tab lists a local Markdown source\'s headline, and a click opens it as a tab',
         news.shown[0] === 'Smoke headline' && news.sources === '1 source' && opened, { ...news, opened });
     }
