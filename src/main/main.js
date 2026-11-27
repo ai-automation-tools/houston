@@ -972,7 +972,7 @@ async function createWindow() {
     const raw = store.rawSettings();
     const s = store.settings();
     return {
-      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal,
+      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal, tabLabels: l.tabLabels,
       defaultShell: terminals.list().some((t) => t.id === l.defaultShell) ? l.defaultShell : terminals.list()[0]?.id ?? '',
       shells: terminals.list(),
       hubUrl: typeof raw.hubUrl === 'string' ? raw.hubUrl : '', hubDefault: DEFAULT_HUB_URL, hubFromEnv: Boolean(env.ACC_HUB_URL), hubNow: hub.url,

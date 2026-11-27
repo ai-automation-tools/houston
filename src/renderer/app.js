@@ -31,6 +31,9 @@ const profileName = await api.profile.info().then((/** @type {any} */ p) => p.na
 const layout = info.layout;
 // Settings › Startup: start with the terminal panel closed, for this launch, without saving it as closed.
 if (layout.startTerminal === false) layout.terminalOpen = false;
+// Settings › General › Sidebar tabs: icons, names or both (styles.css reads the attribute).
+const sideTabs = /** @type {HTMLElement} */ (document.querySelector('.side-tabs'));
+sideTabs.dataset.labels = layout.tabLabels ?? 'icons';
 const appEl = $('app');
 const mainEl = $('main');
 const content = $('content');
@@ -700,6 +703,7 @@ const prefsPane = createPrefs({
   openUrl,
   onOpen: () => api.tabs.setHidden(true),
   onClose: () => { if (activeTab !== null) api.tabs.setHidden(false); },
+  onSaved: (/** @type {any} */ p) => { if (p.tabLabels !== sideTabs.dataset.labels) { sideTabs.dataset.labels = p.tabLabels; sidebar.fitTabs(); } },
 });
 
 const connections = createConnections({

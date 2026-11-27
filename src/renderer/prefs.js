@@ -25,9 +25,9 @@ function el(tag, attrs = {}, kids = []) {
 }
 
 /**
- * @param {{ api: any, onOpen: () => void, onClose: () => void, openUrl: (url: string) => void }} deps
+ * @param {{ api: any, onOpen: () => void, onClose: () => void, openUrl: (url: string) => void, onSaved?: (prefs: any) => void }} deps
  */
-export function createPrefs({ api, onOpen, onClose, openUrl }) {
+export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
   const pane = /** @type {HTMLElement} */ (document.getElementById('prefs'));
   const main = /** @type {HTMLElement} */ (document.getElementById('prefs-main'));
   const status = /** @type {HTMLElement} */ (document.getElementById('prefs-status'));
@@ -51,6 +51,7 @@ export function createPrefs({ api, onOpen, onClose, openUrl }) {
     errorAt?.replaceChildren();
     try {
       p = await api.prefs.set(key, value);
+      onSaved?.(p);
       say('Saved');
       return true;
     } catch (err) {
@@ -154,6 +155,7 @@ export function createPrefs({ api, onOpen, onClose, openUrl }) {
       section('general', 'General', [
         toggle('closeToTray', 'Close to tray', 'Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running.'),
         choice('theme', 'Theme', [['system', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']], 'The window, its own pages and the theme web pages are told to use.'),
+        choice('tabLabels', 'Sidebar tabs', [['icons', 'Icons'], ['names', 'Names'], ['both', 'Icons and names']], "How the tab buttons across the top of the sidebar show. Tabs that don't fit go behind »."),
       ]),
       section('browser', 'Browser', [
         toggle('adBlock', 'Block ads and trackers', "Ghostery's filter lists on every tab; applies at once."),

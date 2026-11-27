@@ -7,10 +7,12 @@ import { MAX_LABEL, MAX_LINKS, feedPath, httpUrl, hubAddress, newsSource } from 
 
 export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const START_TABS = /** @type {const} */ (['restore', 'start']);
+/** How the sidebar's tab buttons show: icon only, name only, or both. */
+export const TAB_LABELS = /** @type {const} */ (['icons', 'names', 'both']);
 /** The rows of scopes.js's controls() that the pane edits, so its read-only list leaves them out. */
 export const PANE_ROWS = new Set(['Close to tray', 'Ad blocking', 'Project Hub', 'Quick links', 'News sources', 'Feed index']);
 
-/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string }} LayoutPrefs */
+/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string, tabLabels: typeof TAB_LABELS[number] }} LayoutPrefs */
 
 /**
  * layout.json's preference keys, each checked on read, so a hand-edited file can't break the app.
@@ -23,6 +25,7 @@ export function layoutPrefs(d) {
     startTab: START_TABS.includes(d.startTab) ? d.startTab : 'restore',
     startTerminal: d.startTerminal !== false,
     defaultShell: typeof d.defaultShell === 'string' ? d.defaultShell : '',
+    tabLabels: TAB_LABELS.includes(d.tabLabels) ? d.tabLabels : 'icons',
   };
 }
 
@@ -69,6 +72,9 @@ export function prefChange(key, value, ctx) {
       return layout(value);
     case 'startTab':
       if (!START_TABS.includes(/** @type {any} */ (value))) throw new Error(`Start with one of ${START_TABS.join(', ')}`);
+      return layout(value);
+    case 'tabLabels':
+      if (!TAB_LABELS.includes(/** @type {any} */ (value))) throw new Error(`Sidebar tabs show one of ${TAB_LABELS.join(', ')}`);
       return layout(value);
     case 'defaultShell':
       if (typeof value !== 'string' || !ctx.shells.includes(value)) throw new Error('Not a shell found on this machine');

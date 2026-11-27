@@ -148,7 +148,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 | Section | What you change there |
 |:---|:---|
-| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once |
+| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once; and whether the sidebar's tabs show icons, names or both |
 | Browser | Ad blocking (applies at once); the quick links on the empty tab page |
 | Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
 | Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |
