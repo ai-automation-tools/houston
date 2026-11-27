@@ -77,15 +77,17 @@ The full tour is in [features.md](docs/guide/features.md).
 Needs Windows 11, Node.js 24, PowerShell 7 and a running [Project Hub](https://github.com/ai-automation-tools/project-hub).
 
 ```powershell
-git clone https://github.com/ai-automation-tools/houston   # private: needs org access
+git clone https://github.com/ai-automation-tools/houston
 cd houston
 npm install
+pwsh -NoProfile -File scripts\Register-HoustonCore.ps1 -StartNow   # the harness's Core, started at logon from now on
 npm start
 ```
 
 | Next | Where |
 |:---|:---|
 | Launcher, `settings.json`, where files live | [setup.md](docs/guide/setup.md) |
+| The Core at logon: check, stop or remove it | [core-at-logon.md](docs/guide/core-at-logon.md) |
 | Set up the MCP server in any client | [mcp-server.md](docs/mcp-server.md) |
 | Connect Claude Code | [claude-code.md](docs/guide/claude-code.md) |
 | Turn on the Chat tab | [chat.md](docs/guide/chat.md) |
