@@ -2,7 +2,7 @@
 // bar at the very top, the demo stylesheet, and demo/install.js (the fake window.acc)
 // loaded before app.js. Module scripts run in document order, so app.js finds it.
 
-// The bar links the homepage; a "View source" link can join it when the demo is published (H2).
+// The source is private while the harness is built, so the bar links the homepage.
 export const HOME_URL = 'https://houston.ai-automation-tools.dev/';
 
 export const SOURCE_BAR = `<div class="src-bar">
