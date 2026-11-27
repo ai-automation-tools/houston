@@ -351,7 +351,7 @@ export class Sidebar {
   fileAction(node, action, newTab = false) {
     if (!this.scan) return;
     const path = absPath(node.id, this.scan);
-    if (action === 'view') this.viewDoc(node.id, { newTab });
+    if (action === 'view' || action === 'view-tab') this.viewDoc(node.id, { newTab: newTab || action === 'view-tab' });
     if (action === 'browse' && path) this.openUrl(`file:///${path}`);
     if (action === 'code' || action === 'reveal') this.openInHub(node, action);
     if (action === 'terminal') {

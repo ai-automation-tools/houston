@@ -195,10 +195,16 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
     /** @type {HTMLElement | null} */ (pane.querySelector('input, select, button'))?.focus();
   }
 
-  function close() {
+  /** A browser tab took over: the pane hides, and its tab stays in the strip to come back to. */
+  function hide() {
     if (pane.hidden) return;
     pane.hidden = true;
     document.removeEventListener('keydown', onKey);
+  }
+
+  /** Esc, ✕ or the tab's ×: the pane and its tab go. */
+  function close() {
+    hide();
     onClose();
   }
 
@@ -209,5 +215,5 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
       document.getElementById(/** @type {string} */ (a.getAttribute('href')).slice(1))?.scrollIntoView({ block: 'start' });
     });
   }
-  return { open, close };
+  return { open, close, hide, showing: () => !pane.hidden };
 }

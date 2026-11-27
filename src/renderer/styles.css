@@ -230,6 +230,7 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .tab .close:hover { color: var(--text); background: var(--line); }
 .tab.pinned { min-width: 0; max-width: 140px; border-top: 2px solid var(--accent); }
 .tab.pinned .close { display: none; }
+.tab.settings-tab svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* The tab the user attached for agents' clicks and typing. */
 .tab.agent .title::before { content: '🤖 '; }
 .tab.loading .title::before { content: "◌ "; color: var(--accent); }
@@ -292,9 +293,11 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 /* ---- light theme ------------------------------------------------------ */
 /* Follows Windows' app mode, like document pages (src/shared/docs.js). The terminal keeps its
    dark xterm palette, so its panel stays dark too. */
-/* ---- the Settings pane (prefs.js): over the main area, the tab view hidden while it shows ---- */
+/* ---- the Settings pane (prefs.js): over the content area, shown as a tab in the strip ---- */
 .prefs { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--bg); }
 .prefs[hidden] { display: none; }
+/* Narrow content area (sidebar and chat both open): no section nav, the read-only list stacked. */
+.prefs { container-type: inline-size; }
 .prefs-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px 12px; border-bottom: 1px solid var(--line); }
 .prefs-head h1 { margin: 0; font-size: 18px; font-weight: 600; }
 .prefs-status { flex: 1; color: var(--ok); font-size: 12px; }
@@ -331,6 +334,7 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .prefs-scope dt { font-weight: 500; }
 .prefs-scope dd { margin: 0; display: flex; flex-direction: column; }
 .prefs-scope .pref-hint { margin-top: 2px; }
+@container (max-width: 620px) { .prefs-nav { display: none; } .prefs-main { padding: 8px 16px 32px; } .prefs-scope dl { grid-template-columns: 1fr; gap: 2px; } .prefs-scope dd { margin-bottom: 8px; } }
 button.linkish { margin-top: 16px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
 
 @media (prefers-color-scheme: light) {
