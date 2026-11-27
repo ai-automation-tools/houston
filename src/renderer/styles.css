@@ -209,7 +209,7 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .splitter:hover, .splitter:focus-visible { background: var(--accent); outline: none; }
 
 /* ---- main column ------------------------------------------------------ */
-#main { display: grid; grid-template-rows: 36px 40px 1fr 4px var(--term-h); min-width: 0; min-height: 0; }
+#main { position: relative; display: grid; grid-template-rows: 36px 40px 1fr 4px var(--term-h); min-width: 0; min-height: 0; }
 #main.no-terminal { grid-template-rows: 36px 40px 1fr 0 0; }
 #main.no-terminal #terminal-panel, #main.no-terminal #term-split { visibility: hidden; }
 
@@ -264,10 +264,10 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 .term-tab .close { background: none; border: 0; color: var(--text-3); cursor: pointer; }
 #term-host { position: relative; flex: 1; min-height: 0; }
 .term-pane { position: absolute; inset: 4px 0 0 8px; }
-#confirm-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel-2); border-bottom: 1px solid var(--warn); }
+#confirm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel-2); border-bottom: 1px solid var(--warn); }
 #confirm-bar[hidden] { display: none; }
-#confirm-label { color: var(--text-2); white-space: nowrap; }
-#confirm-cmd { flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: "Cascadia Mono", Consolas, monospace; color: var(--text); }
+#confirm-label { color: var(--text-2); }
+#confirm-cmd { flex: 1; min-width: 16ch; overflow-wrap: anywhere; font-family: "Cascadia Mono", Consolas, monospace; color: var(--text); }
 #confirm-bar button { background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 12px; cursor: pointer; }
 #confirm-run { border-color: var(--warn) !important; color: var(--warn); }
 #confirm-bar button:focus-visible { outline: 2px solid var(--accent); }
@@ -288,6 +288,47 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
 /* ---- light theme ------------------------------------------------------ */
 /* Follows Windows' app mode, like document pages (src/shared/docs.js). The terminal keeps its
    dark xterm palette, so its panel stays dark too. */
+/* ---- the Settings pane (prefs.js): over the main area, the tab view hidden while it shows ---- */
+.prefs { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--bg); }
+.prefs[hidden] { display: none; }
+.prefs-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px 12px; border-bottom: 1px solid var(--line); }
+.prefs-head h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.prefs-status { flex: 1; color: var(--ok); font-size: 12px; }
+.prefs-status.bad { color: var(--bad); }
+.prefs-body { flex: 1; display: flex; min-height: 0; }
+.prefs-nav { display: flex; flex-direction: column; gap: 2px; width: 190px; flex: none; padding: 14px 10px; border-right: 1px solid var(--line); }
+.prefs-nav a { padding: 7px 10px; border-radius: 5px; color: var(--text-2); text-decoration: none; }
+.prefs-nav a:hover, .prefs-nav a:focus-visible { background: var(--panel-2); color: var(--text); outline: none; }
+.prefs-main { flex: 1; overflow: auto; padding: 8px 28px 40px; }
+.prefs-section { max-width: 760px; padding: 14px 0 18px; border-bottom: 1px solid var(--line); }
+.prefs-section h2 { margin: 6px 0 14px; font-size: 15px; font-weight: 600; }
+.pref { margin: 0 0 18px; }
+.pref-check { display: flex; align-items: center; gap: 9px; font-weight: 500; cursor: pointer; }
+.pref-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.pref-label { display: block; margin-bottom: 6px; font-weight: 500; }
+.pref-hint { margin: 4px 0 0; color: var(--text-3); font-size: 12px; line-height: 1.45; }
+.pref-check + .pref-hint { margin-left: 25px; }
+.pref-error { margin: 4px 0 0; color: var(--bad); font-size: 12px; }
+.pref-error:empty { display: none; }
+.pref select { width: auto; min-width: 220px; }
+.pref-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.pref-row:first-of-type { margin-top: 0; }
+.pref input[type="text"] { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; outline: none; }
+.pref input[type="text"]:focus { border-color: var(--accent); }
+.pref input:disabled { opacity: .55; }
+.pref button, .prefs-section > button { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 5px 12px; cursor: pointer; }
+.pref button.primary, .prefs-section > button.primary { border-color: var(--accent); }
+.pref button:disabled { opacity: .5; cursor: default; }
+.pref-list { display: flex; flex-direction: column; gap: 6px; }
+.pref-list-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 28px; gap: 6px; align-items: center; }
+.pref-list-row .icon-btn { width: 28px; height: 28px; padding: 0; border: 0; background: none; }
+.prefs-scope h3 { margin: 14px 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+.prefs-scope dl { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 8px 16px; margin: 0; }
+.prefs-scope dt { font-weight: 500; }
+.prefs-scope dd { margin: 0; display: flex; flex-direction: column; }
+.prefs-scope .pref-hint { margin-top: 2px; }
+button.linkish { margin-top: 16px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #ffffff;

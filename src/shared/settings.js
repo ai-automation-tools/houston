@@ -4,8 +4,8 @@
 
 export const DEFAULT_HUB_URL = 'http://127.0.0.1:4273';
 export const PROJECT_HUB_REPO = 'https://github.com/ai-automation-tools/project-hub';
-const MAX_LINKS = 12;
-const MAX_LABEL = 40;
+export const MAX_LINKS = 12;
+export const MAX_LABEL = 40;
 
 /** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[], newsSources: { label: string, url: string }[], feedIndex: string | null }} Settings */
 
@@ -14,7 +14,7 @@ const MAX_LABEL = 40;
  * `.md` file (only settings.json can name one; the renderer never does). Null otherwise.
  * @param {unknown} value
  */
-function newsSource(value) {
+export function newsSource(value) {
   if (typeof value !== 'string') return null;
   const v = value.trim();
   if (/^[a-z]:[\\/][^\0]*\.md$/i.test(v) && !/(^|[\\/])\.\.([\\/]|$)/.test(v)) return v;
@@ -31,7 +31,7 @@ function newsSource(value) {
  * An http(s) URL with no trailing slash, or null.
  * @param {unknown} value
  */
-function httpUrl(value) {
+export function httpUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
     const u = new URL(value.trim());
@@ -49,7 +49,7 @@ function httpUrl(value) {
  * @param {unknown} value
  * @param {boolean} remoteOk
  */
-function hubAddress(value, remoteOk) {
+export function hubAddress(value, remoteOk) {
   const url = httpUrl(value);
   if (!url) return null;
   return remoteOk || /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(new URL(url).origin) ? url : null;
@@ -72,6 +72,15 @@ export function hubAuth(hubUrl, token) {
     safe = u.protocol === 'https:' || /^(127\.0\.0\.1|localhost|\[::1\])$/i.test(u.hostname);
   } catch { /* not a URL: withheld */ }
   return safe ? { state: 'sent', headers: { authorization: `Bearer ${t}` } } : { state: 'withheld', headers: {} };
+}
+
+/**
+ * The Feed's index.json (H6): a local file a scheduled job writes; an absolute path to a .json, no `..`. Null otherwise.
+ * @param {unknown} value
+ */
+export function feedPath(value) {
+  const f = typeof value === 'string' ? value.trim() : '';
+  return /^[a-z]:[\\/][^\0]*\.json$/i.test(f) && !/(^|[\\/])\.\.([\\/]|$)/.test(f) ? f : null;
 }
 
 /**
@@ -99,9 +108,7 @@ export function settingsFrom(raw, env = {}) {
     if (url && label) newsSources.push({ label, url });
     if (newsSources.length === MAX_LINKS) break;
   }
-  // The Feed's index.json (H6): a local file a scheduled job writes; an absolute path to a .json, no ..
-  const f = typeof d.feedIndex === 'string' ? d.feedIndex.trim() : '';
-  const feedIndex = /^[a-z]:[\\/][^\0]*\.json$/i.test(f) && !/(^|[\\/])\.\.([\\/]|$)/.test(f) ? f : null;
+  const feedIndex = feedPath(d.feedIndex);
   return {
     hubUrl,
     newsSources,

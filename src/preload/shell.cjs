@@ -22,6 +22,8 @@ const listen = (channel) => (/** @type {(...args: any[]) => void} */ fn) => {
 contextBridge.exposeInMainWorld('acc', {
   info: invoke('app:info'),
   saveLayout: invoke('layout:save'),
+  // The Settings pane: main checks every change (src/shared/prefs.js) before it's saved.
+  prefs: { get: invoke('prefs:get'), set: invoke('prefs:set'), restart: invoke('prefs:restart') },
 
   hub: {
     health: invoke('hub:health'),

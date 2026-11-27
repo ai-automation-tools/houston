@@ -144,7 +144,19 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 ## ⚙️ Settings
 
-**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens a page listing every control, grouped by scope:
+**Settings** at the bottom left of the sidebar, **Ctrl+,** or **Settings** in the palette opens the Settings pane over the main area. Its sections:
+
+| Section | What you change there |
+|:---|:---|
+| General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once |
+| Browser | Ad blocking (applies at once); the quick links on the empty tab page |
+| Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
+| Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |
+| Agents and security | Nothing: the controls the Core enforces, read-only, each with where it's set |
+
+A change saves as you make it (a list or an address with its **Save** button or Enter), and one Houston can't use is refused with the reason under the field. **Esc** or ✕ closes the pane. Grants, policy, secrets and the Core's limits are never switches here: a checkbox can't enforce anything, so they stay with the Core and `npm run ctl`.
+
+At the bottom of the pane, **Open every control as a page** opens `acc://settings/`, every control grouped by scope:
 
 | Scope | What it means | Examples |
 |:---|:---|:---|
@@ -153,7 +165,7 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 | Workspace | Saved with the active workspace | Its folder, tabs, terminals and conversations |
 | Session | Lives as long as one agent session | Allow once and allow for this session; running sessions |
 
-Each row says what it's set to now and where it's changed (a menu, a tab, `settings.json`, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
+Each row says what it's set to now and where it's changed (the Settings pane, a menu, a tab, `.env`, or `npm run ctl`). The page only shows; change a control where its row says. Reload the tab to read it again.
 
 ## 🩺 Health
 

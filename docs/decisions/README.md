@@ -23,6 +23,7 @@ Read in order. The requirements set what matters, the options pick the shape, an
 | [**🛡️ adr-004-core-companion-process.md**](adr-004-core-companion-process.md) | A second process, the Core, launches agent CLIs as identities in OS containers, decides policy, runs the MCP gateway, holds secrets and writes audit. Houston is its client. Containment is pending spike H0-S1. |
 | [**🧪 spikes/2026-11-12-s1-first-contact.md**](spikes/2026-11-12-s1-first-contact.md) | Execution Containers load and run a contained command on Windows 11 Home with no admin rights. Partial: the toolchain and file-policy runs of spike S1 are still open. |
 | [**🧪 spikes/2026-11-12-h0-spike-results.md**](spikes/2026-11-12-h0-spike-results.md) | Spikes S1 to S5 with commands and output. Containers run git, npm, Node tests and pytest on a 5-path grant list at 1.15x to 1.96x; the container proxy setting blocks every local app and leaves one port open; a container can decrypt a DPAPI blob it is handed; signed-in Claude Code and Codex each finish a coding task in a container. Six changes for H1 to H3. Closed: the owner accepted the slowdown and the schemas. |
+| [**🧪 spikes/**](spikes/README.md) | Index of the three spike write-ups above and the write-restricted token spike, which found that deletes and moves are not held, so the owner dropped that fallback rung on 2026-11-22. |
 
 ---
 
