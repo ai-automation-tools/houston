@@ -4,6 +4,7 @@ import { Terminal } from './vendor/xterm/lib/xterm.mjs';
 import { FitAddon } from './vendor/addon-fit/lib/addon-fit.mjs';
 import { SearchAddon } from './vendor/addon-search/lib/addon-search.mjs';
 import { findLinks } from './shared/links.js';
+import { pasteLabel } from './shared/menu.js';
 
 const THEME = {
   background: '#0b0d10', foreground: '#e4e4e7', cursor: '#38bdf8', selectionBackground: '#38bdf855',
@@ -122,15 +123,26 @@ export class TerminalPanel {
     }
     const paste = (/** @type {string} */ text) => this.api.term.write(id, text);
     term.attachCustomKeyEventHandler((e) => clipboardKeys(e, term, paste));
-    // Right-click works like Windows Terminal: copy the selection if there is one, else paste.
-    pane.addEventListener('contextmenu', (e) => {
+    // Right-click copies the selection if there is one. With none it never pastes on its own:
+    // a stray click would run whatever the clipboard holds. A menu shows what would go in first.
+    pane.addEventListener('contextmenu', async (e) => {
       e.preventDefault();
       if (term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection()).catch(() => {});
         term.clearSelection();
-      } else {
-        navigator.clipboard.readText().then(paste).catch(() => {});
+        term.focus();
+        return;
       }
+      const text = await navigator.clipboard.readText().catch(() => '');
+      const label = pasteLabel(text);
+      const picked = await this.api.menu([
+        ...(label ? [{ id: 'paste', label }] : []),
+        { id: 'select-all', label: 'Select all' },
+        { id: 'clear', label: 'Clear' },
+      ]);
+      if (picked === 'paste') paste(text);
+      if (picked === 'select-all') term.selectAll();
+      if (picked === 'clear') term.clear();
       term.focus();
     });
 

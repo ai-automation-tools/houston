@@ -19,6 +19,8 @@
 ## 🌐 Browser
 
 - Tabs, back, forward, reload, a context menu, and ↗ to open the page in your default browser.
+- Right-click a tab for Reload, Duplicate, Copy address, Close, Close other tabs and Close tabs to the right (the pinned Cronsole tab is left open).
+- Right-click a page for back, forward, reload, Print… (web pages only) and the link and extension items. The address bar, the search box, the chat box and Settings' fields have Cut, Copy, Paste and Select all.
 - The address bar takes a URL, a `D:\` path, `localhost:3000`, or anything else as a search.
 - As you type, it lists matching pages from Recent and your bookmarks (Project Hub's favorites and the Bookmarks tab's source). ↑ and ↓ pick one, Enter opens it, Escape closes the list; with none picked, Enter goes to what you typed.
 - Links open as tabs. A sign-in pop-up such as "Sign in with Google" gets its own small window, so it can hand the login back.
@@ -34,7 +36,7 @@
 - PowerShell 7 in tabs along the bottom. The ⌄ next to ＋ opens Windows PowerShell, Command Prompt or Git Bash instead.
 - "Terminal here" on any sidebar folder opens one there.
 - Web addresses in the output (`http(s)://…`, `localhost:3000`) open as a tab on click.
-- Ctrl+C copies a selection and Ctrl+V pastes. Right-click copies a selection, or pastes when nothing is selected.
+- Ctrl+C copies a selection and Ctrl+V pastes. Right-click copies a selection. With nothing selected it opens a menu instead of pasting: **Paste** shows the clipboard's first line and how many lines it has (each one runs as a command), and pastes only when you click it. **Select all** and **Clear** are there too.
 - Ctrl+L and Ctrl+R stay with PowerShell while the terminal has focus.
 
 ## 🧭 Workspaces
@@ -58,7 +60,7 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 
 ## ⚡ Command palette
 
-- **Ctrl+K** opens one box over the open tabs and terminals, the workspaces, and every menu action with its shortcut.
+- **Ctrl+K** opens one box over the open tabs and terminals, the workspaces, and every menu action with its shortcut, with a **Show …** action for each sidebar tab (Show Agents, Show Logs and so on).
 - Once you type, files from the workspace's Files tree join the list.
 - Every word you type has to match. ↑↓ pick, Enter goes, Esc or a click outside closes.
 
@@ -71,17 +73,17 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 
 ## 🔖 Bookmarks, 🕘 Recent and 🔍 Search
 
-- **Bookmarks:** your Chrome, Edge or Brave bookmarks (Hub reads them from disk), or Hub's own favorites.
-- **Recent:** pages, files and terminals you've opened.
+- **Bookmarks:** your Chrome, Edge or Brave bookmarks (Hub reads them from disk), or Hub's own favorites. Right-click one to open it in a new or background tab or your default browser, or to copy its address. Editing them stays with the browser they came from.
+- **Recent:** pages, files and terminals you've opened. Right-click a page for the same menu as a bookmark, a folder or terminal for Open terminal here and Copy path, a file for Open in VS Code and Copy Hub ID.
 - **Search** (Ctrl+Shift+F): one box across files, bookmarks and Recent.
 
 ## 📰 News
 
-The **News** tab lists headlines from the sources in `settings.json`'s `newsSources` ([setup.md](setup.md#settings)), newest first, each link once. A source can be an RSS or Atom feed, a Markdown page on the web, or a local `.md` file such as a weekly AI digest or a bookmarks note: every `[title](https://…)` link in it becomes a headline, and a `## 2026-10-30` heading dates the links under it. Click a headline to open it in a tab (Ctrl+click or middle-click for a background tab). The sources are fetched when you first open the tab and again on **Refresh**; one that fails says why at the top while the rest still show.
+The **News** tab lists headlines from the sources in `settings.json`'s `newsSources` ([setup.md](setup.md#settings)), newest first, each link once. A source can be an RSS or Atom feed, a Markdown page on the web, or a local `.md` file such as a weekly AI digest or a bookmarks note: every `[title](https://…)` link in it becomes a headline, and a `## 2026-10-30` heading dates the links under it. Click a headline to open it in a tab (Ctrl+click or middle-click for a background tab). The sources are fetched when you first open the tab and again on **Refresh**; one that fails says why at the top while the rest still show. With no sources yet, **Set up in Settings** opens Settings at Sources, where they're added.
 
 ## 🗞️ Feed and the start page
 
-The **Feed** tab reads one local `index.json`, the file settings.json's `feedIndex` names ([setup.md](setup.md#settings)), which a scheduled job writes. It shows what you bookmarked first, then each category with its definition (what belongs in it) and its items, newest first. Click an item to open it; ☆ bookmarks it for this profile. An item that names an MCP server has **Add as discovered**: the Core registers it from the command in the file, and nothing runs until you install and pin it in Integrations.
+The **Feed** tab reads one local `index.json`, the file settings.json's `feedIndex` names ([setup.md](setup.md#settings)), which a scheduled job writes. It shows what you bookmarked first, then each category with its definition (what belongs in it) and its items, newest first. With no index file set, **Set up in Settings** opens Settings at Sources. Click an item to open it; ☆ bookmarks it for this profile. An item that names an MCP server has **Add as discovered**: the Core registers it from the command in the file, and nothing runs until you install and pin it in Integrations.
 
 The **start page** opens when Houston starts with no tabs to bring back, or from **Start page** in the Feed tab. Its four cards: advisories in the feed for tools installed here (this profile's MCP servers and skills, Claude Code and Codex, local model runtimes), worst first; approval cards waiting for you; the scheduled runs since 6 pm the day before, and how each ended; and the feed's highlights.
 
@@ -90,7 +92,7 @@ The **start page** opens when Houston starts with no tabs to bring back, or from
 - The **Git** tab in the sidebar shows the active workspace's repo: its branch, the upstream it tracks and how far ahead or behind it is, then the changed files grouped as Conflicts, Staged, Changes and Untracked.
 - Click a file to read its diff in a tab: additions in green, removals in red. A file with both staged and unstaged changes is listed in each group, and each opens its own diff.
 - Read-only for now: nothing here stages, commits or pushes. **Refresh** asks git again, and opening the tab always does.
-- The Default workspace has no folder of its own, so open a folder as a workspace first.
+- The Default workspace has no folder of its own, so open a folder as a workspace first: **Choose a workspace** opens the workspace menu, and the Git tab stays open, so it shows the new workspace's repo once you switch. The Dev and Agents tabs have the same button.
 
 ## 🚀 Dev servers
 
@@ -125,6 +127,7 @@ The **Agents** tab is the harness's: it lists the agent identities in the [Houst
 
 The **Integrations** tab is what the Core's gateway serves. It needs the Core running.
 
+- Each group (MCP servers, Secrets, Standing grants, Memory, Local models, Agent backends) folds under its heading, and stays folded until you open it again. The MCP servers heading counts the unconfined ones, so folding it never hides one. A server's tools fold under a line of their own, open while a **Pin** waits on them.
 - **MCP servers.** Each one with how it runs (contained; on the host or over http, both marked unconfined), its full command or address, and its state. Servers that need a decision come first. **Install** runs a new one once and reads its tools; the tools it read are listed under it, and **Pin N tools** serves them to sessions whose identities are granted them. A pinned server whose tools change is held for review until you pin it again. **Read again** checks a pinned one, **Disable** stops serving it at once and **Enable** brings it back. Houston adds its own MCP server here whenever the Core is running.
 - **Secrets.** The vault's names, when each was set, and when a server last got it. Values never come back out.
 - **Standing grants.** What scheduled tasks run under (`harness run --grant <id>`): who each runs as, its budget, and anything that stops its next run. **Pause** refuses its runs and **Resume** lets them start again; Stop All pauses them all. Making and approving one is `npm run ctl`'s ([Standing grants](../../core/README.md#-standing-grants)).
@@ -136,7 +139,7 @@ The **Integrations** tab is what the Core's gateway serves. It needs the Core ru
 
 The **Logs** tab is the Core's audit log: what each agent identity did and what was decided, newest first. It needs the Core running.
 
-- Pick an identity, a session (the recent ones, by who and when they started) or a decision (allowed, asked, denied) to narrow it. It shows the newest 300 that match and says when there are more.
+- Pick an identity, a session (the recent ones, by who and when they started) or a decision (allowed, asked, denied) to narrow it. A line above the events names what's picked, with **Clear** to show everything again. It shows the newest 300 that match, under a heading for each day (Today, Yesterday, then the date), and says when there are more.
 - Each row is the event and what it acted on, such as `egress.connect example.org:443` or `approval.decided example.org:443 (deny)`, with who and when. Green allowed, amber asked, red denied; hover for the reasons.
 - Click a row for the whole event as the Core wrote it. **Only this session** (on hover) narrows to that row's session.
 - **Transcript** (on hover, on a session's start and end rows) opens what that session's terminal showed as a page: plain text, with keys, tokens and passwords already replaced by `[REDACTED:…]` when the Core wrote it. A transcript keeps up to 100 MB; past 5 GB in all, the oldest go first. The page shows the newest 1 MB.

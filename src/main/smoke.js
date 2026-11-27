@@ -571,6 +571,22 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     console.log(`[smoke] palette=${JSON.stringify(pal)}`);
     check('Ctrl+K opens the palette with tabs and terminals, and Enter runs the top match', pal.open && pal.tabs === tabs.list().length && pal.terminals > 0
       && pal.first === 'Show Recent' && pal.closed && pal.panel === 'recent', pal);
+    // Every sidebar tab has its Show action, and it ranks first for its own name (UI/UX audit BUG-01).
+    wc.send('shortcut', 'palette');
+    await wait(300);
+    const shows = await wc.executeJavaScript(`(() => {
+      const input = document.getElementById('palette-input');
+      const missing = [];
+      const names = [...document.querySelectorAll('.side-tabs [data-panel]')].map((b) => b.getAttribute('aria-label'));
+      for (const name of names) {
+        input.value = 'show ' + name.toLowerCase();
+        input.dispatchEvent(new Event('input'));
+        if (document.querySelector('#palette-list .pal-row.active .name')?.textContent !== 'Show ' + name) missing.push(name);
+      }
+      document.getElementById('palette').close();
+      return { names, missing };
+    })()`);
+    check('Ctrl+K has a Show action for every sidebar tab, first for its name (Show Agents too)', shows.names.length >= 12 && !shows.missing.length, shows);
     // Address-bar suggestions: example.com is in Recent by now; typing lists it, the
     // arrow highlights it, Escape closes the list without navigating.
     if (!process.env.ACC_SMOKE_URL) {
@@ -1177,7 +1193,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
         Boolean(ig?.before?.buttons.join() === 'Install' && ig.before.runs.includes('stub-mcp-server.js') && ig.read.tools.join() === 'big,echo,env'
           && ig.read.buttons[0] === 'Pin 3 tools' && ig.pinned === '3 tools served' && ig.state === 'pinned'
           // Local models depend on the machine, so that group is left out of the comparison.
-          && ig.sections.filter((x) => !x.startsWith('Local models')).join() === 'MCP servers (1),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends'), ig);
+          && ig.sections.filter((x) => !x.startsWith('Local models')).join() === 'MCP servers (1, ⚠ 1 unconfined),Secrets (0),Standing grants (1),Memory (0 waiting, 1 approved),Agent backends (2)'), ig);
       const fd = agentRun?.feed;
       if (fd) {
         check("the Feed tab shows each category, Add as discovered registers the item's MCP server as discovered, and the start page shows the advisory for an installed tool only",

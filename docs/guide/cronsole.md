@@ -33,6 +33,8 @@ ACC_CRONSOLE_MCP=<cronsole>/mcp-server/dist/index.js
 | **Open Cronsole** | Shows Cronsole's UI in a pinned tab, first in the strip, with no close button (Ctrl+W still closes it) |
 | **Refresh** | Asks Cronsole again |
 | **Docs** | The docs upkeep view: only the tasks with doc, docs, documentation, readme, changelog or diagram as a word in their name. Click a task for its runs and a run for its report. Click **Docs** again for every task |
+| **Failed** | Only the active tasks whose last run failed, the ones the label counts |
+| Type in **Filter tasks by name** | Keeps the tasks whose name holds every word typed, with the Docs and Failed buttons too. The count beside it says how many of all are listed |
 
 - Only runs Cronsole performed are listed. A Windows task that fires on its own trigger shows none here; Cronsole's UI has those.
 - A tab on Cronsole's address is the pinned tab. **Open Cronsole** goes back to it instead of opening another.

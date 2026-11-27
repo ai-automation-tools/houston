@@ -3,13 +3,13 @@
 // the log of calls agents made to the app's MCP server and the run history; Cron, Cronsole's tasks;
 // and News, headlines from the sources settings.json lists.
 
-import { docsTasks, failedTasks, grantLine, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
+import { failedTasks, filterTasks, grantLine, runSummary, runUrl, taskSummary } from './shared/cronsole.js';
 import { diffAreas, gitUrl } from './shared/git.js';
 import { devUrl } from './shared/devservers.js';
 import { runLogUrl, runStateText } from './shared/runs.js';
 import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
-import { logRow, transcriptUrl } from './shared/logs.js';
+import { logDay, logRow, transcriptUrl } from './shared/logs.js';
 import { IDENTITIES_URL, identityAnchor } from './shared/identities.js';
 import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
 
@@ -36,10 +36,12 @@ export class Sidebar {
    *   viewDoc: (id: string, opts?: { newTab?: boolean }) => void,
    *   openCronsole: () => void,
    *   focusTerminal: (id: number) => void,
+   *   openSettings?: (section: string) => void,
    * }} opts
    */
-  constructor({ api, layout, openUrl, openTerminal, viewDoc, openCronsole, focusTerminal }) {
+  constructor({ api, layout, openUrl, openTerminal, viewDoc, openCronsole, focusTerminal, openSettings }) {
     this.api = api;
+    this.openSettings = openSettings;
     this.focusTerminal = focusTerminal;
     this.openCronsole = openCronsole;
     this.cronLoaded = false;
@@ -125,11 +127,14 @@ export class Sidebar {
     });
     document.getElementById('cron-open')?.addEventListener('click', () => this.openCronsole());
     document.getElementById('cron-refresh')?.addEventListener('click', () => this.loadCron());
-    document.getElementById('cron-docs')?.addEventListener('click', (e) => {
-      const btn = /** @type {HTMLElement} */ (e.currentTarget);
-      btn.setAttribute('aria-pressed', String(btn.getAttribute('aria-pressed') !== 'true'));
-      if (this.cronTasks) this.renderCron(this.cronTasks);
-    });
+    for (const id of ['cron-docs', 'cron-failed']) {
+      document.getElementById(id)?.addEventListener('click', (e) => {
+        const btn = /** @type {HTMLElement} */ (e.currentTarget);
+        btn.setAttribute('aria-pressed', String(btn.getAttribute('aria-pressed') !== 'true'));
+        if (this.cronTasks) this.renderCron(this.cronTasks);
+      });
+    }
+    document.getElementById('cron-filter')?.addEventListener('input', () => { if (this.cronTasks) this.renderCron(this.cronTasks); });
     document.getElementById('git-refresh')?.addEventListener('click', () => this.loadGit());
     document.getElementById('news-refresh')?.addEventListener('click', () => this.loadNews());
     this.newsLoaded = false;
@@ -382,6 +387,7 @@ export class Sidebar {
     // Another workspace, likely another repo.
     if (this.current === 'git') this.loadGit();
     if (this.current === 'dev') this.loadDev();
+    if (this.current === 'agents') this.loadAgents();
   }
 
   /** @param {HubNode} node @param {'code' | 'reveal'} how */
@@ -468,6 +474,7 @@ export class Sidebar {
     } else {
       row.addEventListener('click', (e) => this.openUrl(/** @type {string} */ (n.url), { background: e.ctrlKey }));
       row.addEventListener('auxclick', (e) => { if (e.button === 1) this.openUrl(/** @type {string} */ (n.url), { background: true }); });
+      row.addEventListener('contextmenu', (e) => this.linkMenu(e, /** @type {string} */ (n.url)));
     }
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
     return wrap;
@@ -484,7 +491,7 @@ export class Sidebar {
       const { sources, items } = /** @type {{ sources: { label: string, count: number, error?: string }[], items: import('./shared/news.js').NewsItem[] }} */ (await this.api.news.list());
       host.innerHTML = '';
       if (!sources.length) {
-        host.append(note('No news sources yet. Add "newsSources" to settings.json: each a label and an RSS or Atom feed, a Markdown page, or a local .md file. See docs/guide/setup.md.'));
+        host.append(note('No news sources yet: an RSS or Atom feed, a Markdown page, or a local .md file.'), this.setUp());
         return;
       }
       const failed = sources.filter((s) => s.error);
@@ -521,7 +528,7 @@ export class Sidebar {
     host.innerHTML = '';
     try {
       const f = /** @type {any} */ (await this.api.feed.list());
-      if (f.error) { host.append(note(f.error)); this.el.feedWhen.textContent = ''; return; }
+      if (f.error) { host.append(note(f.error)); if (f.unset) host.append(this.setUp()); this.el.feedWhen.textContent = ''; return; }
       this.el.feedWhen.textContent = f.generated ? `as of ${ago(Date.parse(f.generated))}` : '';
       if (f.dropped) host.append(note(`${f.dropped} item${f.dropped === 1 ? '' : 's'} in the index had no title, URL or known category and ${f.dropped === 1 ? 'is' : 'are'} left out.`));
       const item = (/** @type {any} */ i) => {
@@ -553,6 +560,34 @@ export class Sidebar {
     }
   }
 
+  /**
+   * Right-click on a page (a bookmark, a Recent page). Imported bookmarks stay read-only here.
+   * @param {MouseEvent} e
+   * @param {string} url
+   */
+  async linkMenu(e, url) {
+    e.preventDefault();
+    const picked = await this.api.menu([
+      { id: 'open', label: 'Open in new tab' },
+      { id: 'background', label: 'Open in background tab' },
+      // Main opens http(s) only, whatever is asked.
+      ...(/^https?:/i.test(url) ? [{ id: 'external', label: 'Open in default browser' }] : []),
+      '-',
+      { id: 'copy', label: 'Copy address' },
+    ]);
+    if (picked === 'open' || picked === 'background') this.openUrl(url, { background: picked === 'background' });
+    if (picked === 'external') this.api.tabs.openExternal(url);
+    if (picked === 'copy') copy(url);
+  }
+
+  /** News and the Feed are set up in Settings › Sources. */
+  setUp() {
+    const d = document.createElement('div');
+    d.className = 'panel-note';
+    d.append(button('Set up in Settings', 'Settings › Sources: News sources and the Feed index file', () => this.openSettings?.('sources')));
+    return d;
+  }
+
   renderRecent() {
     const host = this.el.recent;
     host.innerHTML = '';
@@ -575,6 +610,18 @@ export class Sidebar {
       if (r.type === 'url') this.openUrl(r.target);
       if (r.type === 'terminal' || r.type === 'folder') this.openTerminal(r.target);
       if (r.type === 'file') this.api.hub.open(r.target, 'code', r.label).catch((/** @type {unknown} */ err) => toast(errText(err)));
+    });
+    row.addEventListener('contextmenu', async (e) => {
+      if (r.type === 'url') { this.linkMenu(e, r.target); return; }
+      e.preventDefault();
+      // A file's target is its Hub id, a folder's or terminal's its path.
+      const file = r.type === 'file';
+      const picked = await this.api.menu([
+        { id: 'open', label: file ? 'Open in VS Code' : 'Open terminal here' },
+        { id: 'copy', label: file ? 'Copy Hub ID' : 'Copy path' },
+      ]);
+      if (picked === 'open') row.click();
+      if (picked === 'copy') copy(r.target);
     });
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter') row.click(); });
     return row;
@@ -671,6 +718,7 @@ export class Sidebar {
       host.innerHTML = '';
       if (!st.repo) {
         host.append(note(st.reason));
+        if (st.noFolder) host.append(chooseWorkspace());
         return;
       }
       const repoName = st.repo.split(/[\\/]/).filter(Boolean).pop();
@@ -737,6 +785,7 @@ export class Sidebar {
     this.el.devFolder.textContent = info.folder ? `${folderName(info.folder)}${info.manager ? ` · ${info.manager}` : ''}` : '';
     this.el.devFolder.title = info.folder || '';
     if (info.reason) host.append(note(info.reason));
+    if (!info.folder) host.append(chooseWorkspace());
     /** @param {string} label */
     const group = (label) => {
       const head = document.createElement('div');
@@ -816,7 +865,7 @@ export class Sidebar {
       host.append(note('No agent identities yet. Make one with npm run ctl -- identity.create (see core/README.md, Backends), give it a write grant on this folder, and activate it.'));
       return;
     }
-    if (!info.folder) host.append(note('This workspace has no folder, so no session can start here.'));
+    if (!info.folder) host.append(note('This workspace has no folder, so no session can start here.'), chooseWorkspace());
     /** @param {Promise<unknown>} p */
     const act = (p) => p.catch((err) => toast(errText(err)));
     const open = (/** @type {Promise<{ terminal: number }>} */ p) => act(p.then((r) => this.focusTerminal(r.terminal)));
@@ -891,16 +940,35 @@ export class Sidebar {
    * disable go to the Core by name. Registering a server and setting a secret are `ctl`'s.
    */
   async loadIntegrations() {
-    const host = this.el.integrationsList;
     let info;
     try {
       info = await this.api.integrations.info();
     } catch (err) {
       info = { error: errText(err) };
     }
-    host.innerHTML = '';
-    if (info.error) { host.append(note(info.error, true)); return; }
-    host.append(groupTitle(`MCP servers (${info.servers.length})`));
+    const outer = this.el.integrationsList;
+    outer.innerHTML = '';
+    if (info.error) { outer.append(note(info.error, true)); return; }
+    // Each group folds under its heading; what's folded stays folded across reloads.
+    const folded = (this.foldedGroups ??= new Set());
+    /** @type {HTMLElement} */
+    let host = outer;
+    /** @param {string} key @param {string} title */
+    const group = (key, title) => {
+      const d = document.createElement('details');
+      d.className = 'fold';
+      d.open = !folded.has(key);
+      d.addEventListener('toggle', () => { if (d.open) folded.delete(key); else folded.add(key); });
+      const s = document.createElement('summary');
+      s.className = 'group-title';
+      s.textContent = title;
+      d.append(s);
+      outer.append(d);
+      host = d;
+    };
+    // The unconfined count is in the heading, so folding the list never hides that one runs outside a container.
+    const unconfined = info.servers.filter((/** @type {any} */ r) => /unconfined/.test(r.where)).length;
+    group('servers', `MCP servers (${info.servers.length}${unconfined ? `, ⚠ ${unconfined} unconfined` : ''})`);
     if (!info.servers.length) host.append(note('None registered. Add one with npm run ctl -- mcp.add (core/README.md, MCP gateway); Houston adds its own when the Core is running.'));
     for (const r of /** @type {import('./shared/integrations.js').ServerRow[]} */ (info.servers)) {
       const row = line(r.tone, '10px', r.icon, r.name, r.sub, [`${r.name} · ${r.where} · ${r.state.replace('_', ' ')}`, `Runs: ${r.runs}`, ...r.env].join('\n'));
@@ -916,16 +984,27 @@ export class Sidebar {
       host.append(row);
       // What it runs, always in view before it first runs.
       host.append(line('idle', '26px', '›', r.where, r.runs, [r.runs, ...r.env].join('\n')));
-      if (r.showTools) for (const t of r.tools) host.append(line('idle', '26px', '·', t.name, (t.description ?? '').split('\n')[0], t.description ?? ''));
+      if (r.showTools && r.tools.length) {
+        // Open while a pin waits on them, so what a pin would serve is read before it's served.
+        const tools = document.createElement('details');
+        tools.className = 'fold';
+        tools.open = r.actions.some((a) => a.act === 'pin');
+        const s = document.createElement('summary');
+        s.className = 'fold-tools';
+        s.textContent = `${r.tools.length} tool${r.tools.length === 1 ? '' : 's'}`;
+        tools.append(s);
+        for (const t of r.tools) tools.append(line('idle', '26px', '·', t.name, (t.description ?? '').split('\n')[0], t.description ?? ''));
+        host.append(tools);
+      }
     }
 
-    host.append(groupTitle(`Secrets (${info.secrets.length})`));
+    group('secrets', `Secrets (${info.secrets.length})`);
     if (!info.secrets.length) host.append(note('The vault is empty. Set one with npm run ctl -- secret.set name=<name>, which reads the value from stdin. Values never come back out.'));
     for (const s of info.secrets) host.append(line('idle', '10px', '🔑', s.name, s.sub, `${s.name}\nA server gets it only with a secret:${s.name} use grant.`));
 
     // Standing grants (H4): what scheduled tasks run under. Stop All pauses them all; Resume brings one back.
     if (info.standing) {
-      host.append(groupTitle(`Standing grants (${info.standing.length})`));
+      group('standing', `Standing grants (${info.standing.length})`);
       if (!info.standing.length) host.append(note('None. A scheduled task runs contained under one with harness run --grant <id>; make one with npm run ctl -- standing.create (core/README.md, Standing grants).'));
       for (const g of info.standing) {
         const row = line(g.tone, '10px', g.icon, g.id, g.sub, g.title);
@@ -941,7 +1020,7 @@ export class Sidebar {
 
     // Profile memory (H6): what agents proposed, waiting for review. Only approved items are served.
     if (info.memory) {
-      host.append(groupTitle(`Memory (${info.memory.waiting.length} waiting, ${info.memory.approved} approved)`));
+      group('memory', `Memory (${info.memory.waiting.length} waiting, ${info.memory.approved} approved)`);
       if (!info.memory.waiting.length) host.append(note('Nothing waiting. An agent with a memory:<profile> write grant proposes items with harness.remember; they wait here until you approve them.'));
       for (const m of info.memory.waiting) {
         const row = line('idle', '10px', '🧠', m.text, m.sub, m.title);
@@ -956,12 +1035,12 @@ export class Sidebar {
 
     // Local model runtimes (H6): found on this machine now; a session reaches one through its own relay.
     if (info.runtimes) {
-      host.append(groupTitle(`Local models (${info.runtimes.length})`));
+      group('runtimes', `Local models (${info.runtimes.length})`);
       if (!info.runtimes.length) host.append(note('None answering. Houston looks for Ollama, LM Studio, llama.cpp, KoboldCpp and vLLM on their usual ports.'));
       for (const r of info.runtimes) host.append(line('idle', '10px', '🖥', r.name, r.sub, r.title));
     }
 
-    host.append(groupTitle('Agent backends'));
+    group('backends', `Agent backends (${info.backends.length})`);
     for (const b of info.backends) host.append(line(b.installed ? 'ready' : 'exited', '10px', b.installed ? '●' : '○', b.name, b.sub, b.title));
   }
 
@@ -992,9 +1071,18 @@ export class Sidebar {
     };
     fill(pick('identity'), r.identities.map((/** @type {any} */ i) => ({ id: i.id, label: i.name ? `${i.name} (${i.id})` : i.id })));
     fill(pick('session'), r.sessions);
+    // What's narrowing the list, in words, with one way back to all of it.
+    const active = ['identity', 'session', 'result'].map(pick).filter((s) => s.value);
+    if (active.length) {
+      const bar = note(`Only ${active.map((s) => s.selectedOptions[0]?.textContent).join(' · ')}`);
+      bar.append(' ', button('Clear', 'Show every event again', () => { for (const s of active) s.value = ''; this.loadLogs(); }));
+      host.append(bar);
+    }
     if (!r.events.length) { host.append(note('Nothing in the audit log matches.')); return; }
     if (r.truncated) host.append(note(`The newest ${r.events.length}; narrow the filters for older ones.`));
+    let day = '';
     for (const e of r.events) {
+      if (logDay(e.time) !== day) { day = logDay(e.time); host.append(groupTitle(day)); }
       const v = logRow(e);
       const row = document.createElement('div');
       row.className = `row log ${v.result}`;
@@ -1051,16 +1139,19 @@ export class Sidebar {
   }
 
   /**
-   * The task rows, only the docs-upkeep ones while the Docs button is pressed.
+   * The task rows that pass the filter box and the Docs and Failed toggles, and how many of all.
    * @param {import('./shared/cronsole.js').CronTask[]} all
    */
   renderCron(all) {
     const host = this.el.cronList;
-    const docsOnly = document.getElementById('cron-docs')?.getAttribute('aria-pressed') === 'true';
-    const tasks = docsOnly ? docsTasks(all) : all;
+    const pressed = (/** @type {string} */ id) => document.getElementById(id)?.getAttribute('aria-pressed') === 'true';
+    const query = /** @type {HTMLInputElement | null} */ (document.getElementById('cron-filter'))?.value || '';
+    const tasks = filterTasks(all, { query, docs: pressed('cron-docs'), failed: pressed('cron-failed') });
+    const count = document.getElementById('cron-count');
+    if (count) count.textContent = tasks.length === all.length ? `${all.length} task${all.length === 1 ? '' : 's'}` : `${tasks.length} of ${all.length}`;
     host.innerHTML = '';
     if (!all.length) host.append(note('Cronsole has no tasks.'));
-    else if (!tasks.length) host.append(note('No docs upkeep tasks: none has doc, readme, changelog or diagram in its name.'));
+    else if (!tasks.length) host.append(note('No task matches the filter.'));
     const now = Date.now();
     for (const t of tasks) {
       const s = taskSummary(t, now);
@@ -1315,6 +1406,17 @@ function workRow(w) {
     w.error,
   ].filter(Boolean).join('\n');
   return row;
+}
+
+/**
+ * For a tab that needs a folder when the workspace has none: opens the workspace menu,
+ * whose last item points to Files. The tab stays selected, so a switch lands back here.
+ */
+function chooseWorkspace() {
+  const d = document.createElement('div');
+  d.className = 'panel-note';
+  d.append(button('Choose a workspace', 'Switch to a workspace with a folder, or add one from Files', () => document.getElementById('workspace')?.click()));
+  return d;
 }
 
 /** @param {string} text */

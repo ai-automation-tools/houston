@@ -179,7 +179,8 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
   /** @param {KeyboardEvent} e */
   const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
 
-  async function open() {
+  /** @param {string} [section] a section's id, such as 'sources', to scroll to */
+  async function open(section) {
     try {
       p = await api.prefs.get();
     } catch (err) {
@@ -192,7 +193,9 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
       onOpen();
       document.addEventListener('keydown', onKey);
     }
-    /** @type {HTMLElement | null} */ (pane.querySelector('input, select, button'))?.focus();
+    const at = section && document.getElementById(`prefs-${section}`);
+    if (at) at.scrollIntoView({ block: 'start' });
+    /** @type {HTMLElement | null} */ ((at || pane).querySelector('input, select, button'))?.focus();
   }
 
   /** A browser tab took over: the pane hides, and its tab stays in the strip to come back to. */

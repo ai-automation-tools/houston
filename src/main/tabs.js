@@ -406,6 +406,8 @@ export class Tabs {
       { label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
       { label: 'Reload', click: () => wc.reload() },
     );
+    // Web pages only; the app's own acc:// pages keep their short menu.
+    if (/^https?:/i.test(wc.getURL())) items.push({ label: 'Print…', click: () => wc.print() });
     const extItems = this.extensions?.getContextMenuItems(wc, params) ?? [];
     if (extItems.length) items.push({ type: 'separator' }, ...extItems);
     items.push(

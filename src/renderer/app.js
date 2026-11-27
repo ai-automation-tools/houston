@@ -9,7 +9,7 @@ import { createConnections } from './connections.js';
 import { defaultAction, flattenBookmarks, search } from './shared/tree.js';
 import { stepSelection, suggestAddresses } from './shared/suggest.js';
 import { docUrl, isDocUrl } from './shared/docs.js';
-import { cycleTab, pickTab } from './shared/session.js';
+import { cycleTab, pickTab, tabMenu } from './shared/session.js';
 import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
 import { describeAsk, secondsLeft } from './shared/approvals.js';
@@ -304,6 +304,17 @@ api.tabs.onCreated((/** @type {any} */ t) => {
     else api.tabs.activate(t.id);
   });
   el.addEventListener('auxclick', (e) => { if (e.button === 1 && !el.classList.contains('pinned')) api.tabs.close(t.id); });
+  el.addEventListener('contextmenu', async (e) => {
+    e.preventDefault();
+    const url = tabState.get(t.id)?.url || '';
+    const menu = tabMenu(tabOrder(), t.id, (id) => Boolean(tabEls.get(id)?.classList.contains('pinned')), Boolean(url));
+    const picked = await api.menu(menu.items);
+    if (picked === 'reload') { await api.tabs.activate(t.id); api.tabs.command('reload'); }
+    if (picked === 'duplicate') openUrl(url);
+    if (picked === 'copy') navigator.clipboard.writeText(url).then(() => toast(`Copied ${url}`), () => toast("Couldn't copy to the clipboard"));
+    if (picked === 'close') api.tabs.close(t.id);
+    for (const id of picked === 'others' ? menu.others : picked === 'right' ? menu.right : []) api.tabs.close(id);
+  });
   $('tab-list').append(el);
   tabEls.set(t.id, el);
   updateTab(t);
@@ -519,7 +530,7 @@ api.tabs.onFound((/** @type {number} */ id, /** @type {{ active: number, total: 
 // ---- sidebar -----------------------------------------------------------------
 
 const sidebar = new Sidebar({
-  api, layout, openUrl, openTerminal: (cwd) => openTerminal(cwd), viewDoc, openCronsole,
+  api, layout, openUrl, openTerminal: (cwd) => openTerminal(cwd), viewDoc, openCronsole, openSettings: (section) => prefsPane.open(section),
   // An agent session's tab: main opened it (term:opened) or it was already open.
   focusTerminal: (id) => { setTerminalOpen(true); terminals.activate(id); },
 });
@@ -667,7 +678,8 @@ const ACTIONS = [
   ['Search everything', 'Ctrl+Shift+F', 'focus-search'],
   ['Open Cronsole', 'pinned tab', 'open-cronsole'],
   ['Connections', 'Hub, Cronsole, shells, chat, MCP', 'connections'],
-  ...['Files', 'Bookmarks', 'Recent', 'MCP', 'Cron', 'Git', 'Dev'].map((p) => [`Show ${p}`, 'sidebar', `panel-${p.toLowerCase()}`]),
+  // From the sidebar's own tab buttons, so a new tab gets its action too.
+  ...[...document.querySelectorAll('.side-tabs [data-panel]')].map((b) => [`Show ${b.getAttribute('aria-label')}`, 'sidebar', `panel-${/** @type {HTMLElement} */ (b).dataset.panel}`]),
 ];
 
 const palette = createPalette({

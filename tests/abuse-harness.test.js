@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { codeLines, gateProblems, parseRecord, recordLine, requiredTests } from '../abuse/gate.js';
+import { codeLines, electronDrift, gateProblems, parseRecord, recordLine, requiredTests } from '../abuse/gate.js';
 import { anonymize, at13FromSmoke, attempt, firstLine, removeDir } from '../abuse/harness.js';
 
 const REQ = ['AT-01', 'AT-02', 'AT-13'];
@@ -108,4 +108,20 @@ test('anonymize replaces the data folder, the scratch root, the profile, the use
   assert.equal(s.toLowerCase().includes(user.toLowerCase()), false);
   assert.match(s, /<core-data>[\\/]control\.json <root>\/ws %USERPROFILE%\/\.ssh <user>/);
   assert.equal(firstLine('\r\n  Access is denied.\r\nmore'), 'Access is denied.');
+});
+
+test('electronDrift says when the installed Electron is not the lockfile version, and nothing when it is', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'acc-drift-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'node_modules/electron': { version: '45.4.1' } } }));
+    assert.match(electronDrift(dir), /\(none\) but package-lock\.json has 45\.4\.1/);
+    fs.mkdirSync(path.join(dir, 'node_modules', 'electron'), { recursive: true });
+    const pkg = path.join(dir, 'node_modules', 'electron', 'package.json');
+    fs.writeFileSync(pkg, JSON.stringify({ version: '45.2.3' }));
+    assert.match(electronDrift(dir), /Electron 45\.2\.3 but package-lock\.json has 45\.4\.1/);
+    fs.writeFileSync(pkg, JSON.stringify({ version: '45.4.1' }));
+    assert.equal(electronDrift(dir), '');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
