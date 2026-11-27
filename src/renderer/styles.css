@@ -55,9 +55,18 @@ button.brand:hover, button.brand:focus-visible { background: var(--panel-2); }
   width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; outline: none;
 }
 #search:focus, #address:focus, #runs-search:focus, select:focus { border-color: var(--accent); }
-.side-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); }
-.side-tabs button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; padding: 7px 4px; color: var(--text-2); cursor: pointer; }
-.side-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+/* One row of icon tabs; the ones that don't fit go behind » (sidebar.js fitTabs). */
+.side-tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow: hidden; }
+.side-tabs button { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0; color: var(--text-2); cursor: pointer; }
+.side-tabs button:hover { color: var(--text); background: var(--panel-2); }
+.side-tabs button[aria-selected="true"], .side-tabs .side-more.has-current { color: var(--text); border-bottom-color: var(--accent); }
+.side-tabs button[hidden] { display: none; }
+.side-tabs .side-more { margin-left: auto; }
+.side-tabs svg, .side-foot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.side-tabs .tab-badge { position: absolute; top: 1px; right: -1px; margin: 0; padding: 0 4px; font-size: 9px; line-height: 13px; }
+.side-foot { display: flex; padding: 6px 8px; border-top: 1px solid var(--line); }
+.side-foot-btn { display: flex; align-items: center; gap: 7px; background: none; border: 0; border-radius: 5px; padding: 5px 8px; color: var(--text-2); cursor: pointer; }
+.side-foot-btn:hover { color: var(--text); background: var(--panel-2); }
 .panel { flex: 1; overflow: auto; padding: 6px 0 12px; }
 .panel-tools { padding: 4px 10px 8px; }
 .panel-note { color: var(--text-3); padding: 10px 14px; line-height: 1.5; }

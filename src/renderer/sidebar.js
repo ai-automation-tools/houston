@@ -96,9 +96,19 @@ export class Sidebar {
     };
     this.current = 'files';
 
-    for (const btn of document.querySelectorAll('.side-tabs button')) {
-      btn.addEventListener('click', () => this.show(/** @type {HTMLElement} */ (btn).dataset.panel || 'files'));
+    for (const btn of this.tabButtons()) {
+      btn.addEventListener('click', () => this.show(btn.dataset.panel || 'files'));
     }
+    // One row of icon tabs; what doesn't fit goes behind », a native menu so it draws over the browser view.
+    /** @type {HTMLElement} */ (document.getElementById('side-more')).addEventListener('click', async () => {
+      const hidden = this.tabButtons().filter((b) => b.hidden);
+      const picked = await this.api.menu(hidden.map((b) => {
+        const count = b.querySelector('.tab-badge')?.textContent;
+        return { id: b.dataset.panel || 'files', label: `${b.dataset.panel === this.current ? '✓ ' : ''}${b.getAttribute('aria-label')}${count ? ` (${count})` : ''}` };
+      }));
+      if (picked) this.show(picked);
+    });
+    new ResizeObserver(() => this.fitTabs()).observe(/** @type {HTMLElement} */ (document.querySelector('.side-tabs')));
     let timer = 0;
     this.el.search.addEventListener('input', () => {
       clearTimeout(timer);
@@ -201,29 +211,33 @@ export class Sidebar {
     const btn = /** @type {HTMLElement | null} */ (document.querySelector('.side-tabs [data-panel="mcp"]'));
     if (!btn) return;
     const open = this.work.filter((w) => w.open);
-    btn.textContent = 'MCP';
-    btn.title = "Calls agents made to the app's MCP server, and the commands and tasks they asked to run";
-    if (!open.length) return;
-    const badge = document.createElement('span');
-    badge.className = 'tab-badge work';
-    badge.textContent = String(open.length);
-    btn.append(badge);
-    btn.title = open.slice(0, 10).map((w) => `${w.label}: ${w.text}`).join('\n');
+    btn.querySelector('.tab-badge')?.remove();
+    btn.title = "MCP: calls agents made to the app's MCP server, and the commands and tasks they asked to run";
+    if (open.length) {
+      const badge = document.createElement('span');
+      badge.className = 'tab-badge work';
+      badge.textContent = String(open.length);
+      btn.append(badge);
+      btn.title = `MCP:\n${open.slice(0, 10).map((w) => `${w.label}: ${w.text}`).join('\n')}`;
+    }
+    this.markMore();
   }
 
   /** @param {import('./shared/cronsole.js').CronTask[]} failed */
   showCronFailures(failed) {
     const btn = /** @type {HTMLElement | null} */ (document.querySelector('.side-tabs [data-panel="cron"]'));
     if (!btn) return;
-    btn.textContent = 'Cron';
-    btn.title = "Cronsole's scheduled tasks";
-    if (!failed.length) return;
-    const badge = document.createElement('span');
-    badge.className = 'tab-badge';
-    badge.textContent = String(failed.length);
-    btn.append(badge);
-    const names = failed.slice(0, 10).map((t) => t.name).join('\n');
-    btn.title = `${failed.length} Cronsole task${failed.length === 1 ? '' : 's'} failed the last run:\n${names}${failed.length > 10 ? '\n…' : ''}`;
+    btn.querySelector('.tab-badge')?.remove();
+    btn.title = "Cron: Cronsole's scheduled tasks";
+    if (failed.length) {
+      const badge = document.createElement('span');
+      badge.className = 'tab-badge';
+      badge.textContent = String(failed.length);
+      btn.append(badge);
+      const names = failed.slice(0, 10).map((t) => t.name).join('\n');
+      btn.title = `Cron: ${failed.length} Cronsole task${failed.length === 1 ? '' : 's'} failed the last run:\n${names}${failed.length > 10 ? '\n…' : ''}`;
+    }
+    this.markMore();
   }
 
   /** The Files tree from the last scan, from the workspace's folder down when it has one. */
@@ -1120,12 +1134,54 @@ export class Sidebar {
     }
   }
 
+  /** The sidebar's tab buttons, in order (not the » button). @returns {HTMLElement[]} */
+  tabButtons() {
+    return [...document.querySelectorAll('.side-tabs [role="tab"]')].map((b) => /** @type {HTMLElement} */ (b));
+  }
+
+  /** As many tabs as fit in one row, the rest behind », and the current one always in view. */
+  fitTabs() {
+    const nav = /** @type {HTMLElement} */ (document.querySelector('.side-tabs'));
+    const more = /** @type {HTMLElement} */ (document.getElementById('side-more'));
+    const btns = this.tabButtons();
+    for (const b of btns) b.hidden = false;
+    more.hidden = true;
+    if (nav.scrollWidth > nav.clientWidth) {
+      more.hidden = false;
+      const step = btns[1].offsetLeft - btns[0].offsetLeft;
+      const fit = Math.max(1, Math.floor((nav.clientWidth - more.offsetWidth - 16) / step));
+      const cur = btns.findIndex((b) => b.dataset.panel === this.current);
+      // A current tab past the fold takes the last visible slot.
+      btns.forEach((b, i) => { b.hidden = cur >= fit ? i >= fit - 1 && i !== cur : i >= fit; });
+    }
+    this.markMore();
+  }
+
+  /** » looks selected when the current tab is behind it, and carries a ! when a hidden tab has a badge. */
+  markMore() {
+    const more = document.getElementById('side-more');
+    if (!more) return;
+    const hidden = this.tabButtons().filter((b) => b.hidden);
+    more.classList.toggle('has-current', hidden.some((b) => b.dataset.panel === this.current));
+    more.querySelector('.tab-badge')?.remove();
+    const badged = hidden.filter((b) => b.querySelector('.tab-badge'));
+    if (badged.length) {
+      const badge = document.createElement('span');
+      badge.className = `tab-badge${badged.every((b) => b.querySelector('.tab-badge.work')) ? ' work' : ''}`;
+      badge.textContent = '!';
+      more.append(badge);
+    }
+    more.title = `More tabs: ${hidden.map((b) => b.getAttribute('aria-label')).join(', ')}`;
+  }
+
   /** @param {string} name */
   show(name) {
     this.current = name;
-    for (const btn of document.querySelectorAll('.side-tabs button')) {
-      btn.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (btn).dataset.panel === name));
+    for (const btn of this.tabButtons()) {
+      btn.setAttribute('aria-selected', String(btn.dataset.panel === name));
     }
+    if (this.tabButtons().find((b) => b.dataset.panel === name)?.hidden) this.fitTabs();
+    else this.markMore();
     if (this.el.search.value.trim()) return;
     this.el.files.hidden = name !== 'files';
     this.el.bookmarks.hidden = name !== 'bookmarks';
