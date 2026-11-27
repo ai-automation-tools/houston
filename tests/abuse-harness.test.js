@@ -67,6 +67,17 @@ test('AT-13 comes from the smoke summary: every read refused or opaque and the t
   }
 });
 
+test('AT-13 is judged on its own check when the smoke run stopped later, and the note says it stopped', () => {
+  const detail = { mcp: 'refused: x', mcpNoCors: 'opaque', controlFile: 'refused: x', settings: 'refused: x', transcript: 'refused: x', navigated: 'https://example.com/' };
+  const checks = [{ name: 'AT-13: a web page ...', result: 'pass', detail: JSON.stringify(detail) }, { name: 'a later check', result: 'fail' }];
+  const stopped = at13FromSmoke({ complete: false, checks });
+  assert.equal(stopped.pass, true);
+  assert.match(stopped.notes.at(-1), /stopped before its end, after 2 checks/);
+  assert.equal(at13FromSmoke({ complete: true, checks }).notes.length, 1);
+  // Stopped before AT-13 ran: still a fail.
+  assert.equal(at13FromSmoke({ complete: false, checks: checks.slice(1) }).pass, false);
+});
+
 test('removeDir deletes links, never what they point at', (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'houston-abuse-'));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));

@@ -205,7 +205,10 @@ export function at13FromSmoke(summary) {
   const attempts = tries.filter(([k]) => k in d).map(([k, name]) => ({ name, result: String(d[k]).startsWith('read') ? 'got through' : 'blocked', evidence: String(d[k]) }));
   if ('navigated' in d) attempts.push({ name: 'navigate the tab to acc://settings/', result: /^https:\/\/example\.com/.test(String(d.navigated)) ? 'blocked' : 'got through', evidence: `the tab shows ${d.navigated}` });
   const pass = check.result === 'pass' && attempts.length === tries.length + 1 && attempts.every((a) => a.result === 'blocked');
-  return { id, title, pass, attempts, notes: ['Run in the window by `npm run smoke`, on a throwaway profile.'] };
+  const notes = ['Run in the window by `npm run smoke`, on a throwaway profile.'];
+  // AT-13 is judged on its own check; a later check that stopped the run is the smoke run's failure, said here.
+  if (/** @type {{ complete?: unknown }} */ (summary).complete === false) notes.push(`The smoke run stopped before its end, after ${checks?.length ?? 0} checks; AT-13's check had already run.`);
+  return { id, title, pass, attempts, notes };
 }
 
 /** The first line of an error, short. @param {string} s */

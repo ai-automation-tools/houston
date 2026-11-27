@@ -35,6 +35,18 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
   /** @type {{ name: string, result: 'pass' | 'fail' | 'skip' | 'warn', detail?: string }[]} */
   const results = [];
   /**
+   * Write summary.json as it stands. After every check, with `complete: false`, so a run the
+   * launcher's time limit kills still leaves each check it reached (AT-13 reads its own); at the end, `complete: true`.
+   * @param {boolean} complete
+   */
+  const writeSummary = (complete) => {
+    const count = (/** @type {string} */ r) => results.filter((x) => x.result === r).length;
+    const summary = { live, complete, passed: count('pass'), failed: count('fail'), skipped: count('skip'), warnings: count('warn'), checks: results };
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2));
+    return summary;
+  };
+  /**
    * @param {string} name
    * @param {unknown} ok
    * @param {unknown} [detail]
@@ -44,6 +56,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     const result = ok ? 'pass' : warnOnly ? 'warn' : needsLive && !live ? 'skip' : 'fail';
     results.push({ name, result, ...(detail !== undefined && { detail: String(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 300) }) });
     console.log(`[smoke] ${result.toUpperCase()} ${name}${ok ? '' : ` (${String(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 200)})`}`);
+    writeSummary(false);
   };
   /** A screenshot, which can fail on a hidden or locked display; never fails the run. @param {string} file @param {Electron.WebContents} from */
   const shot = async (file, from) => {
@@ -54,10 +67,8 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     }
   };
   const finish = () => {
-    const failed = results.filter((r) => r.result === 'fail').length;
-    const summary = { live, passed: results.filter((r) => r.result === 'pass').length, failed, skipped: results.filter((r) => r.result === 'skip').length, warnings: results.filter((r) => r.result === 'warn').length, checks: results };
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2));
+    const summary = writeSummary(true);
+    const { failed } = summary;
     console.log(`[smoke] ${failed ? 'FAILED' : 'passed'}: ${summary.passed} passed, ${failed} failed, ${summary.skipped} skipped (live checks need --live), ${summary.warnings} warnings. ${path.join(dir, 'summary.json')}`);
     process.exitCode = failed ? 1 : 0;
     app.quit();
