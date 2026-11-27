@@ -33,7 +33,7 @@ const layout = info.layout;
 if (layout.startTerminal === false) layout.terminalOpen = false;
 // Settings › General › Sidebar tabs: icons, names or both (styles.css reads the attribute).
 const sideTabs = /** @type {HTMLElement} */ (document.querySelector('.side-tabs'));
-sideTabs.dataset.labels = layout.tabLabels ?? 'icons';
+sideTabs.dataset.labels = layout.tabLabels ?? 'both';
 const appEl = $('app');
 const mainEl = $('main');
 const content = $('content');

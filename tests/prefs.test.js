@@ -5,9 +5,9 @@ import { layoutPrefs, prefChange } from '../src/shared/prefs.js';
 const ctx = { shells: ['pwsh', 'cmd'], remoteHub: false };
 
 test('layoutPrefs falls back to the defaults for missing or hand-broken values', () => {
-  assert.deepEqual(layoutPrefs({}), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'icons' });
+  assert.deepEqual(layoutPrefs({}), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both' });
   assert.deepEqual(layoutPrefs({ theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both' }), { theme: 'dark', startTab: 'start', startTerminal: false, defaultShell: 'cmd', tabLabels: 'both' });
-  assert.deepEqual(layoutPrefs({ theme: 'neon', startTab: 'x', startTerminal: 'no', defaultShell: 3, tabLabels: 'big' }), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'icons' });
+  assert.deepEqual(layoutPrefs({ theme: 'neon', startTab: 'x', startTerminal: 'no', defaultShell: 3, tabLabels: 'big' }), { theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: '', tabLabels: 'both' });
 });
 
 test('prefChange sends each window choice to layout.json, checked', () => {

@@ -13,7 +13,7 @@
 ## 🪟 Window and tray
 
 - Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running. Click the tray icon to bring it back.
-- The sidebar's tabs are a row of icons: hover one for its name. When the sidebar is too narrow for all of them, the rest sit behind **»** at the end of the row, which lists them; the tab you're on always stays in view, and **»** shows a **!** when a tab behind it has a count. **Settings** is at the bottom left of the sidebar.
+- The sidebar's tabs are a row of buttons, each an icon and its name. **Settings › General › Sidebar tabs** shows icons only (hover one for its name) or names only instead. When the sidebar is too narrow for all of them, the rest sit behind **»** at the end of the row, which lists them; the tab you're on always stays in view, and **»** shows a **!** when a tab behind it has a count. **Settings** is at the bottom left of the sidebar.
 - Right-click the tray icon for **Show Houston**, **Close to tray** and **Quit Houston**. Untick **Close to tray** there, or under **File** (Alt shows the menu), and ✕ quits instead. **File → Quit** always quits.
 
 ## 🌐 Browser

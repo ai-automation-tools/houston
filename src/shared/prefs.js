@@ -25,7 +25,7 @@ export function layoutPrefs(d) {
     startTab: START_TABS.includes(d.startTab) ? d.startTab : 'restore',
     startTerminal: d.startTerminal !== false,
     defaultShell: typeof d.defaultShell === 'string' ? d.defaultShell : '',
-    tabLabels: TAB_LABELS.includes(d.tabLabels) ? d.tabLabels : 'icons',
+    tabLabels: TAB_LABELS.includes(d.tabLabels) ? d.tabLabels : 'both',
   };
 }
 
