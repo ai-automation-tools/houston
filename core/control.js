@@ -26,6 +26,7 @@ import { SkillError } from './skills.js';
 import { MemoryError } from './memory.js';
 import { discover } from './runtimes.js';
 import { coreHealth } from './health.js';
+import { exportLogs } from './logs.js';
 import { VaultError } from './vault.js';
 
 export const METHODS = [
@@ -34,6 +35,7 @@ export const METHODS = [
   'memory.list', 'memory.add', 'memory.review', 'memory.remove', 'runtime.list', 'identity.allowStanding',
   'identity.list', 'identity.get', 'identity.create', 'identity.activate', 'identity.suspend', 'identity.retire',
   'grant.add', 'grant.remove', 'backend.list', 'session.attach', 'approval.list', 'approval.decide', 'transcript.get',
+  'transcript.delete', 'audit.prune', 'log.export',
   'mcp.list', 'mcp.get', 'mcp.add', 'mcp.update', 'mcp.install', 'mcp.pin', 'mcp.disable', 'secret.list', 'secret.set', 'secret.delete',
   'standing.list', 'standing.get', 'standing.create', 'standing.update', 'standing.pause', 'standing.resume', 'standing.revoke', 'standing.run',
 ];
@@ -54,6 +56,12 @@ export class ControlError extends Error {
 const str = (v, name) => {
   if (typeof v !== 'string' || !v) throw new ControlError('bad_request', `${name} is a non-empty string`);
   return v;
+};
+/** @param {unknown} v @param {string} name @returns {string} the date and time as ISO */
+const when = (v, name) => {
+  const t = Date.parse(str(v, name));
+  if (Number.isNaN(t)) throw new ControlError('bad_request', `${name} is a date and time`);
+  return new Date(t).toISOString();
 };
 /** @param {unknown} v @param {string} name @returns {string[] | undefined} */
 const strings = (v, name) => {
@@ -173,7 +181,7 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     // limits: the defaults the window's Settings page shows (null when this Core has no inbox or transcripts).
     'core.status': () => ({
       pid: process.pid, startedAt, schema, containment: CONTAINMENT, sessions: runner.list().length,
-      limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, transcriptBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null },
+      limits: { approvalSeconds: approvals ? approvals.timeoutMs / 1000 : null, logBytes: transcripts?.capBytes ?? null, sessionTranscriptBytes: transcripts?.sessionCapBytes ?? null },
     }),
     // The health screen and diagnostics bundle: the audit chain checked now, folder sizes, core.log's newest lines redacted.
     'core.health': (p) => coreHealth({ dir, audit, redact: vault?.redact }, p),
@@ -198,6 +206,21 @@ export async function startControl({ dir, runner, registry, audit, schema = 0, a
     'transcript.get': (p) => {
       const r = transcripts?.read(str(p.id, 'id'));
       if (!r) throw new ControlError('not_found', 'no transcript has that session id');
+      return r;
+    },
+    // Log deletion and export (LOG-04): the operator's, from ctl. The window has no way to call these.
+    'transcript.delete': (p) => {
+      if ((p.id === undefined) === (p.before === undefined)) throw new ControlError('bad_request', 'give id or before, not both');
+      const deleted = need(transcripts, 'transcripts').delete(p.id === undefined ? { before: when(p.before, 'before'), by: OPERATOR } : { id: str(p.id, 'id'), by: OPERATOR });
+      return { deleted };
+    },
+    'audit.prune': (p) => ({ deleted: audit.prune({ before: when(p.before, 'before'), by: OPERATOR, reason: 'deleted by the operator' }) }),
+    'log.export': (p) => {
+      const r = exportLogs({ dir, audit, transcripts }, { since: p.since === undefined ? undefined : when(p.since, 'since') });
+      audit.append({
+        type: 'log.exported', action: 'log.export', identity: { subject: OPERATOR }, session_id: null, resource: { type: 'LogExport', id: path.basename(r.folder) },
+        decision: { result: 'allow', policy_version: 'none', reasons: [`${r.events} events, ${r.transcripts} transcripts`] },
+      });
       return r;
     },
     'approval.decide': (p) => {

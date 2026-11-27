@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** The folders under the data folder the health screen sizes, besides the total. */
-export const FOLDERS = ['audit', 'transcripts', 'backups'];
+export const FOLDERS = ['audit', 'transcripts', 'backups', 'exports'];
 /** At most this many core.log lines go out. */
 export const MAX_LOG_LINES = 200;
 

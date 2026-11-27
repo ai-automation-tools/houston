@@ -22,6 +22,7 @@ import { createSkills, skillsRoot } from './skills.js';
 import { createMemory } from './memory.js';
 import { createDelegation } from './delegate.js';
 import { createTranscripts } from './transcripts.js';
+import { retainLogs } from './logs.js';
 import { openVault } from './vault.js';
 
 export { dataDir };
@@ -126,11 +127,15 @@ export function agentsRoot(dir) {
 /**
  * Append one line to <data>/core.log. A Core started hidden at logon has no console, so this
  * is where its start line and a failure to start can be read.
- * ponytail: a line per start; cap it with the log limits (H7).
+ * Past 1 MB it becomes core.log.1 (one old copy kept), as the app's own logs do.
  * @param {string} dir @param {object} entry
  */
 function logLine(dir, entry) {
-  try { fs.appendFileSync(path.join(dir, 'core.log'), `${JSON.stringify({ time: new Date().toISOString(), ...entry })}\n`); } catch { /* nowhere better to say it */ }
+  try {
+    const file = path.join(dir, 'core.log');
+    if ((fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0) > 1024 * 1024) fs.renameSync(file, `${file}.1`);
+    fs.appendFileSync(file, `${JSON.stringify({ time: new Date().toISOString(), ...entry })}\n`);
+  } catch { /* nowhere better to say it */ }
 }
 
 if (import.meta.main) {
@@ -155,7 +160,13 @@ if (import.meta.main) {
     const runner = win32 ? createRunner({ db: core.db, audit: core.audit, ...where, approvals, gateway, skills }) : null;
     const standing = runner ? createStanding({ db: core.db, audit: core.audit, runner }) : undefined;
     const profiles = createProfiles({ db: core.db, audit: core.audit, root: win32 ? profilesRoot(core.dir) : undefined, quarantine: win32 ? quarantineRoot(sessionTemp()) : undefined });
-    const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact }) : undefined;
+    const transcripts = runner ? createTranscripts({ dir: path.join(core.dir, 'transcripts'), audit: core.audit, exact: vault?.redact, reserve: () => core.audit.bytes() }) : undefined;
+    // The log cap (LOG-04): at start and hourly, transcripts first, then the oldest audit segments.
+    const retain = () => {
+      try { for (const s of retainLogs({ audit: core.audit, transcripts })) logLine(core.dir, { event: 'audit.pruned', segment: s }); } catch (e) { logLine(core.dir, { event: 'retention.error', error: /** @type {Error} */ (e).message }); }
+    };
+    retain();
+    setInterval(retain, 60 * 60 * 1000).unref();
     // Sub-agents (H5): the gateway's harness.delegate tool, which needs the runner, made after it.
     // Its children are tapped like any session (their output read, their transcript kept) by the Control API, made below.
     /** @type {Awaited<ReturnType<typeof startControl>> | null} */

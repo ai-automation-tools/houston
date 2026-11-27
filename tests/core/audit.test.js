@@ -195,3 +195,94 @@ test('the Core writes core.start and core.stop, and reports a break it finds at 
   core.close();
   assert.deepEqual(readLines(seg(path.join(dir, 'audit'), 2)).map((l) => JSON.parse(l).type), ['audit.break', 'core.start', 'core.stop']);
 });
+
+test('a full segment rolls over: the next starts with audit.segment chained to the last event, and the log verifies whole', (t) => {
+  const dir = tmp(t);
+  const log = openAudit(dir, { segmentBytes: 1500 });
+  for (let i = 0; i < 12; i++) log.append(event(i));
+  log.close();
+  const files = fs.readdirSync(dir);
+  assert.ok(files.length >= 3, files.join());
+  const first = (n) => JSON.parse(readLines(seg(dir, n))[0]);
+  const lastOf = (n) => JSON.parse(readLines(seg(dir, n)).at(-1));
+  assert.equal(first(2).type, 'audit.segment');
+  assert.deepEqual([first(2).audit.seq, first(2).audit.prev_hash, first(2).pruned_through], [lastOf(1).audit.seq + 1, lastOf(1).audit.hash, 0]);
+  const v = verifyDir(dir);
+  assert.deepEqual([v.breaks, v.events], [[], 12 + files.length - 1]);
+  // Reopened, it carries on in the newest segment.
+  const again = openAudit(dir, { segmentBytes: 1500 });
+  assert.deepEqual(again.breaks, []);
+  again.close();
+});
+
+test('a later segment that does not follow on from the one before is a break', (t) => {
+  const dir = tmp(t);
+  const log = openAudit(dir, { segmentBytes: 1500 });
+  for (let i = 0; i < 8; i++) log.append(event(i));
+  log.close();
+  const lines = readLines(seg(dir, 2));
+  const e = JSON.parse(lines[0]);
+  e.audit.prev_hash = 'f'.repeat(64);
+  e.audit.hash = hashEvent(e);
+  writeLines(seg(dir, 2), [JSON.stringify(e), ...lines.slice(1)]);
+  assert.deepEqual(verifyDir(dir).breaks[0], { segment: 'audit-000002.jsonl', line: 1, reason: 'the segment does not follow on from the one before' });
+});
+
+test('prune deletes the oldest whole segments, never the open one, each a log.deleted event; what it deleted is not a break', (t) => {
+  const dir = tmp(t);
+  const log = openAudit(dir, { segmentBytes: 1500 });
+  for (let i = 0; i < 12; i++) log.append(event(i));
+  const before = log.bytes();
+  const gone = log.prune({ bytes: before - 1 });
+  assert.deepEqual(gone, ['audit-000001.jsonl']);
+  assert.ok(log.bytes() < before);
+  // Asked for nothing, it keeps the segment that was open (its own log.deleted events may fill newer ones).
+  const open = fs.readdirSync(dir).at(-1);
+  log.prune({ bytes: 0 });
+  assert.equal(fs.readdirSync(dir)[0], open);
+  const deleted = [...log.events()].filter((e) => e.type === 'log.deleted');
+  assert.ok(deleted.length >= 1);
+  assert.deepEqual([deleted.at(-1).identity.subject, deleted.at(-1).resource.type, deleted.at(-1).action], ['local:core', 'AuditSegment', 'audit.prune']);
+  assert.deepEqual(log.verify().breaks, []);
+  log.append(event(99));
+  log.close();
+  const again = openAudit(dir, { segmentBytes: 1500 });
+  assert.deepEqual([again.breaks, again.newBreaks], [[], []]);
+  again.close();
+});
+
+test('a segment missing above what prune deleted is still a break', (t) => {
+  const dir = tmp(t);
+  const log = openAudit(dir, { segmentBytes: 1500 });
+  for (let i = 0; i < 16; i++) log.append(event(i));
+  log.prune({ bytes: log.bytes() - 1 });
+  log.close();
+  const v = verifyDir(dir);
+  assert.equal(v.pruned, 1);
+  fs.rmSync(seg(dir, 3));
+  assert.deepEqual(verifyDir(dir).breaks, [{ segment: 'audit-000003.jsonl', line: 0, reason: 'the segment file is missing' }]);
+});
+
+test('prune before a time deletes only segments whose newest event is older, oldest first', (t) => {
+  const dir = tmp(t);
+  let clock = Date.parse('2026-01-01T00:00:00.000Z');
+  const log = openAudit(dir, { segmentBytes: 1500, now: () => new Date(clock += 60_000).toISOString() });
+  for (let i = 0; i < 12; i++) log.append(event(i));
+  const firstNewest = JSON.parse(readLines(seg(dir, 1)).at(-1)).time;
+  assert.deepEqual(log.prune({ before: firstNewest, by: 'local:operator' }), []);
+  assert.deepEqual(log.prune({ before: new Date(Date.parse(firstNewest) + 1).toISOString(), by: 'local:operator' }), ['audit-000001.jsonl']);
+  assert.equal([...log.events()].at(-1).identity.subject, 'local:operator');
+  log.close();
+});
+
+test('exportTo since leaves out older events', (t) => {
+  const dir = tmp(t);
+  let clock = Date.parse('2026-01-01T00:00:00.000Z');
+  const log = openAudit(dir, { now: () => new Date(clock += 1000).toISOString() });
+  for (let i = 0; i < 5; i++) log.append(event(i));
+  const dest = path.join(tmp(t), 'since.jsonl');
+  const r = log.exportTo(dest, { since: '2026-01-01T00:00:03.000Z' });
+  log.close();
+  assert.deepEqual([r.events, r.pruned], [3, 0]);
+  assert.deepEqual(readLines(dest).map((l) => JSON.parse(l).audit.seq), [2, 3, 4]);
+});

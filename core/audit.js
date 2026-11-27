@@ -1,9 +1,14 @@
 // The audit log: append-only JSON lines, each one hashed over the line before it.
 // Event shape: core/schemas/audit-event.schema.json. Imports nothing from runner or gateway.
 //
-// Files are segments, audit-000001.jsonl and up. A segment is checked on its own: the first
-// one starts at seq 0 with an all-zero prev_hash, and every later one starts with an
-// `audit.break` event, because a new segment is only ever opened after a break.
+// Files are segments, audit-000001.jsonl and up. The first one starts at seq 0 with an all-zero
+// prev_hash. A later one starts with an `audit.break` event when a break opened it, or with an
+// `audit.segment` event when the one before grew past its size; that event chains on to the last
+// event before it, which is checked whenever that segment is still there.
+//
+// Retention (LOG-04) deletes whole segments, oldest first, never the open one, each one a
+// `log.deleted` event. Every such event and every `audit.segment` carries `pruned_through`, the
+// highest segment number deleted on purpose so far, so missing segments up to it aren't breaks.
 //
 // What the chain shows: a line that was edited, removed, added or reordered, and a missing
 // segment. What it cannot show: lines cut off the end of the newest segment. Nothing kept on
@@ -19,6 +24,8 @@ export const GENESIS = '0'.repeat(64);
 export const CORE_SUBJECT = 'local:core';
 
 const SEGMENT = /^audit-(\d{6})\.jsonl$/;
+/** A segment past this many bytes is closed and the next one opened. */
+export const SEGMENT_BYTES = 64 * 1024 ** 2;
 const DECISIONS = ['allow', 'ask', 'deny'];
 /** @param {number} n */
 const segmentName = (n) => `audit-${String(n).padStart(6, '0')}.jsonl`;
@@ -54,8 +61,9 @@ export function hashEvent(event) {
  * @param {string} text
  * @param {Link | null} last
  * @param {boolean} first whether this is the first segment
+ * @param {Link | null} prev the last event of the segment before, when it's there and intact
  */
-function checkLine(text, last, first) {
+function checkLine(text, last, first, prev) {
   let e;
   try { e = JSON.parse(text); } catch { throw new Error('the line is not JSON'); }
   const a = e?.audit;
@@ -65,8 +73,10 @@ function checkLine(text, last, first) {
     if (a.prev_hash !== last.hash) throw new Error('prev_hash does not match the line before');
   } else if (first) {
     if (a.seq !== 0 || a.prev_hash !== GENESIS) throw new Error('the log does not start at its first event');
+  } else if (e.type === 'audit.segment') {
+    if (prev && (a.seq !== prev.seq + 1 || a.prev_hash !== prev.hash)) throw new Error('the segment does not follow on from the one before');
   } else if (e.type !== 'audit.break') {
-    throw new Error('the segment does not start with its audit.break event');
+    throw new Error('the segment does not start with its audit.break or audit.segment event');
   }
   if (hashEvent(e) !== a.hash) throw new Error('the hash does not match the content');
   return e;
@@ -74,12 +84,13 @@ function checkLine(text, last, first) {
 
 /**
  * Every event in a segment, in order, stopping at the first line that fails.
- * ponytail: reads the file whole; stream it when segments rotate by size (LOG-04's cap).
+ * Reads the file whole: a segment rolls over at SEGMENT_BYTES.
  * @param {string} file
  * @param {boolean} first
+ * @param {Link | null} [prev] see checkLine
  * @returns {Generator<any, { last: Link | null, bad: { line: number, reason: string } | null }>}
  */
-function* walk(file, first) {
+function* walk(file, first, prev = null) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   if (lines.at(-1) === '') lines.pop();
   if (!lines.length && !first) return { last: null, bad: { line: 0, reason: 'the segment is empty' } };
@@ -87,7 +98,7 @@ function* walk(file, first) {
   let last = null;
   for (let i = 0; i < lines.length; i++) {
     let e;
-    try { e = checkLine(lines[i], last, first); } catch (err) {
+    try { e = checkLine(lines[i], last, first, prev); } catch (err) {
       return { last, bad: { line: i + 1, reason: /** @type {Error} */ (err).message } };
     }
     last = { seq: e.audit.seq, hash: e.audit.hash };
@@ -104,32 +115,49 @@ function segments(dir) {
 /**
  * Check every segment in `dir`.
  * @param {string} dir
- * @returns {{ breaks: Break[], recorded: Set<string>, head: Link | null, tail: { n: number, intact: boolean } | null, events: number }}
- *   `recorded` holds the breaks an `audit.break` event already names; `head` is the newest good event; `tail` the newest segment.
+ * @returns {{ breaks: Break[], recorded: Set<string>, head: Link | null, tail: { n: number, intact: boolean } | null, events: number, pruned: number }}
+ *   `recorded` holds the breaks an `audit.break` event already names; `head` is the newest good event; `tail` the newest
+ *   segment; `pruned` the highest segment number retention deleted (0 for none).
  */
 export function verifyDir(dir) {
   const have = segments(dir);
-  /** @type {Break[]} */
-  const breaks = [];
+  /** @type {(Break & { n: number })[]} */
+  const found = [];
   const recorded = new Set();
   let head = null;
   let tail = null;
   let events = 0;
-  for (let n = 1; n <= (have.at(-1) ?? 0); n++) {
+  let pruned = 0;
+  /** @type {Link | null} */
+  let prev = null;
+  for (const n of have) {
     const segment = segmentName(n);
-    if (!have.includes(n)) { breaks.push({ segment, line: 0, reason: 'the segment file is missing' }); continue; }
-    const it = walk(path.join(dir, segment), n === 1);
+    const it = walk(path.join(dir, segment), n === 1, have.includes(n - 1) ? prev : null);
     let step = it.next();
     for (; !step.done; step = it.next()) {
       events++;
-      if (step.value.type === 'audit.break' && step.value.break) recorded.add(breakKey(step.value.break));
+      const e = step.value;
+      if (e.type === 'audit.break' && e.break) recorded.add(breakKey(e.break));
+      if (Number.isInteger(e.pruned_through)) pruned = Math.max(pruned, e.pruned_through);
     }
     const { last, bad } = step.value;
-    if (bad) breaks.push({ segment, ...bad });
+    if (bad) found.push({ n, segment, ...bad });
     if (last && (!head || last.seq > head.seq)) head = last;
+    prev = bad ? null : last;
     tail = { n, intact: !bad };
   }
-  return { breaks, recorded, head, tail, events };
+  // A missing segment is a break unless retention says it deleted it.
+  for (let n = pruned + 1; n < (have.at(-1) ?? 0); n++) if (!have.includes(n)) found.push({ n, segment: segmentName(n), line: 0, reason: 'the segment file is missing' });
+  const breaks = found.sort((a, b) => a.n - b.n || a.line - b.line).map(({ n: _, ...b }) => b);
+  return { breaks, recorded, head, tail, events, pruned };
+}
+
+/** The time of a segment's newest event, or '' when it can't be read. @param {string} file */
+function newestTime(file) {
+  try {
+    const text = fs.readFileSync(file, 'utf8').trimEnd();
+    return String(JSON.parse(text.slice(text.lastIndexOf('\n') + 1)).time ?? '');
+  } catch { return ''; }
 }
 
 /**
@@ -156,24 +184,28 @@ function shaped(e) {
  * Only one process may have a log open. The Core's database lock sees to that.
  *
  * @param {string} dir
- * @param {{ now?: () => string }} [opts]
+ * @param {{ now?: () => string, segmentBytes?: number }} [opts]
  */
-export function openAudit(dir, { now = () => new Date().toISOString() } = {}) {
+export function openAudit(dir, { now = () => new Date().toISOString(), segmentBytes = SEGMENT_BYTES } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const found = verifyDir(dir);
   const fresh = found.breaks.filter((b) => !found.recorded.has(breakKey(b)));
   const startNew = found.tail ? !found.tail.intact : false;
-  const n = found.tail ? found.tail.n + (startNew ? 1 : 0) : 1;
+  let n = found.tail ? found.tail.n + (startNew ? 1 : 0) : 1;
   let last = found.head;
-  const fd = fs.openSync(path.join(dir, segmentName(n)), 'a');
+  let pruned = found.pruned;
+  let fd = fs.openSync(path.join(dir, segmentName(n)), 'a');
+  let size = fs.fstatSync(fd).size;
 
   /** @param {any} event */
-  function write(event) {
+  function put(event) {
     const full = { ...event, schema: SCHEMA, event_id: crypto.randomUUID(), time: now(), audit: { seq: last ? last.seq + 1 : 0, prev_hash: last ? last.hash : GENESIS } };
     full.audit.hash = hashEvent(full);
+    const line = JSON.stringify(full) + '\n';
     // ponytail: one fsync per event; batch them if the gateway's call rate ever makes this the bottleneck.
-    fs.writeSync(fd, JSON.stringify(full) + '\n');
+    fs.writeSync(fd, line);
     fs.fsyncSync(fd);
+    size += Buffer.byteLength(line);
     last = { seq: full.audit.seq, hash: full.audit.hash };
     return full;
   }
@@ -183,10 +215,25 @@ export function openAudit(dir, { now = () => new Date().toISOString() } = {}) {
    * @param {string} type
    * @param {object} [extra]
    */
-  const system = (type, extra) => write({
+  const systemEvent = (type, extra) => ({
     type, identity: { subject: CORE_SUBJECT }, session_id: null, action: type,
     resource: { type: 'Core', id: 'core' }, decision: { result: 'allow', policy_version: 'none' }, ...extra,
   });
+
+  /** Append, first moving to a new segment when this one is full. @param {any} event */
+  function write(event) {
+    if (size >= segmentBytes) {
+      fs.closeSync(fd);
+      n++;
+      fd = fs.openSync(path.join(dir, segmentName(n)), 'a');
+      size = 0;
+      put(systemEvent('audit.segment', { resource: { type: 'AuditSegment', id: segmentName(n) }, pruned_through: pruned }));
+    }
+    return put(event);
+  }
+  /** @param {string} type @param {object} [extra] */
+  const system = (type, extra) => write(systemEvent(type, extra));
+  const bytes = () => segments(dir).reduce((sum, s) => sum + (fs.statSync(path.join(dir, segmentName(s)), { throwIfNoEntry: false })?.size ?? 0), 0);
 
   // A new segment must open with the break that caused it, so that one goes first.
   if (startNew) fresh.sort((a, b) => Number(b.segment === segmentName(n - 1)) - Number(a.segment === segmentName(n - 1)));
@@ -206,20 +253,57 @@ export function openAudit(dir, { now = () => new Date().toISOString() } = {}) {
     system,
     /** Check the files again, as they are on disk now. */
     verify: () => { const { breaks, events, head } = verifyDir(dir); return { breaks, events, head }; },
+    /** Bytes in every segment. */
+    bytes,
+    /**
+     * Delete whole segments, oldest first, never the open one: while the log is over `bytes`, and
+     * only those whose newest event is older than `before`. The file goes first, then a
+     * `log.deleted` event naming it, so a crash in between shows as a break, not as nothing.
+     * @param {{ bytes?: number, before?: string, by?: string, reason?: string }} p by: who asked (local:core for the cap)
+     * @returns {string[]} the segments deleted
+     */
+    prune({ bytes: keep, before, by = CORE_SUBJECT, reason = 'retention' } = {}) {
+      /** @type {string[]} */
+      const gone = [];
+      let total = bytes();
+      for (const s of segments(dir).filter((x) => x < n)) {
+        const file = path.join(dir, segmentName(s));
+        if (keep !== undefined && total <= keep) break;
+        if (before !== undefined) { const t = newestTime(file); if (!t || t >= before) break; }
+        const size = fs.statSync(file).size;
+        fs.rmSync(file);
+        total -= size;
+        pruned = Math.max(pruned, s);
+        gone.push(segmentName(s));
+        write({
+          type: 'log.deleted', action: 'audit.prune', identity: { subject: by }, session_id: null, resource: { type: 'AuditSegment', id: segmentName(s) },
+          decision: { result: 'allow', policy_version: 'none', reasons: [reason] }, pruned_through: pruned,
+        });
+      }
+      return gone;
+    },
     /** Every good event, oldest first. A broken segment gives its events up to the break. */
     *events() {
       for (const s of segments(dir)) yield* walk(path.join(dir, segmentName(s)), s === 1);
     },
     /**
-     * Write every good event to one JSON-lines file.
+     * Write every good event to one JSON-lines file, from `since` on when it's given.
      * @param {string} dest
-     * @returns {{ events: number, breaks: Break[] }} the breaks tell the reader what the export is missing
+     * @param {{ since?: string }} [opts] an ISO time
+     * @returns {{ events: number, breaks: Break[], pruned: number }} the breaks and pruned segments tell the reader what the export is missing
      */
-    exportTo(dest) {
+    exportTo(dest, { since } = {}) {
       const out = fs.openSync(dest, 'w');
       let count = 0;
-      try { for (const e of this.events()) { fs.writeSync(out, JSON.stringify(e) + '\n'); count++; } } finally { fs.closeSync(out); }
-      return { events: count, breaks: verifyDir(dir).breaks };
+      try {
+        for (const e of this.events()) {
+          if (since && !(e.time >= since)) continue;
+          fs.writeSync(out, JSON.stringify(e) + '\n');
+          count++;
+        }
+      } finally { fs.closeSync(out); }
+      const { breaks, pruned } = verifyDir(dir);
+      return { events: count, breaks, pruned };
     },
     close: () => fs.closeSync(fd),
   };

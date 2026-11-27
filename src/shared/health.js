@@ -46,7 +46,7 @@ export function coreHealthRows(h) {
   const storage = {
     id: 'storage', name: 'Core storage', state: /** @type {'ok' | 'warn'} */ (over ? 'warn' : 'ok'),
     detail: `${bytes(s.total)} in all${parts ? ` (${parts})` : ''}; target ${bytes(LOG_TARGET_BYTES)}`,
-    ...(over ? { fix: 'Transcripts rotate on their own. Old database copies in the data folder\'s backups folder can be deleted by hand.' } : {}),
+    ...(over ? { fix: 'Transcripts and the audit log stay under 5 GB on their own, oldest transcripts first. Old database copies (the data folder\'s backups folder) and log exports (its exports folder) can be deleted by hand.' } : {}),
   };
   return [audit, storage];
 }
