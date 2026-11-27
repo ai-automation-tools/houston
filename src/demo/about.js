@@ -1,7 +1,7 @@
 // The demo's welcome page: what Houston is now (an agent harness with a workbench around it),
 // shown in the first tab. Static HTML, no scripts, no network: the badges are CSS, not
-// shields.io images, so opening the demo calls nothing. The source is private, so links go
-// to the homepage. Keep it in step with the README's features table when a feature lands.
+// shields.io images, so opening the demo calls nothing. Links go to the homepage (a source link
+// can join them when the demo is published). Keep it in step with the README's features table when a feature lands.
 
 import { docUrl } from '../shared/docs.js';
 import { HOME_URL } from './page.js';
