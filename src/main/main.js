@@ -70,6 +70,13 @@ protocol.registerSchemesAsPrivileged([
 // single-instance lock, which is per profile, so a smoke run works beside the real app.
 if (process.env.ACC_USER_DATA) app.setPath('userData', process.env.ACC_USER_DATA);
 
+// A smoke run keeps painting and running timers while its window is covered or minimized,
+// so its checks don't depend on the desktop being left alone. The real app keeps Chromium's
+// throttling, which saves power when it's in the background.
+if (process.env.ACC_SMOKE_DIR) {
+  for (const s of ['disable-renderer-backgrounding', 'disable-backgrounding-occluded-windows', 'disable-background-timer-throttling']) app.commandLine.appendSwitch(s);
+}
+
 // The active profile's browser storage (H5): another profile's cookies and sign-ins are never loaded.
 // After the userData folder is final: profile.json is read from it.
 const BROWSE_PARTITION = browsePartition(activeProfile());
