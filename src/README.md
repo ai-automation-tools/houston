@@ -64,13 +64,13 @@ Plain JavaScript with JSDoc types, no bundler. Electron loads `main/main.js` dir
 
 The shell UI from `renderer/` running in an ordinary browser. `npm run demo` (`scripts/demo.js`) copies `renderer/`, `shared/`, this folder and xterm into `_site/`, and `.github/workflows/pages.yml` deploys that to [houston-demo.ai-automation-tools.dev](https://houston-demo.ai-automation-tools.dev/) on every push to `main`. The app never loads anything here.
 
-> The public demo has been offline since 2026-11-12, while the app is rebuilt as an agent harness: `pages.yml` publishes a notice from `scripts/demo-offline/` instead. `npm run demo` still builds it locally.
+> Live at <https://houston-demo.ai-automation-tools.dev/> (back since 2026-11-27, after being offline from 2026-11-12 while the harness was built). Its page carries `<meta name="build">` with the deployed commit.
 
 | File | What it does |
 |:---|:---|
 | [**acc.js**](demo/acc.js) | `demoApi()`: every call `preload/shell.cjs` exposes, answered from made-up files, bookmarks, Cronsole tasks and MCP calls. Tabs keep a history but have no browser behind them; terminals echo what you type and answer `npm test`, `git status`, `ls` and `help` with canned output; one `terminal_run` ask shows the confirm bar after six seconds; the chat streams one canned reply. No network, no storage. |
 | [**install.js**](demo/install.js) | Loaded before `app.js`: puts `demoApi()` on `window.acc`, draws the stand-in page where a tab would be, shows toasts, and turns Ctrl+K into the palette shortcut the app menu gives the real app. |
-| [**about.js**](demo/about.js) | The welcome page the demo opens on: what the harness is and what to try. Static HTML, no scripts; links go to the homepage, since the source is private. |
+| [**about.js**](demo/about.js) | The welcome page the demo opens on: what the harness is and what to try. Static HTML, no scripts; links go to the homepage. |
 | [**harness.js**](demo/harness.js) | The demo's stand-in for the Core: made-up identities, grants and sessions, contained terminal tabs with a few answers (an ask host waits on a card, an ungranted one is refused, `type .env` is redacted in the transcript), the approval inbox, the audit log behind the Logs tab, transcripts, the Settings page, the Integrations tab's made-up servers and Stop All, all through the window's own rules in `shared/`. |
 | [**page.js**](demo/page.js) | `demoHtml()`: the app's `index.html` with the org source bar at the top, the demo stylesheet and `install.js` added; fails if `index.html` moved an anchor it relies on. |
 | [**demo.css**](demo/demo.css) | The fixed source bar (the shell is shortened by its height), the stand-in page and toasts. |

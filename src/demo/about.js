@@ -1,10 +1,10 @@
 // The demo's welcome page: what Houston is now (an agent harness with a workbench around it),
 // shown in the first tab. Static HTML, no scripts, no network: the badges are CSS, not
-// shields.io images, so opening the demo calls nothing. The source is private, so links go
-// to the homepage. Keep it in step with the README's features table when a feature lands.
+// shields.io images, so opening the demo calls nothing. Links go to the homepage and the source.
+// Keep it in step with the README's features table when a feature lands.
 
 import { docUrl } from '../shared/docs.js';
-import { HOME_URL } from './page.js';
+import { HOME_URL, REPO_URL } from './page.js';
 
 export const WELCOME_ID = 'ai-command-center/README.md';
 export const WELCOME_URL = docUrl(WELCOME_ID);
@@ -22,7 +22,7 @@ export const ABOUT_HTML = `<article class="demo-doc">
     <img class="hero-logo" src="demo/icon.svg" alt="Houston, an agent harness: agents run as named identities in OS containers, and the operator approves, watches and stops them from one window" width="88" height="88">
     <h1>Houston</h1>
     <p class="tagline">Run coding agents as named identities in OS containers,<br>and approve, watch and stop them from the window you already work in.</p>
-    <p class="explore"><a href="${HOME_URL}" ${ext}><strong>About Houston »</strong></a></p>
+    <p class="explore"><a href="${HOME_URL}" ${ext}><strong>About Houston »</strong></a> · <a href="${REPO_URL}" ${ext}><strong>Source on GitHub »</strong></a></p>
     <p class="badges">
       ${badge('demo', 'in your browser', '#2ea44f')}
       ${badge('status', 'harness build', '#8B5CF6')}
@@ -75,6 +75,6 @@ export const ABOUT_HTML = `<article class="demo-doc">
   <hr>
 
   <p class="footer">
-    <a href="${HOME_URL}" ${ext}>Houston</a> · Built with <a href="https://www.electronjs.org" ${ext}>Electron</a> · <a href="https://xtermjs.org" ${ext}>xterm.js</a> · <a href="https://github.com/ai-automation-tools/project-hub" ${ext}>Project Hub</a> · GPL-3.0-or-later
+    <a href="${HOME_URL}" ${ext}>Houston</a> · <a href="${REPO_URL}" ${ext}>Source</a> · Built with <a href="https://www.electronjs.org" ${ext}>Electron</a> · <a href="https://xtermjs.org" ${ext}>xterm.js</a> · <a href="https://github.com/ai-automation-tools/project-hub" ${ext}>Project Hub</a> · GPL-3.0-or-later
   </p>
 </article>`;
