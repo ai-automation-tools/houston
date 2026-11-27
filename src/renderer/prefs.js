@@ -1,8 +1,10 @@
 // The Settings pane: the app's preferences you can change (each saved by main after
-// src/shared/prefs.js checks it), and the agent and security controls, read-only, with
-// where each is set. Everything is built with textContent; nothing from a file becomes HTML.
+// src/shared/prefs.js checks it), Project Hub's folders and scan depth (saved by Hub, after
+// src/shared/hubsettings.js checks them), and the agent and security controls, read-only,
+// with where each is set. Everything is built with textContent; nothing from a file becomes HTML.
 
 import { SCOPES, SETTINGS_URL } from './shared/scopes.js';
+import { DEPTH_MAX, DEPTH_MIN } from './shared/hubsettings.js';
 
 /** @typedef {{ label: string, url: string }} Row */
 
@@ -25,9 +27,9 @@ function el(tag, attrs = {}, kids = []) {
 }
 
 /**
- * @param {{ api: any, onOpen: () => void, onClose: () => void, openUrl: (url: string) => void, onSaved?: (prefs: any) => void }} deps
+ * @param {{ api: any, onOpen: () => void, onClose: () => void, openUrl: (url: string) => void, onSaved?: (prefs: any) => void, resetLayout?: () => void }} deps
  */
-export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
+export function createPrefs({ api, onOpen, onClose, openUrl, onSaved, resetLayout }) {
   const pane = /** @type {HTMLElement} */ (document.getElementById('prefs'));
   const main = /** @type {HTMLElement} */ (document.getElementById('prefs-main'));
   const status = /** @type {HTMLElement} */ (document.getElementById('prefs-status'));
@@ -131,6 +133,124 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
     return el('div', { class: 'pref' }, [el('span', { class: 'pref-label', text: label }), body, el('div', { class: 'pref-row' }, [add, saveBtn]), err, el('p', { class: 'pref-hint', text: hint })]);
   }
 
+  /**
+   * A button that runs `act` and says how it went.
+   * @param {string} label @param {string} hint @param {() => Promise<string>} act what to say when it worked
+   */
+  function action(label, hint, act) {
+    const btn = /** @type {HTMLButtonElement} */ (el('button', { type: 'button', text: label }));
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try { say(await act()); } catch (err) { say(message(err), true); } finally { btn.disabled = false; }
+    });
+    return el('div', { class: 'pref' }, [btn, el('p', { class: 'pref-hint', text: hint })]);
+  }
+
+  /**
+   * Project Hub's own settings, read from Hub each time the pane opens: the folders it shows
+   * next to Projects, and how many folder levels it scans. Hub saves both in hub.config.json.
+   * @param {HTMLElement} box
+   */
+  async function hubSettings(box) {
+    box.replaceChildren(el('p', { class: 'pref-hint', text: 'Asking Project Hub…' }));
+    /** @type {{ folders: { name: string, dir: string }[], defaultDepth: number, workspaces: { name: string, maxDepth: number | null, effectiveDepth: number }[] }} */
+    let h;
+    try {
+      h = await api.prefs.hub();
+    } catch (err) {
+      const retry = el('button', { type: 'button', text: 'Retry' });
+      retry.addEventListener('click', () => hubSettings(box));
+      box.replaceChildren(el('p', { class: 'pref-error', text: message(err) }), el('div', { class: 'pref' }, [retry]));
+      return;
+    }
+    const reload = () => hubSettings(box);
+
+    // Folders: each with Remove, and a row to add one.
+    const folders = el('div', { class: 'pref-list' }, h.folders.map((f) => {
+      const del = el('button', { type: 'button', class: 'icon-btn', title: `Remove ${f.name} from Project Hub (the folder stays on disk)`, 'aria-label': `Remove ${f.name}`, text: '✕' });
+      del.addEventListener('click', async () => {
+        try {
+          await api.prefs.hubFolder({ op: 'remove', name: f.name });
+          say(`Removed ${f.name}; Project Hub is rescanning`);
+          reload();
+        } catch (err) {
+          say(message(err), true);
+        }
+      });
+      return el('div', { class: 'pref-folder' }, [el('b', { text: f.name }), el('span', { class: 'pref-path', text: f.dir, title: f.dir }), del]);
+    }));
+    const dir = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'D:\\Work\\Notes', 'aria-label': 'Folder path', spellcheck: 'false', autocomplete: 'off' }));
+    const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'Name (optional)', 'aria-label': 'Name in Project Hub', spellcheck: 'false', autocomplete: 'off', class: 'pref-short' }));
+    const add = /** @type {HTMLButtonElement} */ (el('button', { type: 'button', class: 'primary', text: 'Add folder' }));
+    const err = el('p', { class: 'pref-error', role: 'alert' });
+    /** @param {boolean} force */
+    const go = async (force) => {
+      err.replaceChildren();
+      add.disabled = true;
+      try {
+        const r = await api.prefs.hubFolder({ op: 'add', dir: dir.value, name: name.value, force });
+        if (r?.ask) {
+          const anyway = el('button', { type: 'button', text: 'Add anyway' });
+          anyway.addEventListener('click', () => go(true));
+          err.replaceChildren(el('span', { text: `${r.ask} ` }), anyway);
+          return;
+        }
+        say('Added; Project Hub is rescanning, and the Files tree updates when it is done');
+        reload();
+      } catch (e) {
+        err.textContent = message(e);
+      } finally {
+        add.disabled = false;
+      }
+    };
+    add.addEventListener('click', () => go(false));
+    for (const input of [dir, name]) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(false); });
+
+    // Scan depth: the default, and each workspace's own or the default.
+    /** @param {number} value @param {string} label */
+    const depthInput = (value, label) => /** @type {HTMLInputElement} */ (el('input', { type: 'number', min: String(DEPTH_MIN), max: String(DEPTH_MAX), step: '1', value: String(value), 'aria-label': label, class: 'pref-depth' }));
+    const depthErr = el('p', { class: 'pref-error', role: 'alert' });
+    /** @param {{ maxDepth: number | null, workspace?: string }} change */
+    const setDepth = async (change) => {
+      depthErr.replaceChildren();
+      try {
+        await api.prefs.hubDepth(change);
+        say('Saved; Project Hub is rescanning');
+        reload();
+      } catch (e) {
+        depthErr.textContent = message(e);
+      }
+    };
+    const def = depthInput(h.defaultDepth, 'Default scan depth');
+    const defSave = el('button', { type: 'button', text: 'Save' });
+    defSave.addEventListener('click', () => setDepth({ maxDepth: Number(def.value) }));
+    const rows = h.workspaces.map((w) => {
+      const own = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: `hub-depth-${w.name}` }));
+      own.checked = w.maxDepth !== null;
+      const n = depthInput(w.effectiveDepth, `${w.name} scan depth`);
+      const save = /** @type {HTMLButtonElement} */ (el('button', { type: 'button', text: 'Save' }));
+      n.disabled = save.disabled = !own.checked;
+      own.addEventListener('change', () => {
+        n.disabled = save.disabled = !own.checked;
+        if (!own.checked && w.maxDepth !== null) setDepth({ maxDepth: null, workspace: w.name });
+      });
+      save.addEventListener('click', () => setDepth({ maxDepth: Number(n.value), workspace: w.name }));
+      return el('div', { class: 'pref-row' }, [el('label', { class: 'pref-check pref-ws', for: own.id }, [own, el('span', { text: w.name })]), n, save]);
+    });
+
+    box.replaceChildren(
+      el('div', { class: 'pref' }, [
+        el('span', { class: 'pref-label', text: 'Folders' }), folders, el('div', { class: 'pref-row' }, [dir, name, add]), err,
+        el('p', { class: 'pref-hint', text: "Shown in the Files tree next to your projects. Adding or removing one changes Project Hub's hub.config.json and starts a rescan; nothing on disk is moved or deleted. A folder on this machine only: never a network path or a whole drive." }),
+      ]),
+      el('div', { class: 'pref' }, [
+        el('span', { class: 'pref-label', text: 'Scan depth' }), el('div', { class: 'pref-row' }, [el('span', { class: 'pref-ws', text: 'Every workspace' }), def, defSave]), ...rows, depthErr,
+        el('p', { class: 'pref-hint', text: `How many folder levels Project Hub indexes, ${DEPTH_MIN} to ${DEPTH_MAX} (10 unless changed). Deeper finds more files and makes scans longer. Tick a workspace to give it a depth of its own.` }),
+      ]),
+      el('p', { class: 'pref-hint', text: "Project Hub's other settings (its colour scheme, folder icons, browser-favorites sync and backup) belong to its own page: open Project Hub in a tab and press ↗ to see it whole in your browser." }),
+    );
+  }
+
   /** The controls the Core and other places own, by scope, read-only. */
   function readOnly() {
     /** @type {Record<string, { label: string, scope: string, value: string, where: string }[]>} */
@@ -150,6 +270,7 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
       ? `Set by ACC_HUB_URL in .env (${p.hubNow}), which wins over this field.`
       : `Empty uses ${p.hubDefault}. Must be on this machine unless ACC_HUB_REMOTE=1 is set. Takes effect when Houston restarts.`;
     const restart = el('button', { type: 'button', class: 'primary', text: 'Restart Houston now', hidden: '' });
+    const hubBox = el('div', { class: 'pref-hub' });
     restart.addEventListener('click', () => api.prefs.restart());
     main.replaceChildren(
       section('general', 'General', [
@@ -160,6 +281,11 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
       section('browser', 'Browser', [
         toggle('adBlock', 'Block ads and trackers', "Ghostery's filter lists on every tab; applies at once."),
         list('quickLinks', 'Quick links', 'https://…', 'The buttons on the empty tab page; up to 12. With none, it shows Project Hub and the Chrome Web Store.'),
+      ]),
+      section('files', 'Files', [
+        toggle('dotsFirst', 'Dot-folders first', 'On: .claude, .github and dot-files sort to the top of their folder, as in Windows Explorer. Off: they come after the other folders and files.'),
+        action('Clear Recent', 'Empties the Recent tab. Your files, bookmarks and history are left alone.', async () => { await api.recent.clear(); return 'Recent cleared'; }),
+        ...(resetLayout ? [action('Reset panel sizes', 'The sidebar, chat pane and terminal panel go back to their first sizes.', async () => { resetLayout(); return 'Panel sizes reset'; })] : []),
       ]),
       section('startup', 'Startup', [
         choice('startTab', 'Start with', [['restore', "The last session's tabs"], ['start', 'The start page']], "The start page means the last session's tabs aren't reopened. Another workspace's tabs still come back when you switch to it."),
@@ -172,8 +298,10 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved }) {
         list('newsSources', 'News sources', 'https://…/feed.xml or D:\\notes\\digest.md', 'RSS, Atom or Markdown over http(s), or an absolute path to a local .md file; up to 12.'),
         text('feedIndex', 'Feed index file', 'D:\\feeds\\index.json', 'The index.json a scheduled job writes, for the Feed tab and the start page. Empty turns the Feed off.'),
       ]),
+      section('hub', 'Project Hub', [hubBox]),
       section('security', 'Agents and security', readOnly()),
     );
+    hubSettings(hubBox);
   }
 
   /** @param {KeyboardEvent} e */

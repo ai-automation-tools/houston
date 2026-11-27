@@ -7,6 +7,7 @@ import { store } from './store.js';
 import { hubAuth } from '../shared/settings.js';
 import { feedSse } from '../shared/events.js';
 import { toggleFavorite } from '../shared/favorites.js';
+import { hubFolderChange, scanDepthChange } from '../shared/hubsettings.js';
 
 // settings.json's hubUrl, or ACC_HUB_URL (src/shared/settings.js), and ACC_HUB_TOKEN from .env as a bearer
 // header on every request when Hub asks for one. Read on first use, not at import: the profile's
@@ -36,7 +37,7 @@ async function hubFetch(path, init = {}, read = (res) => res.json()) {
     const res = await fetch(hubConf().url + path, { ...init, headers: { ...hubConf().auth.headers, ...init.headers }, signal: ctrl.signal });
     if (!res.ok && res.status !== 204) {
       const text = await res.text().catch(() => '');
-      throw new Error(`Project Hub ${path} returned ${res.status}${text ? `: ${text}` : ''}`);
+      throw Object.assign(new Error(`Project Hub ${path} returned ${res.status}${text ? `: ${text}` : ''}`), { status: res.status, hubText: text.slice(0, 500) });
     }
     return await read(res);
   } catch (err) {
@@ -74,6 +75,57 @@ export const hub = {
   /** @param {string} [source] */
   async webmarks(source) {
     return hubFetch(`/api/webmarks${source ? `?source=${encodeURIComponent(source)}` : ''}`);
+  },
+
+  /**
+   * Hub's own settings that Houston's Settings pane shows: the folders next to Projects
+   * (from the scan, which Hub keeps cached) and the scan depths.
+   * @returns {Promise<{ folders: { name: string, dir: string }[], defaultDepth: number, workspaces: { name: string, maxDepth: number | null, effectiveDepth: number }[] }>}
+   */
+  async settings() {
+    const [scan, depth] = await Promise.all([hubFetch('/api/scan'), hubFetch('/api/scan-settings')]);
+    return {
+      folders: (scan.sharedRoots || []).map((/** @type {any} */ r) => ({ name: String(r.name), dir: String(r.dir) })),
+      defaultDepth: depth.defaultDepth,
+      workspaces: (depth.workspaces || []).map((/** @type {any} */ w) => ({ name: String(w.name), maxDepth: w.maxDepth ?? null, effectiveDepth: w.effectiveDepth })),
+    };
+  },
+
+  /**
+   * Add a folder to Hub or remove one, checked by hubFolderChange() first and by Hub again.
+   * Hub asks before adding a folder full of images (a 409); that comes back as `ask`, and
+   * the same request with force: true adds it anyway. Hub rescans afterwards and its change
+   * event reloads the Files tree.
+   * @param {unknown} input
+   * @returns {Promise<{ ok: true } | { ask: string }>}
+   */
+  async folder(input) {
+    const { method, body } = hubFolderChange(input);
+    try {
+      await hubFetch('/api/roots', { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, drain);
+      return { ok: true };
+    } catch (err) {
+      const e = /** @type {any} */ (err);
+      if (e?.status === 409) return { ask: e.hubText };
+      if (e?.status >= 400 && e?.status < 500 && e.hubText) throw new Error(e.hubText);
+      throw err;
+    }
+  },
+
+  /**
+   * Set the scan depth for every workspace or for one (null: back to the default).
+   * @param {unknown} input
+   */
+  async scanDepth(input) {
+    const now = await hubFetch('/api/scan-settings');
+    const body = scanDepthChange(input, (now.workspaces || []).map((/** @type {any} */ w) => String(w.name)));
+    try {
+      await hubFetch('/api/scan-settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, drain);
+    } catch (err) {
+      const e = /** @type {any} */ (err);
+      if (e?.status >= 400 && e?.status < 500 && e.hubText) throw new Error(e.hubText);
+      throw err;
+    }
   },
 
   /** Hub's own favorites (paths and links Mike starred in Hub). */

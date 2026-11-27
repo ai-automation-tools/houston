@@ -753,7 +753,17 @@ const prefsPane = createPrefs({
     settingsTab.remove();
     if (activeTab !== null) api.tabs.activate(activeTab);
   },
-  onSaved: (/** @type {any} */ p) => { if (p.tabLabels !== sideTabs.dataset.labels) { sideTabs.dataset.labels = p.tabLabels; sidebar.fitTabs(); } },
+  onSaved: (/** @type {any} */ p) => {
+    if (p.tabLabels !== sideTabs.dataset.labels) { sideTabs.dataset.labels = p.tabLabels; sidebar.fitTabs(); }
+    if (p.dotsFirst !== sidebar.dotsFirst) { sidebar.dotsFirst = p.dotsFirst; sidebar.renderFiles(); }
+  },
+  resetLayout: () => {
+    Object.assign(layout, { sidebarWidth: 300, terminalHeight: 280, chatWidth: 380 });
+    document.documentElement.style.setProperty('--sidebar-w', `${layout.sidebarWidth}px`);
+    document.documentElement.style.setProperty('--term-h', `${layout.terminalHeight}px`);
+    document.documentElement.style.setProperty('--chat-w', `${layout.chatWidth}px`);
+    api.saveLayout({ sidebarWidth: layout.sidebarWidth, terminalHeight: layout.terminalHeight, chatWidth: layout.chatWidth });
+  },
 });
 
 const connections = createConnections({

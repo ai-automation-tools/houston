@@ -12,7 +12,7 @@ export const TAB_LABELS = /** @type {const} */ (['icons', 'names', 'both']);
 /** The rows of scopes.js's controls() that the pane edits, so its read-only list leaves them out. */
 export const PANE_ROWS = new Set(['Close to tray', 'Ad blocking', 'Project Hub', 'Quick links', 'News sources', 'Feed index']);
 
-/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string, tabLabels: typeof TAB_LABELS[number] }} LayoutPrefs */
+/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string, tabLabels: typeof TAB_LABELS[number], dotsFirst: boolean }} LayoutPrefs */
 
 /**
  * layout.json's preference keys, each checked on read, so a hand-edited file can't break the app.
@@ -26,6 +26,7 @@ export function layoutPrefs(d) {
     startTerminal: d.startTerminal !== false,
     defaultShell: typeof d.defaultShell === 'string' ? d.defaultShell : '',
     tabLabels: TAB_LABELS.includes(d.tabLabels) ? d.tabLabels : 'both',
+    dotsFirst: d.dotsFirst === true,
   };
 }
 
@@ -65,6 +66,7 @@ export function prefChange(key, value, ctx) {
     case 'closeToTray':
     case 'adBlock':
     case 'startTerminal':
+    case 'dotsFirst':
       if (typeof value !== 'boolean') throw new Error('Expected on or off');
       return layout(value);
     case 'theme':

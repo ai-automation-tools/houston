@@ -80,6 +80,12 @@ export const store = {
     return next;
   },
 
+  /** Empties Recent (Settings › Files › Clear Recent). */
+  clearRecent() {
+    writeJson('recent.json', []);
+    return [];
+  },
+
   /** @returns {{ sidebarWidth: number, terminalHeight: number, terminalOpen: boolean, chatWidth: number, chatOpen: boolean, adBlock: boolean, closeToTray: boolean, bookmarkSource: string } & import('../shared/prefs.js').LayoutPrefs} */
   layout() {
     const d = readJson('layout.json', {});

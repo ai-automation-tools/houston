@@ -72,6 +72,7 @@ A profile keeps one workstream apart from another: its own agent identities, MCP
 - Every workspace from Project Hub. A rescan by Hub shows up on its own.
 - A click reads the file in a tab under the app's own sidebar: Markdown rendered by Hub, other text as code, images inline, folders as a listing. Clicking through files reuses that tab; Ctrl+click, or **Preview in a new tab** on the right-click menu, opens another. **Open raw file in a new tab** shows the file itself in a browser tab instead.
 - An HTML file opens as the page itself.
+- Project Hub's own page (its address in a tab, or the **Project Hub** quick link) opens without Hub's sidebar, since its Explorer, Bookmarks and Recent repeat Houston's: the page fills the tab, and Houston's sidebar is the one you navigate with. Hub's folders and scan depth are in Houston's **Settings › Project Hub**, and dot-folder order, Clear Recent and panel sizes under **Settings › Files**. Hub's remaining settings (its colour scheme, folder icons, browser-favorites sync and backup) are on its own page: **↗** opens it in your default browser whole.
 - Hover or right-click a row for Terminal here, Preview here or in a new tab, the raw file in a new tab, VS Code, Reveal in Explorer, Copy path, Copy Hub id and Open as workspace.
 
 ## 🔖 Bookmarks, 🕘 Recent and 🔍 Search
@@ -156,8 +157,10 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 |:---|:---|
 | General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once; and whether the sidebar's tabs show icons, names or both |
 | Browser | Ad blocking (applies at once); the quick links on the empty tab page |
+| Files | Dot-folders first in the Files tree (`.claude`, `.github` and dot-files at the top of their folder, or after the rest); **Clear Recent**; **Reset panel sizes** for the sidebar, chat pane and terminal panel |
 | Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
 | Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |
+| Project Hub | Project Hub's own settings, read from Hub when the pane opens and saved by Hub in its `hub.config.json`: the **folders** it shows next to your projects (add one by its path, with an optional name, or remove one; nothing on disk moves) and its **scan depth**, 1 to 32 levels, for every workspace or one of its own. Hub rescans after a change and the Files tree follows. A folder full of images asks first, with **Add anyway**. Only a folder on this machine: never a network path or a whole drive |
 | Agents and security | Nothing: the controls the Core enforces, read-only, each with where it's set |
 
 A change saves as you make it (a list or an address with its **Save** button or Enter), and one Houston can't use is refused with the reason under the field. **Esc** or ✕ closes the pane. Grants, policy, secrets and the Core's limits are never switches here: a checkbox can't enforce anything, so they stay with the Core and `npm run ctl`.

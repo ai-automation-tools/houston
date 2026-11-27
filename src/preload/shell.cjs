@@ -23,7 +23,11 @@ contextBridge.exposeInMainWorld('acc', {
   info: invoke('app:info'),
   saveLayout: invoke('layout:save'),
   // The Settings pane: main checks every change (src/shared/prefs.js) before it's saved.
-  prefs: { get: invoke('prefs:get'), set: invoke('prefs:set'), restart: invoke('prefs:restart') },
+  prefs: {
+    get: invoke('prefs:get'), set: invoke('prefs:set'), restart: invoke('prefs:restart'),
+    // Project Hub's folders and scan depth, through Hub's API (src/shared/hubsettings.js checks them).
+    hub: invoke('prefs:hub'), hubFolder: invoke('prefs:hub-folder'), hubDepth: invoke('prefs:hub-depth'),
+  },
 
   hub: {
     health: invoke('hub:health'),
@@ -91,6 +95,7 @@ contextBridge.exposeInMainWorld('acc', {
   recent: {
     list: invoke('recent:list'),
     add: invoke('recent:add'),
+    clear: invoke('recent:clear'),
     onChanged: listen('recent:changed'),
   },
 

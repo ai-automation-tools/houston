@@ -391,6 +391,7 @@ async function createWindow() {
     session: browseSession,
     send,
     onVisit: (url, title) => send('recent:changed', store.addRecent({ type: 'url', target: url, label: title || url })),
+    hubUrl: () => hub.url,
   });
   const terminals = new Terminals(send);
   // terminal_run's runs: a run ends when its session exits, and that exit code is its result.
@@ -927,6 +928,7 @@ async function createWindow() {
   handle('recent:list', () => store.recent());
   // A download enters Recent only from downloads.js, since Show in folder trusts that entry.
   handle('recent:add', (item) => { if (item?.type === 'download') throw new Error('Only a download adds a download.'); return store.addRecent(item); });
+  handle('recent:clear', () => { const list = store.clearRecent(); send('recent:changed', list); return list; });
   handle('downloads:show', (file) => showDownload(file));
 
   handle('ext:list', () => listExtensions(browseSession));
@@ -989,7 +991,7 @@ async function createWindow() {
     const raw = store.rawSettings();
     const s = store.settings();
     return {
-      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal, tabLabels: l.tabLabels,
+      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal, tabLabels: l.tabLabels, dotsFirst: l.dotsFirst,
       defaultShell: terminals.list().some((t) => t.id === l.defaultShell) ? l.defaultShell : terminals.list()[0]?.id ?? '',
       shells: terminals.list(),
       hubUrl: typeof raw.hubUrl === 'string' ? raw.hubUrl : '', hubDefault: DEFAULT_HUB_URL, hubFromEnv: Boolean(env.ACC_HUB_URL), hubNow: hub.url,
@@ -1013,6 +1015,11 @@ async function createWindow() {
     }
     return prefs();
   });
+  // Project Hub's own settings (its folders and scan depth), changed through Hub's API from
+  // here only; src/shared/hubsettings.js checks each request before Hub checks it again.
+  handle('prefs:hub', () => hub.settings());
+  handle('prefs:hub-folder', (input) => hub.folder(input));
+  handle('prefs:hub-depth', (input) => hub.scanDepth(input));
   // A new Project Hub address is read at start (src/main/hub.js), so the pane offers a restart.
   handle('prefs:restart', () => { app.relaunch(); app.quit(); });
 

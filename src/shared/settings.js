@@ -7,6 +7,33 @@ export const PROJECT_HUB_REPO = 'https://github.com/ai-automation-tools/project-
 export const MAX_LINKS = 12;
 export const MAX_LABEL = 40;
 
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Whether a tab shows Project Hub's own page: the Hub address's scheme and port, and its
+ * host or, for a Hub on this machine, any loopback name for it.
+ * @param {string} url
+ * @param {string} hubUrl
+ */
+export function isHubPage(url, hubUrl) {
+  try {
+    const page = new URL(url);
+    const hub = new URL(hubUrl);
+    if (page.protocol !== hub.protocol || page.port !== hub.port) return false;
+    return page.hostname === hub.hostname || (LOOPBACK.has(page.hostname) && LOOPBACK.has(hub.hostname));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hub's page inside Houston: its sidebar (Explorer, Bookmarks, Recent, favorites) repeats
+ * Houston's own, so it's hidden and the page takes the whole tab. Hub's phone-width drawer
+ * dims the page while open; that goes too. The full page, sidebar and Settings included,
+ * is a ↗ away in the default browser.
+ */
+export const HUB_PAGE_CSS = '#sidebar, #sidedrag { display: none !important; } main { margin-left: 0 !important; } main::after { content: none !important; }';
+
 /** @typedef {{ hubUrl: string, quickLinks: { label: string, url: string }[], newsSources: { label: string, url: string }[], feedIndex: string | null }} Settings */
 
 /**

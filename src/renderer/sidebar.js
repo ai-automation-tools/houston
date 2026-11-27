@@ -11,7 +11,7 @@ import { PROJECT_HUB_REPO } from './shared/settings.js';
 import { pushEntry } from './shared/mcplog.js';
 import { logDay, logRow, transcriptUrl } from './shared/logs.js';
 import { IDENTITIES_URL, identityAnchor } from './shared/identities.js';
-import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, searchAll, terminalDir } from './shared/tree.js';
+import { HUB_FAVORITES, absPath, defaultAction, faviconEntry, faviconUrls, fileMenu, flatten, flattenBookmarks, isContainer, orderDots, searchAll, terminalDir } from './shared/tree.js';
 
 const ICONS = {
   projects: '🗂️', root: '📦', section: '📁', cli: '🤖', folder: '📁', repo: '📘', group: '🗃️', draft: '🧪',
@@ -41,6 +41,8 @@ export class Sidebar {
    */
   constructor({ api, layout, openUrl, openTerminal, viewDoc, openCronsole, focusTerminal, openSettings }) {
     this.api = api;
+    /** Dot-folders and dot-files first in the Files tree (Settings › Files). */
+    this.dotsFirst = Boolean(layout?.dotsFirst);
     this.openSettings = openSettings;
     this.focusTerminal = focusTerminal;
     this.openCronsole = openCronsole;
@@ -255,7 +257,7 @@ export class Sidebar {
     this.fileIndex = top ? flatten(nodes) : all;
     this.el.files.innerHTML = '';
     const list = document.createElement('div');
-    for (const node of nodes) list.append(this.fileRow(node, 0));
+    for (const node of orderDots(nodes, this.dotsFirst)) list.append(this.fileRow(node, 0));
     this.el.files.append(list);
   }
 
@@ -305,7 +307,7 @@ export class Sidebar {
       if (!container) return;
       if (!kids) {
         kids = document.createElement('div');
-        for (const c of node.children || []) kids.append(this.fileRow(c, depth + 1));
+        for (const c of orderDots(node.children || [], this.dotsFirst)) kids.append(this.fileRow(c, depth + 1));
         wrap.append(kids);
       } else {
         kids.hidden = !kids.hidden;

@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_HUB_URL, hubAuth, settingsFrom } from '../src/shared/settings.js';
+import { DEFAULT_HUB_URL, hubAuth, isHubPage, settingsFrom } from '../src/shared/settings.js';
+
+test('isHubPage matches the Hub address by scheme, port and host, any loopback name for a Hub on this machine', () => {
+  const hub = 'http://127.0.0.1:4273';
+  for (const url of ['http://127.0.0.1:4273/', 'http://localhost:4273/#/Projects', 'http://[::1]:4273/?q=x']) assert.equal(isHubPage(url, hub), true, url);
+  for (const url of ['http://127.0.0.1:4274/', 'https://127.0.0.1:4273/', 'http://example.com:4273/', 'acc://doc/x', 'not a url', '']) assert.equal(isHubPage(url, hub), false, url);
+  assert.equal(isHubPage('https://hub.example.com/', 'https://hub.example.com'), true);
+  assert.equal(isHubPage('https://localhost/', 'https://hub.example.com'), false);
+  assert.equal(isHubPage('http://127.0.0.1:4273/', ''), false);
+});
 
 test('settingsFrom gives neutral defaults for no file, junk, or an empty object', () => {
   for (const raw of [undefined, null, 'x', [], {}]) {

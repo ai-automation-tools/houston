@@ -23,6 +23,7 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 - Houston's own interface (the sidebar, tab bar, chat and terminals) runs without Chromium's sandbox, because the extensions toolbar needs it. It loads only its own files and runs only its own scripts; your secrets live in the Core, never in the window.
 - A page gets no permission it asks for (camera, microphone, location, notifications, MIDI, screen capture, clipboard reads, USB, serial, HID) except fullscreen, pointer lock and sanitized clipboard writes. Without a handler, Electron would grant all of them.
 - Every IPC channel checks the sender is the shell UI's main frame.
+- **Settings › Project Hub** adds a folder to Project Hub only by a path on a drive of this machine. A network path is refused before Hub hears of it: scanning one would have Hub sign in to that server with your Windows account. Hub refuses its own deny-list (credential folders) and a whole drive too.
 - Houston never opens or runs a download. It saves each one to your Downloads folder under a name that overwrites nothing, and the file keeps Windows' mark of the web, so SmartScreen and Office's Protected View still treat it as from the internet. **Show in folder** only selects the file in Explorer, and only for a download Recent got from the main process; the interface can't add one.
 
 ## Document and run pages
