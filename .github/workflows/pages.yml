@@ -1,16 +1,12 @@
-# The demo is OFFLINE since 2026-11-12, while Houston is rebuilt as an agent harness.
-# This publishes a one-page "offline" notice to https://houston-demo.ai-automation-tools.dev/
-# instead of the demo. The address stays published on purpose: its DNS record still points at
-# GitHub Pages, and an unpublished custom domain can be claimed by someone else's repo.
-#
-# To bring the demo back: restore the build job from git history (setup-node, `npm ci
-# --ignore-scripts`, `npm run demo`, upload `_site`). The demo's source is still in src/demo/.
+# Builds the demo (`npm run demo`) and publishes _site/ to GitHub Pages at
+# https://houston-demo.ai-automation-tools.dev/. The demo is fake end to end;
+# see src/demo/ and AGENTS.md. Back online since 2026-11-27 (offline from 2026-11-12
+# while the harness was built).
 name: Pages
 
 on:
   push:
     branches: [main]
-    paths: ['scripts/demo-offline/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,13 +22,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
     steps:
       - uses: actions/checkout@v4
-      # Every path gets the notice, not GitHub's stock 404.
-      - run: cp scripts/demo-offline/index.html scripts/demo-offline/404.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # The demo only needs xterm from node_modules: no Electron, no install scripts.
+      - run: npm ci --ignore-scripts
+      - run: npm run demo
+        env:
+          # Stamped into <meta name="build"> so the org's surface check can tell a stale deploy.
+          BUILD_SHA: ${{ github.sha }}
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: scripts/demo-offline
+          path: _site
 
   deploy:
     needs: build

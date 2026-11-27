@@ -64,7 +64,7 @@ Plain JavaScript with JSDoc types, no bundler. Electron loads `main/main.js` dir
 
 The shell UI from `renderer/` running in an ordinary browser. `npm run demo` (`scripts/demo.js`) copies `renderer/`, `shared/`, this folder and xterm into `_site/`, and `.github/workflows/pages.yml` deploys that to [houston-demo.ai-automation-tools.dev](https://houston-demo.ai-automation-tools.dev/) on every push to `main`. The app never loads anything here.
 
-> The public demo has been offline since 2026-11-12, while the app is rebuilt as an agent harness: `pages.yml` publishes a notice from `scripts/demo-offline/` instead. `npm run demo` still builds it locally.
+> Live at <https://houston-demo.ai-automation-tools.dev/> (back since 2026-11-27, after being offline from 2026-11-12 while the harness was built). Its page carries `<meta name="build">` with the deployed commit.
 
 | File | What it does |
 |:---|:---|
