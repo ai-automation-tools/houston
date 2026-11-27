@@ -13,9 +13,15 @@ export const IMAGE_TYPES = /** @type {Record<string, string>} */ ({
   avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon', svg: 'image/svg+xml',
 });
 
-/** No scripts, frames or forms; images from documents and the web (README badges). */
+/**
+ * No scripts, frames or forms; images from documents and the web (README badges).
+ * Cross-Origin-Resource-Policy: a web page that requests one of these with no referrer (which
+ * serveAppPage lets through, as the app's own loads have none) never gets the answer delivered
+ * (2026-11-27 security call: accept the empty referrer, add this).
+ */
 export const DOC_HEADERS = {
   'content-security-policy': "default-src 'none'; img-src acc: https: data:; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  'cross-origin-resource-policy': 'same-origin',
   'x-content-type-options': 'nosniff',
   'cache-control': 'no-store',
 };

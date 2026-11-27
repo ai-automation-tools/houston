@@ -21,7 +21,7 @@ Houston is a workbench: browser, shells, files, workspaces, an MCP server that w
 Three facts shape the decision:
 
 - **Unattended work must run with the window closed.** Houston's main process ends when the app quits.
-- **Secrets should not live in the process that renders web pages.** The shell view runs with `sandbox: false` today.
+- **Secrets should not live in the process that renders web pages.** The shell view runs with `sandbox: false` today. *(2026-11-27, the owner's call on the security sweep's carried item: it stays that way, documented. Its preload loads the extensions toolbar, which a sandboxed preload can't; the shell loads only its own files with `script-src 'self'`, and context isolation is on. What's left is a Chromium memory bug, for example in an image decoder, reached through a favicon or feed image, which would run with the user's rights rather than in a sandbox. That is one more reason secrets stay in the Core and never reach the window. Sandboxing it by copying the toolbar's 13 KB preload code in, with a test that the copy matches the package, is the way out if this is revisited.)*
 - **A control inside the thing it governs is not a control.** Houston's MCP server has one shared per-launch token and self-reported client names; the per-client switch was dropped on 2026-10-26 for exactly that reason (see [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md)).
 
 `AGENTS.md` says nothing but the MCP server listens on a port, and its Won't list has no notion of a companion process. This ADR is the "new ADR" that list asks for.

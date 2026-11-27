@@ -19,12 +19,14 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 
 - Browser tabs are sandboxed. Their only preloads are the extension-API ones, which act only on `chrome-extension://` pages, and, with ad blocking on, Ghostery's cosmetic-filter preload, which asks the main process for the CSS that hides ad slots.
 - Tabs can't navigate to `javascript:`, `data:` or the app's own protocols.
+- A local file opens only from a drive of this machine (`file:///C:/…`). A `file:` address with a server in it (`file://server/share`) is refused for every request, a page's image as much as a navigation: Windows would sign in to that server and send your password hash. Folders show as a plain list of links.
+- Houston's own interface (the sidebar, tab bar, chat and terminals) runs without Chromium's sandbox, because the extensions toolbar needs it. It loads only its own files and runs only its own scripts; your secrets live in the Core, never in the window.
 - A page gets no permission it asks for (camera, microphone, location, notifications, MIDI, screen capture, clipboard reads, USB, serial, HID) except fullscreen, pointer lock and sanitized clipboard writes. Without a handler, Electron would grant all of them.
 - Every IPC channel checks the sender is the shell UI's main frame.
 
 ## Document and run pages
 
-- `acc://doc/…` pages are served to the sandboxed tabs only, run no scripts (`default-src 'none'`), can't be framed, and can't be reached from a web page.
+- `acc://doc/…` pages are served to the sandboxed tabs only, run no scripts (`default-src 'none'`), can't be framed, and can't be reached from a web page. Every page of this kind also says `Cross-Origin-Resource-Policy: same-origin`, so a web page that asks for one with no referrer never gets the answer.
 - Only files in Project Hub's index are served, so a crafted address can't read anything else.
 - A Cronsole run page (`acc://run/…`) has the same policy, opens only from the sidebar, and shows the run's output as text.
 - A Git diff page (`acc://git/…`) does too, and is served only for a file `git status` lists right now with that kind of change.

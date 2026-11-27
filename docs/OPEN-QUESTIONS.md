@@ -6,6 +6,12 @@ Decisions only the owner can make, asked by the roadmap routine. Fill in an `- A
 
 ## Answered
 
+### Security sweep: `sandbox: false`, the empty-referrer check and `file:` navigation
+
+- Asked: 2026-11-10 by the weekly security sweep (carried as design items); options laid out 2026-11-27
+- Context: (1) the shell view runs unsandboxed so its preload can load the extensions toolbar; (2) app pages (`acc://run`, `git`, `dev`, `runlog`, `transcript`, `settings`) accept a request with no referrer, which a web page can send on purpose; (3) a local file's page could reach `file://<host>/…`, which makes Windows sign in to that host over SMB and send the NTLM hash.
+- Answer: option A for all three (Mike, 2026-11-27). (1) Keep `sandbox: false` and document it (ADR-004, `AGENTS.md`). (2) Accept the empty referrer and add `Cross-Origin-Resource-Policy: same-origin` to every app page, so a web page's request is answered but never delivered to it. (3) Allow only drive-letter `file:` paths, and refuse a `file:` URL with a host for every request in the browse session, navigation or not.
+
 ### Provider adapters: which second provider, and may the app start a CLI agent itself?
 
 - Asked: 2026-10-26 by ai-command-center-roadmap
