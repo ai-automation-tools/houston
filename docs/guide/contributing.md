@@ -29,7 +29,7 @@ npm run demo     # builds the browser demo into _site/
 
 - A scheduled routine (job `houston-roadmap`) opens PRs from `roadmap/auto-<date>` branches, one [roadmap](../ROADMAP.md) item at a time.
 - An org-wide sweep reviews and merges them.
-- The routine never changes dependencies. When a PR you merge changes `package.json`, quit the app and run `npm install` yourself.
+- The routine never changes dependencies. When a PR you merge changes `package.json`, quit the app and run `npm install` yourself. If the Core runs at logon, stop its task first and start it again after: it keeps `koffi.node` open, and npm can't replace that file while it does ([core-at-logon.md](core-at-logon.md)).
 
 ---
 

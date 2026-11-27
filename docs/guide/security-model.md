@@ -23,6 +23,7 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 - Houston's own interface (the sidebar, tab bar, chat and terminals) runs without Chromium's sandbox, because the extensions toolbar needs it. It loads only its own files and runs only its own scripts; your secrets live in the Core, never in the window.
 - A page gets no permission it asks for (camera, microphone, location, notifications, MIDI, screen capture, clipboard reads, USB, serial, HID) except fullscreen, pointer lock and sanitized clipboard writes. Without a handler, Electron would grant all of them.
 - Every IPC channel checks the sender is the shell UI's main frame.
+- Houston never opens or runs a download. It saves each one to your Downloads folder under a name that overwrites nothing, and the file keeps Windows' mark of the web, so SmartScreen and Office's Protected View still treat it as from the internet. **Show in folder** only selects the file in Explorer, and only for a download Recent got from the main process; the interface can't add one.
 
 ## Document and run pages
 
@@ -36,6 +37,7 @@ This page is the app as it runs today. The agent harness (identities, OS contain
 ## Terminals and agents
 
 - Each shell is a fixed executable with fixed arguments. The UI chooses only a starting folder and a shell by name.
+- A right-click in a terminal never pastes on its own: with nothing selected it opens a menu whose **Paste** item shows the clipboard's first line and how many lines it has, and only a click on it sends them to the shell.
 - `terminal_run` starts nothing until you click Run. Then the main process opens a PowerShell terminal for that command alone, in the folder the bar named. Its arguments are a fixed script; the command reaches it in an environment variable that only the main process sets and the script removes, so the shell still never takes arguments from an agent or the UI.
 - The main process keeps the command and folder from the moment it asks. The click only says yes or no.
 - A run's result is its exit code, never its output. Closing its tab while it runs ends it and every process it started, found by the pid the app started, never by name.
