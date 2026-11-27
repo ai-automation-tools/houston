@@ -19,6 +19,7 @@ Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04
 
 **Changed**
 
+- **Electron 45.4.1 installed, as the lockfile says** (2026-11-27). *UI/UX audit.* `node_modules` held 45.2.3. Reinstalled with `npm ci`; the Houston Core keeps `koffi.node` open, so its logon task was ended first and started again after. Smoke passes 55 of 55 on the new install.
 - **Terminal right-click no longer pastes on its own** (2026-11-27). *UI/UX audit.* With nothing selected, a right-click in a terminal sent the clipboard straight to PowerShell, which ran it; the audit's own test ran a stray fragment that way. It now opens a menu whose **Paste** item shows the clipboard's first line and how many lines it has, and pastes only on that click; **Select all** and **Clear** are there too. A right-click on a selection still copies it, and Ctrl+V still pastes. Native menus also show `&` now instead of reading it as a mnemonic.
 - **Ctrl+K reaches every sidebar tab** (2026-11-27). *UI/UX audit.* The palette had **Show …** actions for seven of the twelve tabs: News, Feed, Agents, Logs and Integrations were missing, and "Show Agents" found files. The actions now come from the sidebar's own tab buttons, and `npm run smoke` checks each one.
 - **A warning when the installed Electron isn't the lockfile's** (2026-11-27). *UI/UX audit.* The audit found Electron 45.2.3 in `node_modules` against 45.4.1 in `package.json` and the lockfile. `npm run smoke` now warns, and `npm run gate` refuses, naming both versions (`electronDrift()` in `abuse/gate.js`).
