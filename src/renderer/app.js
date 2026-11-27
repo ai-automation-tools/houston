@@ -13,7 +13,7 @@ import { cycleTab, pickTab } from './shared/session.js';
 import { isCronsoleUrl } from './shared/cronsole.js';
 import { isFavorite } from './shared/favorites.js';
 import { describeAsk, secondsLeft } from './shared/approvals.js';
-import { SETTINGS_URL } from './shared/scopes.js';
+import { createPrefs } from './prefs.js';
 import { HEALTH_URL } from './shared/health.js';
 import { profileMenu } from './shared/profiles.js';
 
@@ -29,6 +29,8 @@ let space = await api.workspace.info();
 // The active profile's name, on the 🧭 button when it isn't the default (H5). Read once: switching restarts the app.
 const profileName = await api.profile.info().then((/** @type {any} */ p) => p.name, () => '');
 const layout = info.layout;
+// Settings › Startup: start with the terminal panel closed, for this launch, without saving it as closed.
+if (layout.startTerminal === false) layout.terminalOpen = false;
 const appEl = $('app');
 const mainEl = $('main');
 const content = $('content');
@@ -693,6 +695,13 @@ const palette = createPalette({
   onClose: () => { if (activeTab !== null) api.tabs.setHidden(false); },
 });
 
+const prefsPane = createPrefs({
+  api,
+  openUrl,
+  onOpen: () => api.tabs.setHidden(true),
+  onClose: () => { if (activeTab !== null) api.tabs.setHidden(false); },
+});
+
 const connections = createConnections({
   api,
   onOpen: () => api.tabs.setHidden(true),
@@ -717,7 +726,7 @@ function errText(err) {
 function runAction(action) {
   if (action === 'palette') palette.open();
   if (action === 'connections') connections.open();
-  if (action === 'settings') openUrl(SETTINGS_URL);
+  if (action === 'settings') prefsPane.open();
   if (action === 'health') openUrl(HEALTH_URL);
   if (action === 'open-cronsole') openCronsole();
   if (action.startsWith('panel-')) {

@@ -12,6 +12,7 @@ import { feedView, parseFeed, toggleBookmark } from '../shared/feed.js';
 import { trayItem } from '../shared/chat.js';
 import { chatRow, coreRow, cronsoleRow, hubRow, mcpRow, shellRows } from '../shared/connections.js';
 import { demoHarness } from './harness.js';
+import { PANE_ROWS, prefChange } from '../shared/prefs.js';
 import { searchConversations } from '../shared/conversations.js';
 import { Activity, activityRows } from '../shared/activity.js';
 import { Runs, runRows } from '../shared/runs.js';
@@ -324,6 +325,14 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
     },
   });
 
+  /** The Settings pane's made-up preferences (prefs below). */
+  const prefs = {
+    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', shells: SHELLS,
+    hubUrl: '', hubDefault: 'http://127.0.0.1:4273', hubFromEnv: false, hubNow: 'http://127.0.0.1:4273',
+    quickLinks: [{ label: 'Project Hub demo', url: 'https://project-hub.ai-automation-tools.dev' }],
+    newsSources: [{ label: 'Team digest', url: 'D:\\work\\notes\\digest.md' }, { label: 'Release notes', url: 'https://example.com/releases.xml' }],
+    feedIndex: '',
+  };
   const api = {
     info: async () => ({
       hubUrl: 'http://localhost:8765',
@@ -338,6 +347,17 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       browsePartition: 'persist:browse',
     }),
     saveLayout: async () => {},
+    // The Settings pane: made-up preferences, changed in memory only, checked like the app's.
+    prefs: {
+      get: async () => ({ ...prefs, readOnly: harness.settingsRows().filter((c) => !PANE_ROWS.has(c.label)) }),
+      set: async (/** @type {string} */ key, /** @type {unknown} */ value) => {
+        const c = prefChange(key, value, { shells: SHELLS.map((x) => x.id), remoteHub: false });
+        Object.assign(prefs, { [c.key]: c.value ?? (c.key === 'hubUrl' || c.key === 'feedIndex' ? '' : c.value) });
+        if (c.key === 'theme') notify('In the app the theme switches the whole window; the demo follows your browser.');
+        return { ...prefs, readOnly: harness.settingsRows().filter((x) => !PANE_ROWS.has(x.label)) };
+      },
+      restart: async () => { notify('Restarting needs the desktop app.'); },
+    },
 
     hub: {
       health: async () => ({ ok: true, state: 'ready' }),

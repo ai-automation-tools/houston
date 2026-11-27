@@ -7,7 +7,7 @@ import { agentRows } from '../shared/agents.js';
 import { backendRows, memoryRows, runtimeRows, secretRows, serverName, serverRows, standingId, standingRows } from '../shared/integrations.js';
 import { escapeHtml } from '../shared/docs.js';
 import { logFilter, sessionChoices, transcriptBody, transcriptIdFromUrl } from '../shared/logs.js';
-import { SETTINGS_URL, settingsBody } from '../shared/scopes.js';
+import { SETTINGS_URL, controls, settingsBody } from '../shared/scopes.js';
 import { HEALTH_URL, coreHealthRows, healthBody } from '../shared/health.js';
 import { IDENTITIES_URL, identitiesBody } from '../shared/identities.js';
 
@@ -261,8 +261,17 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
 
   const list = () => [...sessions.values()].map(({ id, identity, workspace, startedAt }) => ({ id, identity, workspace, startedAt }));
   const grants = IDENTITIES.flatMap((i) => i.grants);
+  // What the Settings page shows, and the read-only rows of the Settings pane.
+  const settingsData = () => ({
+    hubUrl: 'http://127.0.0.1:4273', hubToken: 'sent', quickLinks: 2, newsSources: 2, bookmarkSource: 'chrome', adBlock: true, closeToTray: true,
+    chat: { model: '', missing: ['ACC_CHAT_API_KEY', 'ACC_CHAT_MODEL'] }, cronsole: { configured: true, ui: 'http://localhost:7373' }, mcpUrl: 'http://127.0.0.1:52011/mcp',
+    workspaces: 2, workspace: { name: 'acme-api', folder: WS.replaceAll('/', '\\'), tabs: 2, terminals: 1 + [...sessions.values()].filter((s) => s.term).length },
+    core: { dir: 'C:\\Users\\dev\\AppData\\Local\\houston-core', sessions: sessions.size, identities: IDENTITIES.length, grants: grants.length, askGrants: grants.filter((g) => g.effect === 'ask').length, approvals: pending.length,
+      limits: { approvalSeconds: APPROVAL_MS / 1000, logBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: servers.length, pinned: servers.filter((x) => x.state === 'pinned').length, review: servers.filter((x) => x.state === 'needs_review').length }, secrets: SECRETS.length },
+  });
 
   return {
+    settingsRows: () => controls(settingsData()),
     agents: {
       info: async () => ({ folder: WS.replaceAll('/', '\\'), rows: agentRows(/** @type {any} */ (IDENTITIES), list(), BACKENDS).map((r) => ({ ...r, sessions: r.sessions.map((x) => ({ ...x, shown: Boolean(sessions.get(x.id)?.term) })) })) }),
       start: async (/** @type {string} */ identity) => {
@@ -374,15 +383,7 @@ export function demoHarness({ now, emit, openTerminal, fallback, approvalAfterMs
         }
         return identitiesBody({ identities: /** @type {any} */ (IDENTITIES), reach, sessions: list(), starts: events.filter((e) => e.type === 'session.start').reverse(), now: now() }, escapeHtml);
       }
-      if (url === SETTINGS_URL) {
-        return settingsBody({
-          hubUrl: 'http://127.0.0.1:4273', hubToken: 'sent', quickLinks: 2, newsSources: 2, bookmarkSource: 'chrome', adBlock: true, closeToTray: true,
-          chat: { model: '', missing: ['ACC_CHAT_API_KEY', 'ACC_CHAT_MODEL'] }, cronsole: { configured: true, ui: 'http://localhost:7373' }, mcpUrl: 'http://127.0.0.1:52011/mcp',
-          workspaces: 2, workspace: { name: 'acme-api', folder: WS.replaceAll('/', '\\'), tabs: 2, terminals: 1 + [...sessions.values()].filter((s) => s.term).length },
-          core: { dir: 'C:\\Users\\dev\\AppData\\Local\\houston-core', sessions: sessions.size, identities: IDENTITIES.length, grants: grants.length, askGrants: grants.filter((g) => g.effect === 'ask').length, approvals: pending.length,
-            limits: { approvalSeconds: APPROVAL_MS / 1000, logBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 }, mcp: { servers: servers.length, pinned: servers.filter((x) => x.state === 'pinned').length, review: servers.filter((x) => x.state === 'needs_review').length }, secrets: SECRETS.length },
-        }, escapeHtml);
-      }
+      if (url === SETTINGS_URL) return settingsBody(settingsData(), escapeHtml);
       if (url === HEALTH_URL) {
         return healthBody({
           app: { Houston: '0.1.0', Electron: '45.0.0', Chromium: '142.0.0.0', Node: '24.0.0', Windows: 'Windows 11 Home (10.0.26100)', Profile: 'default', 'Data folder': 'C:\\Users\\dev\\AppData\\Roaming\\ai-command-center' },

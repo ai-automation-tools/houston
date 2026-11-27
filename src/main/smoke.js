@@ -16,6 +16,7 @@ import { onPath } from './env.js';
 import { listExtensions } from './extensions.js';
 import { cleanOutput } from '../shared/output.js';
 import { docsTasks } from '../shared/cronsole.js';
+import { store } from './store.js';
 
 /** @typedef {import('./tabs.js').Tabs} Tabs */
 /** @typedef {import('./terminal.js').Terminals} Terminals */
@@ -953,8 +954,33 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
           tabs.close(tTab.id);
         }
 
-        // Settings: the ⚙ button opens every control with its scope, the Core's rows from this Core.
+        // Settings: the button opens the pane over the main area; a checkbox saves through main (close
+        // to tray off, then on again, in layout.json), a bad value is refused with the reason, and the
+        // pane's link opens every control as a page, the Core's rows from this Core.
         await wc.executeJavaScript(`document.getElementById('settings-open').click()`);
+        for (let i = 0; i < 40 && await wc.executeJavaScript(`document.getElementById('prefs').hidden`); i++) await wait(100);
+        agentRun.pane = await wc.executeJavaScript(`(async () => {
+          const $ = (id) => document.getElementById(id);
+          const h2 = [...document.querySelectorAll('#prefs-main h2')].map((h) => h.textContent);
+          $('pref-closeToTray').click();
+          await new Promise((r) => setTimeout(r, 500));
+          return { h2, off: $('pref-closeToTray').checked };
+        })()`);
+        agentRun.pane.savedOff = store.layout().closeToTray === false;
+        Object.assign(agentRun.pane, await wc.executeJavaScript(`(async () => {
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          const $ = (id) => document.getElementById(id);
+          $('pref-closeToTray').click();
+          await pause(500);
+          const feed = $('pref-feedIndex').closest('.pref');
+          $('pref-feedIndex').value = 'index.json';
+          feed.querySelector('button').click();
+          await pause(500);
+          const readOnly = [...document.querySelectorAll('#prefs-security dt')].map((d) => d.textContent);
+          document.querySelector('#prefs-security button.linkish').click();
+          return { on: $('pref-closeToTray').checked, refused: feed.querySelector('.pref-error').textContent, readOnly, closed: $('prefs').hidden };
+        })()`));
+        agentRun.pane.savedOn = store.layout().closeToTray === true;
         for (let i = 0; i < 40 && !tabs.list().some((x) => x.url.startsWith('acc://settings/')); i++) await wait(250);
         const sTab = tabs.list().find((x) => x.url.startsWith('acc://settings/'));
         const sView = sTab && tabs.tabs.get(sTab.id);
@@ -1133,7 +1159,11 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
           && lg.denied.includes('egress.connect example.org:443') && lg.deniedClasses.every((/** @type {string} */ c) => c.endsWith(' deny'))
           && lg.oneSession && lg.detail), lg);
       const st = agentRun?.settings;
-      check('⚙ opens Settings: every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
+      const pn = agentRun?.pane;
+      check('Settings opens a pane: a checkbox saves through main and a bad value is refused with the reason; the agent controls are read-only there',
+        Boolean(pn && pn.h2.join() === 'General,Browser,Startup,Sources,Agents and security' && pn.off === false && pn.savedOff && pn.on === true && pn.savedOn
+          && /absolute path/.test(pn.refused) && pn.readOnly.includes('Hard denies') && !pn.readOnly.includes('Close to tray') && pn.closed), pn);
+      check('the pane\'s link opens every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
         Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile: Default,Workspace: Agents smoke,Session'
           && st.rows['Log limits'] === '100 MB a transcript, 5 GB for transcripts and the audit log together; oldest transcripts deleted first, then the oldest audit segments' && st.rows['Running agent sessions'] === '0 sessions'
           && st.rows['Agent identities and grants']?.startsWith('2 identities, 3 grants (2 ask)') && st.rows.Folder?.toLowerCase() === ws.toLowerCase()
