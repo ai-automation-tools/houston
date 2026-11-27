@@ -48,7 +48,7 @@ Task Scheduler shows **Last Run Result** `0x41301` (the task is running) while t
 
 | To | Do |
 |:---|:---|
-| Stop it | **End** the task in Task Scheduler, or `Stop-ScheduledTask -TaskPath '\Houston\' -TaskName 'Houston Core'` |
+| Stop it | **End** the task in Task Scheduler, or `Stop-ScheduledTask -TaskPath '\Houston\' -TaskName 'Houston Core'`, or the `-TaskPath` and `-TaskName` you registered it with (`Get-ScheduledTask *Houston*` finds it). Stop it before `npm install` or `npm ci`: the Core keeps `koffi.node` open |
 | Start it again | **Run** the task, or `Start-ScheduledTask` with the same names |
 | Remove it | `pwsh -NoProfile -File scripts\Register-HoustonCore.ps1 -Unregister` |
 
