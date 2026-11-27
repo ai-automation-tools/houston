@@ -157,7 +157,7 @@ Each row says what it's set to now and where it's changed (a menu, a tab, `setti
 ## 🩺 Health
 
 - **View › Health**, or **Health** in the palette, opens a page with this install's versions and every check, each marked ✓ working, ! to look at, ✗ failing or – not set up, with what to do.
-- The checks are the Connections rows below, plus two from the Core: the **audit chain**, verified again when the page opens, and **Core storage**, the size of its audit log, transcripts and database backups against the 5 GB log target.
+- The checks are the Connections rows below, plus two from the Core: the **audit chain**, verified again when the page opens, and **Core storage**, the size of its audit log, transcripts, database backups and log exports against the 5 GB log target. The Core keeps transcripts and the audit log under it on its own; `npm run ctl -- log.export` copies both into its `exports` folder.
 - Reload the tab to check again. The page only shows.
 - **View › Save diagnostics bundle** writes all of it, with the newest 200 lines of the app's log and the Core's, to one JSON file in the app's `diagnostics` folder, and shows it in Explorer. Your user folder is written as `%USERPROFILE%`, the chat key, Hub's token and the vault's values are left out, and nothing sends the file anywhere: attach it to a bug report yourself if you want to.
 

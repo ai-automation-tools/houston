@@ -27,7 +27,8 @@ It prints one JSON line (`core.start`, with the data folder, the schema versions
 | [**main.js**](main.js) | The entry point. Picks the data folder, creates it, opens the database, runs the migrations, opens the audit log, writes `core.start`, makes the operator on the first start, then, on Windows, starts the runner and the Control API. `start(dir)` does the first part as a function, for tests. |
 | [**db.js**](db.js) | `openDb` opens the database in SQLite's exclusive locking mode, which is also the single-instance lock. `migrate` applies the schema steps a database is missing. |
 | [**migrations.js**](migrations.js) | The schema, one SQL string per version. |
-| [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, export. |
+| [**audit.js**](audit.js) | The audit log: append, the hash chain, the check at start, segments that roll over at 64 MB, pruning, export. |
+| [**logs.js**](logs.js) | Log retention (one 5 GB cap: transcripts first, then the oldest audit segments) and `log.export` into the data folder's `exports`. |
 | [**health.js**](health.js) | `core.health`: the audit chain checked again, the size of each folder the Core writes, and `core.log`'s newest lines through the vault's redaction. Reads only. |
 | [**policy.js**](policy.js) | The policy check: global denies, explicit denies, the narrowest allow or ask, default deny. |
 | [**egress.js**](egress.js) | The egress proxy: `CONNECT` tunnels, and plain `GET` for revocation lists, to the hosts a session's policy allows, and only to public addresses. |
@@ -138,7 +139,14 @@ A break is recorded once. Later starts still list it, but add nothing. If an old
 
 The claim is tamper-evident against an agent, not tamper-proof against the operator's own account ([requirements](../docs/product/harness-requirements.md)). An agent's container cannot reach this folder at all.
 
-`log.events()` gives every good event oldest first, and `log.exportTo(file)` writes them to one JSON-lines file and returns the breaks, so a reader knows what the export is missing. Events the Core writes about itself (`core.start`, `core.stop`, `audit.break`) use the subject `local:core`.
+`log.events()` gives every good event oldest first, and `log.exportTo(file, { since })` writes them to one JSON-lines file and returns the breaks and how many segments retention deleted, so a reader knows what the export is missing. Events the Core writes about itself (`core.start`, `core.stop`, `audit.break`, `audit.segment`) use the subject `local:core`.
+
+### Segments, retention and export (LOG-04)
+
+- **Segments.** A file past 64 MB is closed and the next one starts with an `audit.segment` event chained to the last line before it; while both files are there, that link is checked too.
+- **One cap for the logs.** Transcripts and the audit log share 5 GB. At start and every hour the Core rotates transcripts first (oldest finished first), and only if they aren't enough deletes the oldest whole audit segments, never the open one. Each deleted segment is a `log.deleted` event (resource `AuditSegment`) carrying `pruned_through`, the highest segment number deleted so far, so a missing segment up to it isn't a break; one missing above it still is. The file is deleted first and the event written after, so a crash in between shows as a break, never as nothing. `core.log` keeps one old copy past 1 MB.
+- **Deleting by hand** (the operator, from `ctl`; the window has no way to). `transcript.delete id=<session>` or `before=<date>` deletes finished transcripts; `audit.prune before=<date>` deletes whole segments whose newest event is older, oldest first. Each is a `log.deleted` event by `local:operator`.
+- **Export.** `npm run ctl -- log.export` (optional `since=<date>`) writes `exports\logs-<time>\` in the data folder: `audit.jsonl` (every good event), `transcripts\` (copies, already redacted) and `manifest.json` (counts, breaks, `prunedThrough`). It's a `log.exported` event. Exports don't count against the cap; delete old ones by hand.
 
 ## ⚖️ Policy
 
@@ -452,7 +460,7 @@ Checked by `npm run smoke` against a throwaway Core on 2026-11-12: a contained `
 
 - **Plain text.** The terminal's escape sequences are resolved the way the window's own output reader does it (one line at a time), so it reads like the screen did, minus colours.
 - **Redacted before write** (LOG-04). Text is held until its line ends, so a secret split across two chunks is caught whole, and each line is checked before it reaches the disk: Anthropic, OpenAI, GitHub, Slack, AWS and Google key shapes, JWTs, `Bearer`/`Basic` credentials and `NAME=value` where the name ends in KEY, TOKEN, SECRET, PASSWORD or similar become `[REDACTED:<kind>]`; a private key block, over however many lines, becomes one `[REDACTED:private-key]`. A secret with no telltale shape gets through by shape, but every value stored in the vault is also replaced, wherever it shows, by `[REDACTED:secret:<name>]` (values of 8 characters or more).
-- **Caps.** One transcript stops at 100 MB with a line saying so (the session runs on). The folder is kept under 5 GB: past it, the oldest finished transcripts are deleted first, each a `log.deleted` audit event by `local:core`. A running session's transcript is never deleted, and the audit log is never rotated here.
+- **Caps.** One transcript stops at 100 MB with a line saying so (the session runs on). Transcripts and the audit log together are kept under 5 GB: past it, the oldest finished transcripts are deleted first, each a `log.deleted` audit event by `local:core`, and only then the oldest audit segments ([retention](#segments-retention-and-export-log-04)). A running session's transcript is never deleted.
 - **Reading one.** `transcript.get` gives a session's newest 1 MB (from a whole line), running or ended. Houston opens it as an `acc://transcript/<id>` page from the Logs tab's **Transcript** button.
 
 A disk error stops that transcript, not the session. Checked by `npm run smoke` on 2026-11-12: a made-up Anthropic key echoed in a contained shell shows only as its marker on the transcript page.
@@ -684,8 +692,8 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 
 | Method | Params | Result |
 |:---|:---|:---|
-| `core.status` | none | `{ pid, startedAt, schema, containment, sessions, limits }`: `containment` is the rung sessions run on (`container`), `sessions` how many run, and `limits` the approval timeout and transcript caps (`approvalSeconds`, `transcriptBytes`, `sessionTranscriptBytes`). Houston's Connections row and Settings page show it |
-| `core.health` | optional `log` (0 to 200) | `{ audit: { events, breaks, firstBreak }, storage: { audit, transcripts, backups, total }, log }`: the chain verified now, bytes per folder, and that many of `core.log`'s newest lines, redacted. Houston's Health page and diagnostics bundle show it |
+| `core.status` | none | `{ pid, startedAt, schema, containment, sessions, limits }`: `containment` is the rung sessions run on (`container`), `sessions` how many run, and `limits` the approval timeout and transcript caps (`approvalSeconds`, `logBytes` for transcripts and the audit log together, `sessionTranscriptBytes`). Houston's Connections row and Settings page show it |
+| `core.health` | optional `log` (0 to 200) | `{ audit: { events, breaks, firstBreak }, storage: { audit, transcripts, backups, exports, total }, log }`: the chain verified now, bytes per folder, and that many of `core.log`'s newest lines, redacted. Houston's Health page and diagnostics bundle show it |
 | `session.start` | `identity`, `workspace`; `command` unless the identity has a backend; optional `attended`, `size`, `program` (`readonly`, `pathDirs`, `env`) | `{ id, identity, workspace, startedAt }` |
 | `backend.list` | none | each manifest: `name`, `displayName`, `hosts`, `signIn`, and whether its program is `installed` here |
 | `session.attach` | `id` | `{ attached: id }`, then the connection streams the terminal ([below](#a-sessions-terminal)) |
@@ -696,6 +704,9 @@ A named pipe, `\\.\pipe\houston-core-<32 random hex digits>`, new at every start
 | `transcript.get` | `id` | `{ id, text, bytes, truncated }`: the session's transcript, its newest 1 MB, already redacted; `not_found` when there is none ([Transcripts](#-transcripts)) |
 | `stop.all` | none | `{ stopped, paused }`: the sessions stopped and the standing grants paused (first, so no scheduled run starts in between). One `stop.all` audit event (resource `Core` / `sessions`) by `local:operator` (how many were running), then each session's own `session.end`; pending approvals end denied with their sessions. Houston's **Stop All** button, Ctrl+Shift+Backspace and the tray call it |
 | `audit.query` | optional `type`, `session_id`, `identity`, `result`, `since`, `limit` (1 to 1000, default 100) | `{ events, truncated }`: the newest matches, oldest first |
+| `transcript.delete` | `id` or `before` (a date), not both | `{ deleted }`: the session ids whose finished transcripts went, each a `log.deleted` event by `local:operator` ([retention](#segments-retention-and-export-log-04)) |
+| `audit.prune` | `before` (a date) | `{ deleted }`: the audit segments deleted, oldest first, never the open one |
+| `log.export` | optional `since` (a date) | `{ folder, created, since, events, breaks, prunedThrough, transcripts }`: the folder under `exports` it wrote; a `log.exported` event |
 | `profile.list` | none | every profile: `id`, `displayName`, `createdAt`, `folder` |
 | `profile.create` | `id`, `displayName`; optional `preset` (`quarantine`) | the new profile; its folder is made, and a quarantine one's work folder (`workFolder`) ([The quarantine preset](#-the-quarantine-preset)) |
 | `profile.export` | `id` | the profile as a `houston-profile` document, version 1, with no secret value in it ([Export and restore](#-export-and-restore)) |

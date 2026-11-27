@@ -1,14 +1,15 @@
 // Session transcripts (CORE-19, LOG-01, LOG-04): what each contained session's terminal showed,
 // as plain text, with secrets replaced by a marker before anything reaches the disk. One file per
 // session in <data>/transcripts, inside the data folder only the operator can read. Two caps: one
-// transcript stops growing at sessionCapBytes, and the whole folder is kept under capBytes by
-// deleting the oldest finished transcripts first (each one a `log.deleted` audit event). The
-// audit log is never rotated here.
+// transcript stops growing at sessionCapBytes, and transcripts plus the audit log (`reserve`) are
+// kept under capBytes by deleting the oldest finished transcripts first (each one a `log.deleted`
+// audit event). The audit log is never rotated here: retainLogs prunes it after these (LOG-04).
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const TRANSCRIPT_CAP = 5 * 1024 ** 3;
+/** One cap for transcripts and the audit log together (harness-requirements.md, Logs). */
+export const LOG_CAP = 5 * 1024 ** 3;
 export const SESSION_CAP = 100 * 1024 ** 2;
 // Text with no line end yet is held back, so a secret split across two chunks is redacted
 // whole. Past this much, it's written anyway.
@@ -91,31 +92,41 @@ const ID = /^[A-Za-z0-9-]{1,64}$/;
  *   capBytes?: number,
  *   sessionCapBytes?: number,
  *   exact?: (line: string) => string,
+ *   reserve?: () => number,
  * }} opts
  *   exact: the vault's redaction of its own stored values (vault.js), run after the shapes
+ *   reserve: bytes the rest of the logs hold under the same cap (the audit log's)
  */
-export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessionCapBytes = SESSION_CAP, exact = (l) => l }) {
+export function createTranscripts({ dir, audit, capBytes = LOG_CAP, sessionCapBytes = SESSION_CAP, exact = (l) => l, reserve = () => 0 }) {
   fs.mkdirSync(dir, { recursive: true });
   /** Sessions being written now: never rotated out. @type {Set<string>} */
   const open = new Set();
   const file = (/** @type {string} */ id) => path.join(dir, `${id}.txt`);
+  /** Every transcript, oldest first. */
+  const list = () => fs.readdirSync(dir).filter((f) => f.endsWith('.txt')).flatMap((f) => {
+    const st = fs.statSync(path.join(dir, f), { throwIfNoEntry: false });
+    return st ? [{ id: f.slice(0, -4), size: st.size, mtime: st.mtimeMs }] : [];
+  }).sort((a, b) => a.mtime - b.mtime);
 
-  /** Delete the oldest finished transcripts until the folder is under the cap. */
+  /** @param {string} id @param {string} action @param {string} by @param {string} reason */
+  function remove(id, action, by, reason) {
+    fs.rmSync(file(id), { force: true });
+    audit.append({
+      type: 'log.deleted', action, identity: { subject: by }, session_id: id,
+      resource: { type: 'Transcript', id }, decision: { result: 'allow', policy_version: 'none', reasons: [reason] },
+    });
+  }
+
+  /** Delete the oldest finished transcripts until they and the rest of the logs are under the cap. */
   function rotate() {
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.txt')).map((f) => {
-      const st = fs.statSync(path.join(dir, f));
-      return { id: f.slice(0, -4), size: st.size, mtime: st.mtimeMs };
-    }).sort((a, b) => a.mtime - b.mtime);
+    const files = list();
+    const limit = capBytes - reserve();
     let total = files.reduce((n, f) => n + f.size, 0);
     for (const f of files) {
-      if (total <= capBytes) break;
+      if (total <= limit) break;
       if (open.has(f.id)) continue;
-      fs.rmSync(file(f.id), { force: true });
+      remove(f.id, 'transcript.rotate', 'local:core', `logs over their ${capBytes} byte cap; oldest transcripts first`);
       total -= f.size;
-      audit.append({
-        type: 'log.deleted', action: 'transcript.rotate', identity: { subject: 'local:core' }, session_id: f.id,
-        resource: { type: 'Transcript', id: f.id }, decision: { result: 'allow', policy_version: 'none', reasons: [`transcripts over their ${capBytes} byte cap; oldest first`] },
-      });
     }
   }
   rotate();
@@ -124,6 +135,35 @@ export function createTranscripts({ dir, audit, capBytes = TRANSCRIPT_CAP, sessi
     capBytes,
     sessionCapBytes,
     rotate,
+    /** Bytes in every transcript. */
+    bytes: () => list().reduce((n, f) => n + f.size, 0),
+
+    /**
+     * The operator deletes finished transcripts: one by session id, or every one last written before
+     * a time. A running session's transcript stays. Each is a `log.deleted` event.
+     * @param {{ id?: string, before?: string, by: string }} p
+     * @returns {string[]} the session ids whose transcripts went
+     */
+    delete({ id, before, by }) {
+      if (id !== undefined && !ID.test(id)) return [];
+      const t = before === undefined ? null : Date.parse(before);
+      const gone = list().filter((f) => !open.has(f.id) && (id === undefined || f.id === id) && (t === null || f.mtime < t)).map((f) => f.id);
+      for (const g of gone) remove(g, 'transcript.delete', by, 'deleted by the operator');
+      return gone;
+    },
+
+    /**
+     * Copy transcripts into `dest` (a new folder): every one, or those written since a time.
+     * @param {string} dest @param {{ since?: string }} [opts]
+     * @returns {number} how many
+     */
+    copyTo(dest, { since } = {}) {
+      const t = since === undefined ? null : Date.parse(since);
+      const pick = list().filter((f) => t === null || f.mtime >= t);
+      fs.mkdirSync(dest, { recursive: true });
+      for (const f of pick) fs.copyFileSync(file(f.id), path.join(dest, `${f.id}.txt`));
+      return pick.length;
+    },
 
     /**
      * Start a session's transcript. write() takes raw terminal text; close() writes what's held.

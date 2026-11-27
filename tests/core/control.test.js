@@ -343,7 +343,7 @@ test('core.status: pid, schema, the containment rung, how many sessions run and 
   const st = await s.call('core.status');
   assert.deepEqual({ ...st, startedAt: typeof st.startedAt }, {
     pid: process.pid, startedAt: 'string', schema: 3, containment: 'container', sessions: 1,
-    limits: { approvalSeconds: 120, transcriptBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 },
+    limits: { approvalSeconds: 120, logBytes: 5 * 1024 ** 3, sessionTranscriptBytes: 100 * 1024 ** 2 },
   });
 });
 
@@ -399,4 +399,32 @@ test('secrets go in through secret.set (ctl reads the value from stdin) and neve
   assert.equal((await call('secret.set', { name: 'Bad Name', value }).catch((e) => e)).code, 'bad_request');
   assert.deepEqual(await call('secret.delete', { name: 'api-key' }), { name: 'api-key', deleted: true });
   assert.ok(![...s.audit.events()].some((e) => JSON.stringify(e).includes(value)));
+});
+
+test('transcript.delete, audit.prune and log.export: the operator\'s, checked and audited', async (t) => {
+  const s = await setup(t);
+  await s.call('session.start', { identity: 'local:dev', workspace: 'D:\w', command: 'c' });
+  s.runner.get('s1').output.write('hello\r\n');
+  s.runner.get('s1').exit(0);
+  await new Promise((r) => setTimeout(r, 20));
+
+  const r = await s.call('log.export', { since: '2000-01-01' });
+  assert.ok(r.folder.startsWith(path.join(s.dir, 'exports')));
+  assert.equal(r.transcripts, 1);
+  assert.ok(r.events > 0);
+  assert.ok(fs.existsSync(path.join(r.folder, 'audit.jsonl')));
+  await assert.rejects(s.call('log.export', { since: 'soon' }), (e) => e.code === 'bad_request');
+
+  await assert.rejects(s.call('transcript.delete', {}), (e) => e.code === 'bad_request');
+  await assert.rejects(s.call('transcript.delete', { id: 's1', before: '2030-01-01' }), (e) => e.code === 'bad_request');
+  assert.deepEqual(await s.call('transcript.delete', { id: 's1' }), { deleted: ['s1'] });
+  assert.deepEqual(await s.call('transcript.delete', { before: '2030-01-01' }), { deleted: [] });
+
+  await assert.rejects(s.call('audit.prune', {}), (e) => e.code === 'bad_request');
+  // One segment, and it's the open one: nothing to delete.
+  assert.deepEqual(await s.call('audit.prune', { before: '2100-01-01' }), { deleted: [] });
+
+  const events = [...s.audit.events()];
+  assert.deepEqual(events.filter((e) => e.type === 'log.exported').map((e) => [e.identity.subject, e.action]), [['local:operator', 'log.export']]);
+  assert.deepEqual(events.filter((e) => e.type === 'log.deleted').map((e) => [e.identity.subject, e.resource.id]), [['local:operator', 's1']]);
 });

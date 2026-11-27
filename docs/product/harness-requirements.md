@@ -126,7 +126,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 | LOG-01 | Conversation logs on by default | Must | MVP; built (H2) | Session transcripts |
 | LOG-02 | Application logs on by default | Must | Done for the app; Core log MVP | `logs\app.log` and a Core log |
 | LOG-03 | Security and audit logs on by default | Must | MVP | The audit event log |
-| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction, limits, export MVP; rest Next; redaction and caps built for transcripts (H2) | Redact before write; a size cap; chain check on start |
+| LOG-04 | Redaction, access control, retention, deletion, export, storage limits, recovery | Must | Redaction and caps built for transcripts (H2); retention, deletion and export built (H7) | Redact before write; one 5 GB cap, transcripts first then the oldest audit segments; `transcript.delete`, `audit.prune` and `log.export` from `ctl`; chain check on start |
 
 ## Acceptance criteria for the MVP musts
 
@@ -138,7 +138,7 @@ Precedence: global deny, then any explicit deny, then the narrowest matching all
 - **Delegation (CORE-08).** Given a parent session with grant G, when it starts a sub-agent, then the child's grant is a subset of G and expires no later than the parent.
 - **Stop All (SEC-10).** Given three running sessions, when the operator presses Stop All, then within 5 seconds no session process is alive and every gateway token is rejected.
 - **Audit (SEC-07).** Given any allowed or denied action, then one event exists with identity, session, parent, action, resource, decision and policy version, and the hash chain verifies.
-- **Logging limits (LOG-04).** Given a secret passes through a tool result, then the stored transcript holds a redaction marker; given the log store reaches its cap, then the oldest transcripts rotate out and audit events are kept.
+- **Logging limits (LOG-04).** Given a secret passes through a tool result, then the stored transcript holds a redaction marker; given the log store reaches its cap, then the oldest transcripts rotate out first and audit events are kept until no finished transcript is left; only then do the oldest whole audit segments go, each recorded in the chain.
 
 ## Abuse tests
 

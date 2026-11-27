@@ -99,3 +99,46 @@ test('read gives the newest part from a whole line, and nothing for an unknown o
   assert.equal(r.truncated, true);
   assert.equal(r.text, 'last\n');
 });
+
+/** Three finished transcripts of 400 bytes, oldest first, written minutes apart. */
+function three(s) {
+  for (const [i, id] of ['old', 'mid', 'new'].entries()) {
+    fs.writeFileSync(path.join(s.tdir, `${id}.txt`), 'y'.repeat(400));
+    const at = new Date(Date.parse('2026-11-20T00:00:00.000Z') + i * 60_000);
+    fs.utimesSync(path.join(s.tdir, `${id}.txt`), at, at);
+  }
+}
+
+test('the cap is shared: what the rest of the logs hold (reserve) leaves less room for transcripts', (t) => {
+  let held = 0;
+  const s = setup(t, { capBytes: 1300, reserve: () => held });
+  three(s);
+  s.transcripts.rotate();
+  assert.equal(fs.readdirSync(s.tdir).length, 3);
+  held = 500;
+  s.transcripts.rotate();
+  assert.deepEqual(fs.readdirSync(s.tdir).sort(), ['mid.txt', 'new.txt']);
+  assert.equal(s.transcripts.bytes(), 800);
+});
+
+test('the operator deletes a transcript by id or by date, never a running one, each audited as theirs', (t) => {
+  const s = setup(t);
+  three(s);
+  const running = s.transcripts.open(session('live'));
+  assert.deepEqual(s.transcripts.delete({ id: 'mid', by: 'local:operator' }), ['mid']);
+  assert.deepEqual(s.transcripts.delete({ id: '../x', by: 'local:operator' }), []);
+  assert.deepEqual(s.transcripts.delete({ id: 'live', by: 'local:operator' }), []);
+  assert.deepEqual(s.transcripts.delete({ before: '2026-11-20T00:01:30.000Z', by: 'local:operator' }), ['old']);
+  assert.deepEqual(fs.readdirSync(s.tdir).sort(), ['live.txt', 'new.txt']);
+  const deleted = s.events().filter((e) => e.type === 'log.deleted');
+  assert.deepEqual(deleted.map((e) => [e.resource.id, e.action, e.identity.subject]), [['mid', 'transcript.delete', 'local:operator'], ['old', 'transcript.delete', 'local:operator']]);
+  running.close();
+});
+
+test('copyTo copies every transcript, or those written since a time', (t) => {
+  const s = setup(t);
+  three(s);
+  const dest = path.join(s.tdir, '..', 'copy');
+  assert.equal(s.transcripts.copyTo(dest, { since: '2026-11-20T00:01:00.000Z' }), 2);
+  assert.deepEqual(fs.readdirSync(dest).sort(), ['mid.txt', 'new.txt']);
+});
