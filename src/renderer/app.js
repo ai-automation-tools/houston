@@ -454,20 +454,30 @@ address.addEventListener('blur', () => {
   closeSuggest();
   // Leaving the address bar without navigating returns to the tab that was showing.
   setTimeout(() => {
-    if (activeTab === null && tabEls.size && document.activeElement !== address) {
+    // Not when the new tab's Settings button opened Settings: that is where the click went.
+    if (activeTab === null && tabEls.size && document.activeElement !== address && !prefsPane.showing()) {
       api.tabs.activate([...tabEls.keys()].pop());
       $('empty').hidden = true;
     }
   }, 150);
 });
 
-// From settings.json (src/shared/settings.js); Project Hub and the Web Store by default.
-for (const { label, url } of info.quickLinks) {
-  const b = document.createElement('button');
-  b.textContent = label;
-  b.title = url;
-  b.addEventListener('click', () => openUrl(url));
-  $('quick-links').append(b);
+// A new tab's buttons: Settings, then settings.json's links (src/shared/settings.js; Project Hub
+// and the Web Store by default), redrawn when Settings › Start and new tab saves them.
+/** @param {{ label: string, url: string }[]} links */
+function renderQuickLinks(links) {
+  const settings = document.createElement('button');
+  settings.textContent = '⚙ Settings';
+  settings.title = 'Settings (Ctrl+,)';
+  settings.addEventListener('click', () => prefsPane.open('start'));
+  const rest = links.map(({ label, url }) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.title = url;
+    b.addEventListener('click', () => openUrl(url));
+    return b;
+  });
+  $('quick-links').replaceChildren(settings, ...rest);
 }
 
 // ---- find in page --------------------------------------------------------------
@@ -756,6 +766,7 @@ const prefsPane = createPrefs({
   onSaved: (/** @type {any} */ p) => {
     if (p.tabLabels !== sideTabs.dataset.labels) { sideTabs.dataset.labels = p.tabLabels; sidebar.fitTabs(); }
     if (p.dotsFirst !== sidebar.dotsFirst) { sidebar.dotsFirst = p.dotsFirst; sidebar.renderFiles(); }
+    if (p.quickLinksShown) renderQuickLinks(p.quickLinksShown);
   },
   resetLayout: () => {
     Object.assign(layout, { sidebarWidth: 300, terminalHeight: 280, chatWidth: 380 });
@@ -765,6 +776,8 @@ const prefsPane = createPrefs({
     api.saveLayout({ sidebarWidth: layout.sidebarWidth, terminalHeight: layout.terminalHeight, chatWidth: layout.chatWidth });
   },
 });
+
+renderQuickLinks(info.quickLinks);
 
 const connections = createConnections({
   api,

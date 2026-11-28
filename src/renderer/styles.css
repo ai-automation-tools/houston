@@ -348,6 +348,7 @@ details.fold > summary:focus-visible { outline: 1px solid var(--accent); outline
 .pref input[type="number"].pref-depth:focus { border-color: var(--accent); }
 .pref input[type="text"].pref-short { flex: 0 1 160px; }
 .pref-ws { min-width: 160px; }
+.pref-checks { display: flex; flex-direction: column; gap: 7px; }
 .pref-folder { display: grid; grid-template-columns: minmax(100px, auto) minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
 .pref-path { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .pref-folder .icon-btn { width: 28px; height: 28px; padding: 0; border: 0; background: none; }

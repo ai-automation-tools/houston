@@ -65,8 +65,12 @@ export const feed = {
   },
 };
 
-/** The acc://start/ page: advisories for installed tools, approvals waiting, last night's runs, feed highlights. */
-export async function startPage() {
+/**
+ * The acc://start/ page: advisories for installed tools, approvals waiting, last night's runs,
+ * feed highlights, each only when Settings › Start and new tab has it on.
+ * @param {string[]} [cards]
+ */
+export async function startPage(cards) {
   const now = new Date();
   // "Overnight": since 6 pm the day before, or today's 6 pm once it's passed.
   const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (now.getHours() >= 18 ? 0 : 1), 18).toISOString();
@@ -90,6 +94,6 @@ export async function startPage() {
     }
   }
   const highlights = f ? (f.items.some((i) => i.highlight) ? f.items.filter((i) => i.highlight) : [...f.items].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))).slice(0, 6) : null;
-  const body = startBody({ runs, approvals, highlights, advisories: f ? advisoriesFor(f, await installed()) : null, feedError: error, since, core: coreDown });
+  const body = startBody({ runs, approvals, highlights, advisories: f ? advisoriesFor(f, await installed()) : null, feedError: error, since, core: coreDown, cards });
   return docPage({ title: 'Start', trail: 'Houston › Start', body });
 }

@@ -5,6 +5,7 @@
 
 import { SCOPES, SETTINGS_URL } from './shared/scopes.js';
 import { DEPTH_MAX, DEPTH_MIN } from './shared/hubsettings.js';
+import { START_CARDS } from './shared/feed.js';
 
 /** @typedef {{ label: string, url: string }} Row */
 
@@ -81,6 +82,24 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved, resetLayou
     let was = sel.value;
     sel.addEventListener('change', async () => { if (await save(key, sel.value)) was = sel.value; else sel.value = was; });
     return el('div', { class: 'pref' }, [el('label', { class: 'pref-label', for: sel.id, text: label }), sel, el('p', { class: 'pref-hint', text: hint })]);
+  }
+
+  /**
+   * A group of checkboxes saved as the list of the ones ticked.
+   * @param {string} key @param {string} label @param {readonly (readonly [string, string])[]} options @param {string} hint
+   */
+  function checks(key, label, options, hint) {
+    const boxes = options.map(([id, text]) => {
+      const box = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: `pref-${key}-${id}`, value: id }));
+      box.checked = p[key].includes(id);
+      return { box, row: el('label', { class: 'pref-check', for: box.id }, [box, el('span', { text })]) };
+    });
+    for (const { box } of boxes) {
+      box.addEventListener('change', async () => {
+        if (!(await save(key, boxes.filter((b) => b.box.checked).map((b) => b.box.value)))) box.checked = !box.checked;
+      });
+    }
+    return el('div', { class: 'pref' }, [el('span', { class: 'pref-label', text: label }), el('div', { class: 'pref-checks' }, boxes.map((b) => b.row)), el('p', { class: 'pref-hint', text: hint })]);
   }
 
   /**
@@ -272,7 +291,15 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved, resetLayou
     const restart = el('button', { type: 'button', class: 'primary', text: 'Restart Houston now', hidden: '' });
     const hubBox = el('div', { class: 'pref-hub' });
     restart.addEventListener('click', () => api.prefs.restart());
+    const openStart = el('button', { type: 'button', class: 'linkish', text: 'Open the start page' });
+    openStart.addEventListener('click', () => { close(); openUrl('acc://start/'); });
     main.replaceChildren(
+      section('start', 'Start and new tab', [
+        choice('startTab', 'Houston opens with', [['restore', "The last session's tabs"], ['start', 'The start page']], "The start page means the last session's tabs aren't reopened. Another workspace's tabs still come back when you switch to it."),
+        checks('startCards', 'Start page cards', START_CARDS, 'What the start page (acc://start/) shows, in this order. It also opens from the Feed tab and when a workspace has no tabs.'),
+        openStart,
+        list('quickLinks', 'New tab links', 'https://…', 'The buttons on a new tab, up to 12, after its Settings button. With none, it shows Project Hub and the Chrome Web Store.'),
+      ]),
       section('general', 'General', [
         toggle('closeToTray', 'Close to tray', 'Closing the window hides Houston to the system tray; terminals, dev servers and the MCP server keep running.'),
         choice('theme', 'Theme', [['system', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']], 'The window, its own pages and the theme web pages are told to use.'),
@@ -280,7 +307,6 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved, resetLayou
       ]),
       section('browser', 'Browser', [
         toggle('adBlock', 'Block ads and trackers', "Ghostery's filter lists on every tab; applies at once."),
-        list('quickLinks', 'Quick links', 'https://…', 'The buttons on the empty tab page; up to 12. With none, it shows Project Hub and the Chrome Web Store.'),
       ]),
       section('files', 'Files', [
         toggle('dotsFirst', 'Dot-folders first', 'On: .claude, .github and dot-files sort to the top of their folder, as in Windows Explorer. Off: they come after the other folders and files.'),
@@ -288,7 +314,6 @@ export function createPrefs({ api, onOpen, onClose, openUrl, onSaved, resetLayou
         ...(resetLayout ? [action('Reset panel sizes', 'The sidebar, chat pane and terminal panel go back to their first sizes.', async () => { resetLayout(); return 'Panel sizes reset'; })] : []),
       ]),
       section('startup', 'Startup', [
-        choice('startTab', 'Start with', [['restore', "The last session's tabs"], ['start', 'The start page']], "The start page means the last session's tabs aren't reopened. Another workspace's tabs still come back when you switch to it."),
         toggle('startTerminal', 'Open the terminal panel', 'Off: Houston starts with the terminal panel closed and no shell running until you open it.'),
         choice('defaultShell', 'Default shell', p.shells.map((/** @type {{ id: string, label: string }} */ s) => [s.id, s.label]), 'What a new terminal (+) runs. Only shells found on this machine are listed.'),
       ]),

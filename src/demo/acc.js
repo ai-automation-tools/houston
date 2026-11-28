@@ -334,9 +334,10 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
 
   /** The Settings pane's made-up preferences (prefs below). */
   const prefs = {
-    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', tabLabels: 'both', dotsFirst: false, shells: SHELLS,
+    closeToTray: true, adBlock: true, theme: 'system', startTab: 'restore', startTerminal: true, defaultShell: 'pwsh', tabLabels: 'both', dotsFirst: false, startCards: ['advisories', 'approvals', 'runs', 'highlights'], shells: SHELLS,
     hubUrl: '', hubDefault: 'http://127.0.0.1:4273', hubFromEnv: false, hubNow: 'http://127.0.0.1:4273',
     quickLinks: [{ label: 'Project Hub demo', url: 'https://project-hub.ai-automation-tools.dev' }],
+    quickLinksShown: [{ label: 'Project Hub demo', url: 'https://project-hub.ai-automation-tools.dev' }],
     newsSources: [{ label: 'Team digest', url: 'D:\\work\\notes\\digest.md' }, { label: 'Release notes', url: 'https://example.com/releases.xml' }],
     feedIndex: '',
   };
@@ -360,6 +361,7 @@ export function demoApi({ now = Date.now, onTab = () => {}, notify = () => {}, a
       set: async (/** @type {string} */ key, /** @type {unknown} */ value) => {
         const c = prefChange(key, value, { shells: SHELLS.map((x) => x.id), remoteHub: false });
         Object.assign(prefs, { [c.key]: c.value ?? (c.key === 'hubUrl' || c.key === 'feedIndex' ? '' : c.value) });
+        if (c.key === 'quickLinks') prefs.quickLinksShown = /** @type {any} */ (c.value);
         if (c.key === 'theme') notify('In the app the theme switches the whole window; the demo follows your browser.');
         return { ...prefs, readOnly: harness.settingsRows().filter((x) => !PANE_ROWS.has(x.label)) };
       },

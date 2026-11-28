@@ -61,6 +61,9 @@ test('the start page shows each card, escapes what the feed says, and says why a
   const down = startBody({ runs: null, approvals: null, highlights: null, advisories: null, feedError: 'No feed yet.', since: '2026-11-12T18:00:00Z', core: 'The Houston Core is not running.' });
   assert.equal(down.split('The Houston Core is not running.').length - 1, 2);
   assert.equal(down.split('No feed yet.').length - 1, 2);
+  const some = startBody({ runs: null, approvals: [], highlights: null, advisories: null, feedError: 'No feed yet.', since: '2026-11-12T18:00:00Z', core: null, cards: ['highlights', 'approvals'] });
+  assert.ok(some.indexOf('Approvals waiting') < some.indexOf('Feed highlights') && !some.includes('Advisories') && !some.includes('Overnight'), 'only the chosen cards, in their usual order');
+  assert.ok(startBody({ runs: null, approvals: null, highlights: null, advisories: null, feedError: null, since: '2026-11-12T18:00:00Z', core: null, cards: [] }).includes('Every card is turned off'));
 });
 
 test('settings take a feedIndex that is an absolute path to a .json file, nothing else', () => {

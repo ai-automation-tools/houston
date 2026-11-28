@@ -378,7 +378,7 @@ async function createWindow() {
     settings: { title: 'Settings', render: () => settingsPage() },
     health: { title: 'Health', render: async () => docPage({ title: 'Health', trail: 'Houston › Health', body: healthBody(await healthSnapshot(), escapeHtml) }) },
     identities: { title: 'Identity Center', render: () => identitiesPage() },
-    start: { title: 'Start', render: () => startPage() },
+    start: { title: 'Start', render: () => startPage(store.layout().startCards) },
   });
   // Hub rescans on its own; reload the tree and drop the doc index when it says so.
   stopEvents = subscribeHubEvents(() => {
@@ -991,11 +991,12 @@ async function createWindow() {
     const raw = store.rawSettings();
     const s = store.settings();
     return {
-      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal, tabLabels: l.tabLabels, dotsFirst: l.dotsFirst,
+      closeToTray: l.closeToTray, adBlock: l.adBlock, theme: l.theme, startTab: l.startTab, startTerminal: l.startTerminal, tabLabels: l.tabLabels, dotsFirst: l.dotsFirst, startCards: l.startCards,
       defaultShell: terminals.list().some((t) => t.id === l.defaultShell) ? l.defaultShell : terminals.list()[0]?.id ?? '',
       shells: terminals.list(),
       hubUrl: typeof raw.hubUrl === 'string' ? raw.hubUrl : '', hubDefault: DEFAULT_HUB_URL, hubFromEnv: Boolean(env.ACC_HUB_URL), hubNow: hub.url,
       quickLinks: Array.isArray(raw.quickLinks) ? s.quickLinks : [],
+      quickLinksShown: s.quickLinks,
       newsSources: s.newsSources,
       feedIndex: s.feedIndex ?? '',
       readOnly: controls(await settingsData()).filter((c) => !PANE_ROWS.has(c.label)),
