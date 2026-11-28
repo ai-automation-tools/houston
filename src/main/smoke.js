@@ -500,6 +500,43 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
     check("Settings shows Project Hub's folders and scan depth, and refuses a network folder before Hub hears of it",
       hubPrefs.folders > 0 && hubPrefs.depth >= 1 && hubPrefs.depth <= 32 && /full path to a folder on this machine/.test(hubPrefs.refused), hubPrefs, { live: true });
     check('Settings › Files › Dot-folders first saves and turns off again', hubPrefs.on === true && hubPrefs.off === true && store.layout().dotsFirst === false, hubPrefs);
+    // A new tab's Settings button opens Settings at Start and new tab, its first section; a start
+    // page card turned off there leaves the start page, and comes back when turned on.
+    await wc.executeJavaScript(`document.getElementById('new-tab')?.click()`);
+    await wait(300);
+    const startPrefs = await wc.executeJavaScript(`(async () => {
+      const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+      const btn = [...document.querySelectorAll('#quick-links button')].find((b) => b.textContent.includes('Settings'));
+      btn?.click();
+      for (let i = 0; i < 20 && !document.getElementById('pref-startCards-runs'); i++) await pause(100);
+      const box = document.getElementById('pref-startCards-runs');
+      box?.click();
+      await pause(500);
+      return { button: Boolean(btn), first: document.querySelector('#prefs-main h2')?.textContent, open: !document.getElementById('prefs').hidden, off: box ? !box.checked : null };
+    })()`).catch((/** @type {Error} */ err) => ({ error: err.message }));
+    startPrefs.saved = store.layout().startCards;
+    const startTab = tabs.create('acc://start/');
+    for (let i = 0; i < 40 && startTab.view.webContents.isLoading(); i++) await wait(100);
+    await wait(300);
+    startPrefs.page = await startTab.view.webContents.executeJavaScript(`[...document.querySelectorAll('.card h2')].map((h) => h.textContent.split(' (')[0])`).catch(() => []);
+    startTab.view.webContents.close();
+    await wc.executeJavaScript(`(async () => {
+      const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+      document.getElementById('settings-open').click();
+      for (let i = 0; i < 20 && !document.getElementById('pref-startCards-runs'); i++) await pause(100);
+      await pause(200);
+      const box = document.getElementById('pref-startCards-runs');
+      if (box && !box.checked) box.click();
+      await pause(500);
+      document.getElementById('prefs-close')?.click();
+    })()`);
+    startPrefs.back = store.layout().startCards.includes('runs');
+    // Whatever happened above, the rest of the run sees every card.
+    if (!startPrefs.back) store.saveLayout({ startCards: ['advisories', 'approvals', 'runs', 'highlights'] });
+    console.log(`[smoke] start prefs=${JSON.stringify(startPrefs)}`);
+    check('a new tab\'s Settings button opens Start and new tab, and a start page card turned off there leaves the start page',
+      startPrefs.button && startPrefs.open && startPrefs.first === 'Start and new tab' && startPrefs.off === true && !startPrefs.saved?.includes('runs')
+        && Array.isArray(startPrefs.page) && startPrefs.page.includes('Approvals waiting') && !startPrefs.page.includes('Overnight runs') && startPrefs.back, startPrefs);
     // The MCP calls above, in the sidebar's MCP panel and at the end of mcp.log.
     const panel = await wc.executeJavaScript(`[...document.querySelectorAll('#panel-mcp .row .name')].map((n) => n.textContent.split(' ')[0]).slice(0, 20)`);
     const logged = fs.readFileSync(path.join(app.getPath('userData'), 'logs', 'mcp.log'), 'utf8').trim().split('\n').slice(-20)
@@ -1300,7 +1337,7 @@ export function smoke(dir, wc, tabs, terminals, browseSession, saveDiagnostics =
       const st = agentRun?.settings;
       const pn = agentRun?.pane;
       check('Settings opens a pane: a checkbox saves through main and a bad value is refused with the reason; the agent controls are read-only there',
-        Boolean(pn && pn.h2.join() === 'General,Browser,Files,Startup,Sources,Project Hub,Agents and security' && pn.off === false && pn.savedOff && pn.on === true && pn.savedOn
+        Boolean(pn && pn.h2.join() === 'Start and new tab,General,Browser,Files,Startup,Sources,Project Hub,Agents and security' && pn.off === false && pn.savedOff && pn.on === true && pn.savedOn
           && /absolute path/.test(pn.refused) && pn.readOnly.includes('Hard denies') && !pn.readOnly.includes('Close to tray') && pn.closed), pn);
       check('the pane\'s link opens every control under its scope (global, profile, workspace, session) with its value now, the Core\'s from the Core; Ctrl+, on the menu',
         Boolean(st && st.scripts === 0 && st.h2.join() === 'Global,Profile: Default,Workspace: Agents smoke,Session'

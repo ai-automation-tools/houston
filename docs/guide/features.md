@@ -89,7 +89,9 @@ The **News** tab lists headlines from the sources in `settings.json`'s `newsSour
 
 The **Feed** tab reads one local `index.json`, the file settings.json's `feedIndex` names ([setup.md](setup.md#settings)), which a scheduled job writes. It shows what you bookmarked first, then each category with its definition (what belongs in it) and its items, newest first. With no index file set, **Set up in Settings** opens Settings at Sources. Click an item to open it; ☆ bookmarks it for this profile. An item that names an MCP server has **Add as discovered**: the Core registers it from the command in the file, and nothing runs until you install and pin it in Integrations.
 
-The **start page** opens when Houston starts with no tabs to bring back, or from **Start page** in the Feed tab. Its four cards: advisories in the feed for tools installed here (this profile's MCP servers and skills, Claude Code and Codex, local model runtimes), worst first; approval cards waiting for you; the scheduled runs since 6 pm the day before, and how each ended; and the feed's highlights.
+The **start page** opens when Houston starts with no tabs to bring back, or from **Start page** in the Feed tab. Its four cards: advisories in the feed for tools installed here (this profile's MCP servers and skills, Claude Code and Codex, local model runtimes), worst first; approval cards waiting for you; the scheduled runs since 6 pm the day before, and how each ended; and the feed's highlights. **Settings › Start and new tab** turns each card on or off.
+
+A **new tab** (Ctrl+T or ＋) shows **⚙ Settings**, which opens Settings at Start and new tab, then your links: Project Hub and the Chrome Web Store until you set your own there, up to twelve.
 
 ## 🌿 Git
 
@@ -155,10 +157,11 @@ The **Logs** tab is the Core's audit log: what each agent identity did and what 
 
 | Section | What you change there |
 |:---|:---|
+| Start and new tab | Whether Houston opens with the last session's tabs or the start page; which of the start page's four cards it shows; the links on a new tab (saved, they show on the next new tab at once) |
 | General | Close to tray; the theme (follow Windows, light or dark), which switches the window, its own pages and what web pages are told at once; and whether the sidebar's tabs show icons, names or both |
-| Browser | Ad blocking (applies at once); the quick links on the empty tab page |
+| Browser | Ad blocking (applies at once) |
 | Files | Dot-folders first in the Files tree (`.claude`, `.github` and dot-files at the top of their folder, or after the rest); **Clear Recent**; **Reset panel sizes** for the sidebar, chat pane and terminal panel |
-| Startup | Whether the window opens with the last session's tabs or the start page; whether the terminal panel opens; the shell a new terminal runs |
+| Startup | Whether the terminal panel opens; the shell a new terminal runs |
 | Sources | Project Hub's address (applies after a restart, which the pane offers); News sources; the Feed's `index.json` |
 | Project Hub | Project Hub's own settings, read from Hub when the pane opens and saved by Hub in its `hub.config.json`: the **folders** it shows next to your projects (add one by its path, with an optional name, or remove one; nothing on disk moves) and its **scan depth**, 1 to 32 levels, for every workspace or one of its own. Hub rescans after a change and the Files tree follows. A folder full of images asks first, with **Add anyway**. Only a folder on this machine: never a network path or a whole drive |
 | Agents and security | Nothing: the controls the Core enforces, read-only, each with where it's set |

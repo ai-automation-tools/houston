@@ -99,15 +99,25 @@ export function advisoriesFor(feed, installed) {
 /** Toggle one id in the bookmark list. @param {string[]} list @param {string} id */
 export const toggleBookmark = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
+/** The start page's cards, in the order they show: id and title. Settings › Start and new tab turns each on or off. */
+export const START_CARDS = /** @type {const} */ ([
+  ['advisories', 'Advisories for installed tools'],
+  ['approvals', 'Approvals waiting'],
+  ['runs', 'Overnight runs'],
+  ['highlights', 'Feed highlights'],
+]);
+
 /** @param {unknown} s */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
- * The start page's body: four cards. Script-free, like every acc:// page; links open as tabs.
+ * The start page's body: the cards `cards` names (every one when it's left out), in START_CARDS'
+ * order. Script-free, like every acc:// page; links open as tabs.
  * @param {{
  *   runs: { identity: string, grant: string, startedAt: string, status: string, end: string | null }[] | null,
  *   approvals: { id: string, identity: string, action: string, resource: string }[] | null,
  *   highlights: Item[] | null, advisories: Item[] | null, feedError: string | null, since: string, core: string | null,
+ *   cards?: string[],
  * }} d core: why the Core's cards are empty (it isn't running), or null
  */
 export function startBody(d) {
@@ -125,12 +135,18 @@ export function startBody(d) {
     : list(d.highlights.map((i) => `<li>${link(i)}${i.summary ? ` <span class="note">${esc(i.summary)}</span>` : ''}</li>`));
   const advisories = d.feedError ? none(d.feedError) : !d.advisories?.length ? none('No advisories for anything installed here.')
     : list(d.advisories.map((i) => `<li class="adv ${esc(i.advisory?.severity)}"><b>${esc(i.advisory?.tool)}</b> · ${esc(i.advisory?.severity)} · ${link(i)}${i.advisory?.summary ? ` <span class="note">${esc(i.advisory.summary)}</span>` : ''}</li>`));
+  /** @type {Record<string, string>} */
+  const bodies = {
+    advisories: card('Advisories for installed tools', advisories),
+    approvals: card('Approvals waiting', approvals),
+    runs: card(`Overnight runs (since ${since})`, runs),
+    highlights: card('Feed highlights', highlights),
+  };
+  const on = d.cards ?? START_CARDS.map(([id]) => id);
+  const shown = START_CARDS.filter(([id]) => on.includes(id)).map(([id]) => bodies[id]);
   return `<style>.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.card{border:1px solid #8884;border-radius:8px;padding:4px 16px 12px}.card h2{font-size:1.05em}.card li.bad,.card li.adv.high,.card li.adv.critical{color:#e5534b}.card ul{padding-left:18px}</style>
 <h1>Start</h1>
-<div class="cards">
-${card('Advisories for installed tools', advisories)}
-${card('Approvals waiting', approvals)}
-${card(`Overnight runs (since ${since})`, runs)}
-${card('Feed highlights', highlights)}
-</div>`;
+${shown.length ? `<div class="cards">
+${shown.join('\n')}
+</div>` : none('Every card is turned off. Turn them on in Settings › Start and new tab.')}`;
 }

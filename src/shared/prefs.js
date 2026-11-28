@@ -4,6 +4,10 @@
 // and a checkbox here would be a toggle pretending to be a control.
 
 import { MAX_LABEL, MAX_LINKS, feedPath, httpUrl, hubAddress, newsSource } from './settings.js';
+import { START_CARDS } from './feed.js';
+
+/** The start page's card ids. */
+const CARD_IDS = START_CARDS.map(([id]) => id);
 
 export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const START_TABS = /** @type {const} */ (['restore', 'start']);
@@ -12,7 +16,7 @@ export const TAB_LABELS = /** @type {const} */ (['icons', 'names', 'both']);
 /** The rows of scopes.js's controls() that the pane edits, so its read-only list leaves them out. */
 export const PANE_ROWS = new Set(['Close to tray', 'Ad blocking', 'Project Hub', 'Quick links', 'News sources', 'Feed index']);
 
-/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string, tabLabels: typeof TAB_LABELS[number], dotsFirst: boolean }} LayoutPrefs */
+/** @typedef {{ theme: typeof THEMES[number], startTab: typeof START_TABS[number], startTerminal: boolean, defaultShell: string, tabLabels: typeof TAB_LABELS[number], dotsFirst: boolean, startCards: string[] }} LayoutPrefs */
 
 /**
  * layout.json's preference keys, each checked on read, so a hand-edited file can't break the app.
@@ -27,6 +31,8 @@ export function layoutPrefs(d) {
     defaultShell: typeof d.defaultShell === 'string' ? d.defaultShell : '',
     tabLabels: TAB_LABELS.includes(d.tabLabels) ? d.tabLabels : 'both',
     dotsFirst: d.dotsFirst === true,
+    // Every card unless a list was saved; an empty list (all turned off) stays empty.
+    startCards: Array.isArray(d.startCards) ? CARD_IDS.filter((id) => d.startCards.includes(id)) : [...CARD_IDS],
   };
 }
 
@@ -78,6 +84,11 @@ export function prefChange(key, value, ctx) {
     case 'tabLabels':
       if (!TAB_LABELS.includes(/** @type {any} */ (value))) throw new Error(`Sidebar tabs show one of ${TAB_LABELS.join(', ')}`);
       return layout(value);
+    case 'startCards':
+      if (!Array.isArray(value) || value.some((v) => !CARD_IDS.includes(v)) || new Set(value).size !== value.length) {
+        throw new Error(`Start page cards are some of ${CARD_IDS.join(', ')}`);
+      }
+      return layout(CARD_IDS.filter((id) => value.includes(id)));
     case 'defaultShell':
       if (typeof value !== 'string' || !ctx.shells.includes(value)) throw new Error('Not a shell found on this machine');
       return layout(value);
