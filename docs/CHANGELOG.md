@@ -15,6 +15,8 @@ Entries tagged with a phase in italics came off the [roadmap](ROADMAP.md).
 
 ## Unreleased
 
+- `CLAUDE.md` is gone: Claude Code reads `AGENTS.md` directly, and its Claude-only notes are the closing *Claude Code only* section of `AGENTS.md`.
+
 Everything since 0.1.0, newest first within each group: Phase 2 (done 2026-10-04), the public-release gates (all closed 2026-10-18, when the repo went public), Phase 2b, the Integrations, Milestone A (2026-10-20), Milestone B (2026-10-21), and the starts of Milestones C and D.
 
 **Changed**

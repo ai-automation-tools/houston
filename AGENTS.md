@@ -1,6 +1,6 @@
 # AGENTS.md — Houston
 
-Instructions for any agent working in this repo (Codex, opencode, Antigravity and Claude Code, which imports this file from `CLAUDE.md`), including the roadmap routine that runs twice a week.
+Instructions for any agent working in this repo (Claude Code, Codex, opencode and Antigravity all read this file), including the roadmap routine that runs twice a week.
 Read `docs/ROADMAP.md`, `docs/product/spec.md`, `docs/product/harness-requirements.md` and `docs/decisions/` before changing code.
 
 ## What this is
@@ -123,3 +123,7 @@ change gets `- [!]` with the reason, for Mike to install by hand.
 A roadmap item is done when its code is in, `npm run lint` and `npm test` pass, the docs
 it made untrue are fixed, the changelog has its line, and the item is `- [x]` with a
 dated note.
+
+## Claude Code only
+
+To try the app's MCP server from Claude Code, see [docs/mcp-server.md](docs/mcp-server.md).
